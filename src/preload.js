@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('vees', {
   canOpenTools,
   languageChange,
   checkUpdates: () => ipcRenderer.invoke('check-update'),
-  dismissUpdate: commit => ipcRenderer.invoke('dismiss-update', commit),
+  dismissUpdate: tag => ipcRenderer.invoke('dismiss-update', tag),
   openUpdate: () => ipcRenderer.invoke('open-update'),
   on: (event, callback) => {
     if (!['run-start', 'run-output', 'run-end', 'update-status'].includes(event)) throw new Error('Invalid event');

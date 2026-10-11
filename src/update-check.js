@@ -1,19 +1,37 @@
 const https = require('node:https');
 
-const API_URL = 'https://api.github.com/repos/Foxiary/VE-ES/commits?per_page=1';
+const API_URL = 'https://api.github.com/repos/Foxiary/Otome-Translator/releases/latest';
 
-function latestFromResponse(items, bundledCommit) {
-  const commit = Array.isArray(items) ? items[0] : null;
-  const sha = commit?.sha;
-  if (typeof sha !== 'string' || !/^[0-9a-f]{40}$/.test(sha)) {
-    throw new Error('GitHub returned an invalid commit.');
+function parseVersion(value) {
+  const match = String(value || '').match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return match.slice(1, 4).map(Number);
+}
+
+function compareVersions(left, right) {
+  for (let index = 0; index < 3; index++) {
+    if (left[index] !== right[index]) return left[index] - right[index];
   }
+  return 0;
+}
+
+function latestFromResponse(release, currentVersion) {
+  const current = parseVersion(currentVersion);
+  const latest = parseVersion(release?.tag_name);
+  if (!current || !latest || release.draft || release.prerelease) {
+    throw new Error('GitHub returned an invalid release.');
+  }
+  const tag = String(release.tag_name);
+  const newer = compareVersions(latest, current) > 0;
   return {
-    status: sha === bundledCommit ? 'current' : 'available',
-    bundledCommit,
-    latestCommit: sha,
-    title: String(commit.commit?.message || '').split(/\r?\n/)[0].slice(0, 160),
-    url: `https://github.com/Foxiary/VE-ES/commit/${sha}`,
+    status: newer ? 'available' : 'current',
+    currentVersion: current.join('.'),
+    latestVersion: latest.join('.'),
+    tag,
+    title: String(release.name || tag).slice(0, 160),
+    url: typeof release.html_url === 'string' && release.html_url.startsWith('https://github.com/')
+      ? release.html_url
+      : `https://github.com/Foxiary/Otome-Translator/releases/tag/${encodeURIComponent(tag)}`,
     checkedAt: new Date().toISOString()
   };
 }
@@ -45,8 +63,8 @@ function fetchLatest() {
   });
 }
 
-async function checkForUpdate(bundledCommit, requestLatest = fetchLatest) {
-  return latestFromResponse(await requestLatest(), bundledCommit);
+async function checkForUpdate(currentVersion, requestLatest = fetchLatest) {
+  return latestFromResponse(await requestLatest(), currentVersion);
 }
 
 module.exports = {checkForUpdate, latestFromResponse};
