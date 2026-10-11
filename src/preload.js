@@ -1,4 +1,7 @@
 const {contextBridge, ipcRenderer} = require('electron');
+const {t} = require('./i18n');
+const {browse, selectTool} = require('./tool-browser');
+const {isXlsx, successActions, canSwitchEngine, canOpenTools, languageChange} = require('./patch-ui');
 
 contextBridge.exposeInMainWorld('vees', {
   state: () => ipcRenderer.invoke('state'),
@@ -10,7 +13,19 @@ contextBridge.exposeInMainWorld('vees', {
   openWorkspace: () => ipcRenderer.invoke('open-workspace'),
   openDocument: name => ipcRenderer.invoke('open-document', name),
   run: (id, values) => ipcRenderer.invoke('run-tool', id, values),
+  runPatch: options => ipcRenderer.invoke('run-patch', options),
+  setLanguage: language => ipcRenderer.invoke('set-language', language),
+  setPatch: fields => ipcRenderer.invoke('set-patch', fields),
+  openOutput: () => ipcRenderer.invoke('open-output'),
   cancel: () => ipcRenderer.invoke('cancel-run'),
+  t: (key, language) => t(key, language),
+  browse: (tools, options) => browse(tools, options),
+  selectTool: tool => selectTool(tool),
+  isXlsx,
+  successActions,
+  canSwitchEngine,
+  canOpenTools,
+  languageChange,
   checkUpdates: () => ipcRenderer.invoke('check-update'),
   dismissUpdate: commit => ipcRenderer.invoke('dismiss-update', commit),
   openUpdate: () => ipcRenderer.invoke('open-update'),
