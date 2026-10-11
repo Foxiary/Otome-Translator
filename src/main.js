@@ -13,9 +13,10 @@ let currentRun = null;
 let settings;
 let lastUpdate = null;
 let updateRequest = null;
-// The engine commit this build carries. The update check compares VE-ES's
-// newest commit against it, so it must name the commit engines/otomate is
-// pinned at; `npm run check` refuses a build where the two differ.
+// The engine commit this build carries. It must name the commit
+// engines/otomate is pinned at; `npm run check` refuses a build where the
+// two differ. Update notices compare the app version with the latest
+// Otome Translator release, not with a new engine commit.
 const SOURCE_COMMIT = '08807f7e9783afae1aaf6cf9058d47a4c7039e21';
 const engineById = new Map(engines.map(engine => [engine.id, engine]));
 const toolById = new Map(engines.flatMap(engine => engine.tools.map(tool => [tool.id, {engine, tool}])));
@@ -90,14 +91,14 @@ function pythonCheck() {
 function emit(event, payload) { if (window && !window.isDestroyed()) window.webContents.send(event, payload); }
 function performUpdateCheck() {
   if (updateRequest) return updateRequest;
-  updateRequest = checkForUpdate(SOURCE_COMMIT).then(result => {
-    lastUpdate = {...result, dismissed: settings.dismissedUpdateCommit === result.latestCommit};
-    if (result.status === 'available' && settings.lastNotifiedUpdateCommit !== result.latestCommit) {
-      settings.lastNotifiedUpdateCommit = result.latestCommit;
+  updateRequest = checkForUpdate(app.getVersion()).then(result => {
+    lastUpdate = {...result, dismissed: settings.dismissedUpdateTag === result.tag};
+    if (result.status === 'available' && settings.lastNotifiedUpdateTag !== result.tag) {
+      settings.lastNotifiedUpdateTag = result.tag;
       saveSettings();
       if (app.isPackaged && Notification.isSupported()) {
-        const notice = new Notification({title: 'Otome Translator: engine update',
-          body: `New VE-ES engine code is available: ${result.latestCommit.slice(0, 7)}`});
+        const notice = new Notification({title: 'Otome Translator update',
+          body: `Version ${result.latestVersion} is available.`});
         notice.on('click', () => {window?.show(); window?.focus();});
         notice.show();
       }
@@ -174,9 +175,9 @@ ipcMain.handle('set-engine', (_event, id) => {
   return {settings, workspace: workspace(), python: pythonCheck()};
 });
 ipcMain.handle('check-update', () => performUpdateCheck());
-ipcMain.handle('dismiss-update', (_event, commit) => {
-  if (lastUpdate?.status !== 'available' || commit !== lastUpdate.latestCommit) return false;
-  settings.dismissedUpdateCommit = commit;
+ipcMain.handle('dismiss-update', (_event, tag) => {
+  if (lastUpdate?.status !== 'available' || tag !== lastUpdate.tag) return false;
+  settings.dismissedUpdateTag = tag;
   saveSettings();
   lastUpdate.dismissed = true;
   return true;

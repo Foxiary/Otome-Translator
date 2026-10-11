@@ -80,7 +80,7 @@ Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js` và
 
 ## Thông báo cập nhật
 
-Khi mở ứng dụng và mỗi ngày một lần, ứng dụng kiểm tra commit mới nhất của VE-ES (engine Otomate; engine Unity đi cùng bản app). Nếu khác `SOURCE_COMMIT`, ứng dụng hiển thị thông báo trong cửa sổ và, nếu hệ điều hành hỗ trợ, một thông báo desktop. Nút **Check updates** kiểm tra ngay. Ứng dụng không tự tải hay cài mã mới. Lỗi mạng hoặc giới hạn API không cản trở công việc.
+Khi mở ứng dụng và mỗi ngày một lần, ứng dụng so phiên bản của nó với [release mới nhất](https://github.com/Foxiary/Otome-Translator/releases/latest) trên GitHub. Commit mới trong repo không tạo thông báo. Khi release mới có số phiên bản cao hơn, ứng dụng hiển thị thông báo trong cửa sổ và, nếu hệ điều hành hỗ trợ, một thông báo desktop. Nút **Check updates** kiểm tra ngay. Ứng dụng không tự tải hay cài bản mới. Lỗi mạng hoặc giới hạn API không cản trở công việc.
 
 ## Cách hoạt động
 
