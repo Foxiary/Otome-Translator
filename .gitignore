@@ -5,3 +5,10 @@ work/
 *.log
 .DS_Store
 __pycache__/
+
+# Local agent skill installs. Reinstall from skills-lock.json.
+.agents/
+.aider-desk/
+
+# Personal BMAD install answers.
+_bmad/config.user.toml
