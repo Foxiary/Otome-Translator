@@ -4,6 +4,9 @@ const path = require('node:path');
 const {spawn, spawnSync} = require('node:child_process');
 const {engines} = require('./engines');
 const {checkForUpdate} = require('./update-check');
+const {normalizePatchSettings} = require('./patch-settings');
+const {isXlsx} = require('./patch-ui');
+const {recipeFor, setupError} = require('./patch-recipe');
 
 let window;
 let currentRun = null;
@@ -44,6 +47,7 @@ function loadSettings() {
   settings.python ||= process.platform === 'win32' ? 'py' : 'python3';
   settings.history ||= [];
   settings.values ||= {};
+  settings = normalizePatchSettings(settings, engines.map(engine => engine.id));
 }
 function saveSettings() {
   fs.mkdirSync(path.dirname(settingsPath()), {recursive: true});
@@ -285,6 +289,153 @@ ipcMain.handle('cancel-run', () => {
   currentRun.cancelled = true;
   currentRun.child?.kill();
   return true;
+});
+ipcMain.handle('set-language', (_event, language) => {
+  if (language !== 'en' && language !== 'vi') throw new Error('Unknown language.');
+  settings.language = language;
+  saveSettings();
+  return {settings};
+});
+ipcMain.handle('set-patch', (_event, fields) => {
+  const current = settings.patch[settings.engine];
+  if (Object.prototype.hasOwnProperty.call(fields, 'sheetPath')) current.sheetPath = String(fields.sheetPath || '');
+  if (Object.prototype.hasOwnProperty.call(fields, 'outputPath')) current.outputPath = String(fields.outputPath || '');
+  if (Object.prototype.hasOwnProperty.call(fields, 'group')) current.group = fields.group || null;
+  saveSettings();
+  return {settings};
+});
+ipcMain.handle('open-output', () => shell.openPath(settings.patch[settings.engine].outputPath));
+
+function projectAssets(engineId) {
+  const folder = settings.workspaces[engineId];
+  if (!folder || !fs.existsSync(folder)) return {hasGameFiles: false, hasFonts: false};
+  const names = fs.readdirSync(folder);
+  if (engineId === 'otomate') {
+    return {
+      hasGameFiles: names.includes('STORY.cpk'),
+      hasFonts: names.includes('fonts.json')
+    };
+  }
+  const bundled = names.some(name => /\.(bundle|assets)$/i.test(name));
+  return {hasGameFiles: bundled, hasFonts: bundled || names.some(name => /\.(ttf|otf)$/i.test(name))};
+}
+function outputHasPatch(folder) {
+  if (!folder || !fs.existsSync(folder)) return false;
+  return fs.readdirSync(folder).some(name => name !== 'runs');
+}
+function spawnPython(script, args, cwd) {
+  return new Promise(resolve => {
+    if (!currentRun || currentRun.cancelled) return resolve({code: 130, stdout: ''});
+    const child = spawn(settings.python, ['-u', script, ...args],
+      {cwd, env: {...process.env, PYTHONIOENCODING: 'utf-8'}, windowsHide: true, shell: false});
+    currentRun.child = child;
+    let stdout = '';
+    const runId = currentRun.runId;
+    child.stdout.on('data', data => {
+      const text = data.toString('utf8');
+      stdout += text;
+      emit('run-output', {runId, stream: 'stdout', text});
+    });
+    child.stderr.on('data', data => emit('run-output', {runId, stream: 'stderr', text: data.toString('utf8')}));
+    child.on('error', error => {
+      emit('run-output', {runId, stream: 'stderr', text: `${error.message}\n`});
+      resolve({code: 1, stdout});
+    });
+    child.on('close', code => resolve({code: code ?? 1, stdout}));
+  });
+}
+function patchFindings(stdout) {
+  return stdout.split(/\r?\n/).filter(Boolean).map(line => {
+    try { return JSON.parse(line); } catch { return null; }
+  }).filter(Boolean);
+}
+ipcMain.handle('run-patch', async (_event, options = {}) => {
+  if (currentRun) throw new Error('Another command is already running.');
+  const engineId = settings.engine;
+  const patch = settings.patch[engineId];
+  const projectPath = settings.workspaces[engineId];
+  const outputPath = patch.outputPath;
+  const originalPath = patch.sheetPath;
+  if (!isXlsx(path.basename(originalPath || ''))) return {error: 'xlsx', skip: false};
+  if (setupError({projectPath, outputPath, ...projectAssets(engineId)})) return {error: 'setup', skip: false};
+  if (outputHasPatch(outputPath) && options.confirmed !== true) return {needsConfirm: true, skip: false};
+  const runDirectory = path.join(outputPath, 'runs', `${Date.now()}`);
+  const copyPath = path.join(runDirectory, 'sheet.xlsx');
+  const reportPath = path.join(runDirectory, 'quarong-report.xlsx');
+  let copied = false;
+  try {
+    fs.mkdirSync(runDirectory, {recursive: true});
+    fs.copyFileSync(originalPath, copyPath);
+    copied = true;
+  } catch (error) {
+    return {error: 'copy', message: error.message, skip: false};
+  }
+  const runId = `patch-${Date.now()}`;
+  currentRun = {runId, child: null, cancelled: false, id: 'patch'};
+  emit('run-start', {runId, id: 'patch', title: 'Create patch', started: new Date().toISOString(), command: ['patch', engineId]});
+  const recipe = recipeFor(engineId);
+  const findings = [];
+  let blocked = false;
+  let failedStep = null;
+  const finish = (code, extra) => {
+    const cancelled = currentRun?.cancelled;
+    currentRun = null;
+    emit('run-end', {runId, id: 'patch', code: cancelled ? 130 : code, signal: cancelled ? 'cancelled' : null, ...extra});
+    return {started: true, runDirectory, copied, skip: false, ...extra, code: cancelled ? 130 : code};
+  };
+  const noteFailure = step => {blocked = true; failedStep = failedStep || step.id;};
+  try {
+  for (const step of recipe) {
+    if (currentRun.cancelled) return finish(130, {stopped: true, findings, failedStep});
+    if (step.phase === 'create' && blocked) return finish(2, {findings, skip: false, failedStep});
+    emit('run-output', {runId, stream: 'stdout', text: `\n${step.phase}: ${step.id}\n`});
+    let result = {code: 0, stdout: ''};
+    if (step.id === 'empty-scan') {
+      result = await spawnPython(path.join(__dirname, 'sheet_scan.py'), [copyPath], projectPath);
+      findings.push(...patchFindings(result.stdout));
+      if (result.code !== 0) noteFailure(step);
+    } else if (step.id === 'unity-sheetfit') {
+      const boxes = path.join(projectPath, 'text-boxes.json');
+      const bundle = fs.readdirSync(projectPath).find(name => /\.(bundle|assets)$/i.test(name));
+      if (!fs.existsSync(boxes) || !bundle) {
+        noteFailure(step);
+        emit('run-output', {runId, stream: 'stderr', text: 'Layout check could not be read.\n'});
+      } else {
+        result = await spawnPython(path.join(enginePath(activeEngine()), 'tools', 'sheetfit.py'),
+          [copyPath, boxes, path.join(projectPath, bundle)], projectPath);
+        findings.push(...patchFindings(result.stdout));
+        if (result.code !== 0) noteFailure(step);
+      }
+    } else if (step.id === 'quarong') {
+      const script = path.join(projectPath, 'tools', 'quarong.py');
+      result = await spawnPython(script, [copyPath, reportPath, copyPath], projectPath);
+      const readable = fs.existsSync(reportPath) && fs.readFileSync(reportPath).subarray(0, 2).toString() === 'PK';
+      if (!readable || result.code !== 0) noteFailure(step);
+      const scan = await spawnPython(path.join(__dirname, 'sheet_scan.py'), [copyPath], projectPath);
+      findings.push(...patchFindings(scan.stdout));
+      if (scan.code !== 0) noteFailure(step);
+    } else if (step.id === 'filltitles-fill') {
+      result = await spawnPython(path.join(projectPath, 'tools', 'filltitles.py'),
+        ['fill', copyPath, copyPath], projectPath);
+      if (result.code !== 0) noteFailure(step);
+    } else if (step.id === 'applyvi') {
+      result = await spawnPython(path.join(projectPath, 'tools', 'applyvi.py'),
+        [copyPath, path.join(projectPath, 'STORY.cpk'), outputPath], projectPath);
+      if (result.code !== 0) return finish(result.code, {findings, skip: false, failedStep: step.id});
+    } else if (step.id === 'unity-sheet-apply') {
+      const bundle = fs.readdirSync(projectPath).find(name => /\.(bundle|assets)$/i.test(name));
+      if (!bundle) return finish(1, {findings, skip: false, failedStep: step.id});
+      result = await spawnPython(path.join(projectPath, 'tools', 'jsonsheet.py'),
+        ['apply', path.join(projectPath, bundle), copyPath, '--out', path.join(outputPath, 'patched.bundle'), '--apply'], projectPath);
+      if (result.code !== 0) return finish(result.code, {findings, skip: false, failedStep: step.id});
+    }
+    if (step.phase === 'prepare' && blocked) return finish(result.code || 1, {findings, skip: false, failedStep});
+  }
+  return finish(0, {findings, complete: !blocked, skip: false, failedStep});
+  } catch (error) {
+    emit('run-output', {runId, stream: 'stderr', text: `${error.message}\n`});
+    return finish(1, {findings, skip: false, failedStep});
+  }
 });
 
 module.exports = {makeArgs};

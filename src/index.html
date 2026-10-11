@@ -8,9 +8,17 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app">
+  <div class="app page-patch">
     <aside class="rail">
       <div class="brand"><div class="brand-mark">O<span>T</span></div><div><strong>OTM</strong><small>OTOME TRANSLATOR</small></div></div>
+      <div class="mode-nav">
+        <button id="nav-patch" class="rail-link" type="button" data-i18n="nav.patch"></button>
+        <button id="nav-tools" class="rail-link" type="button" data-i18n="nav.tools"></button>
+      </div>
+      <div class="lang-nav">
+        <button id="lang-en" class="rail-link" type="button" data-i18n="language.en"></button>
+        <button id="lang-vi" class="rail-link" type="button" data-i18n="language.vi"></button>
+      </div>
       <div class="rail-label">ENGINE</div>
       <div id="engines" class="engines" role="group" aria-label="Engine"></div>
       <div class="rail-label">WORKSPACE</div>
@@ -31,9 +39,45 @@
       <p id="group-subtitle">Choose a tool to configure a run.</p>
       <div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="Search all tools…" aria-label="Search tools"></div>
       <div id="tool-list" class="tool-list"></div>
+      <div id="pager" class="pager hidden"><button id="page-prev" class="secondary" type="button">←</button><span id="page-label"></span><button id="page-next" class="secondary" type="button">→</button></div>
       <div class="browser-footer"><strong id="tool-count"></strong><span>commands available</span></div>
     </section>
     <main class="main-pane">
+      <section id="patch-view" class="patch-view">
+        <ol class="stages">
+          <li id="stage-choose" data-i18n="stage.choose"></li>
+          <li id="stage-create" data-i18n="stage.create"></li>
+          <li id="stage-try" data-i18n="stage.try"></li>
+        </ol>
+        <div id="patch-choose">
+          <label class="field"><span data-i18n="patch.choose"></span><input id="patch-file" type="text" readonly></label>
+          <div class="run-buttons">
+            <button id="choose-sheet" class="secondary" type="button" data-i18n="patch.choose"></button>
+            <button id="choose-output" class="secondary" type="button" data-i18n="patch.output"></button>
+          </div>
+          <p id="patch-error" class="notice hidden"></p>
+          <button id="create-patch" class="primary" type="button" disabled data-i18n="patch.button"></button>
+          <div id="patch-shortcuts" class="shortcut-row"></div>
+        </div>
+        <div id="patch-working" class="hidden">
+          <ol class="stages">
+            <li id="task-prepare" data-i18n="task.prepare"></li>
+            <li id="task-check" data-i18n="task.check"></li>
+            <li id="task-create" data-i18n="task.create"></li>
+          </ol>
+          <button id="stop-patch" class="secondary" type="button" data-i18n="patch.stop"></button>
+          <pre id="patch-log"></pre>
+        </div>
+        <div id="patch-issues" class="hidden">
+          <p data-i18n="patch.blocked"></p>
+          <ul id="finding-list"></ul>
+          <button id="choose-fixed" class="primary" type="button" data-i18n="patch.another"></button>
+        </div>
+        <div id="patch-done" class="hidden">
+          <div id="patch-actions"></div>
+        </div>
+      </section>
+      <div id="form-view">
       <header class="main-header"><div><div class="eyebrow" id="breadcrumb">BUILD / COMMAND</div><h2 id="tool-title">Build mod</h2><p id="tool-description"></p></div><div id="python-status" class="env-pill">Checking Python</div></header>
       <div id="update-banner" class="update-banner hidden" role="status"><div><strong id="update-title"></strong><p id="update-message"></p></div><div class="update-actions"><button id="update-open" class="update-primary hidden">View changes ↗</button><button id="update-dismiss" class="update-secondary">Dismiss</button></div></div>
       <div id="notice" class="notice hidden"></div>
@@ -43,6 +87,7 @@
       </section>
       <section class="run-section"><div><strong>Ready to run</strong><small id="run-hint">Commands use your selected Python and project folder.</small></div><div class="run-buttons"><button id="cancel-button" class="secondary" disabled>Stop</button><button id="run-button" class="primary">Run tool <span>↗</span></button></div></section>
       <section class="console-section"><div class="console-header"><div><span class="console-dot"></span><strong>Run log</strong><span id="run-status">No run yet</span></div><button id="clear-log" title="Clear log">Clear</button></div><pre id="log" aria-live="polite">Select a tool, enter its inputs, then run it. Output will appear here.</pre></section>
+      </div>
     </main>
   </div>
   <dialog id="info-dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button id="dialog-close" aria-label="Close">×</button></div><div id="dialog-body"></div></dialog>
