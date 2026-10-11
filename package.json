@@ -1,6 +1,6 @@
 {
   "name": "otome-translator",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "description": "Otome Translator (OTM) - desktop app for translating Otomate / Idea Factory games",
   "license": "MIT",
@@ -9,7 +9,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/catalog-otomate.js && node --check src/catalog-unity.js && node --check src/engines.js && node --check src/update-check.js && node --check src/update-ui.js",
+    "check": "node scripts/check-source-commit.js && node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/catalog-otomate.js && node --check src/catalog-unity.js && node --check src/engines.js && node --check src/update-check.js && node --check src/update-ui.js",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux"

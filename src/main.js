@@ -10,7 +10,10 @@ let currentRun = null;
 let settings;
 let lastUpdate = null;
 let updateRequest = null;
-const SOURCE_COMMIT = 'fc4fa6899cac3eb8f62360c165e0245dcba7b3ed';
+// The engine commit this build carries. The update check compares VE-ES's
+// newest commit against it, so it must name the commit engines/otomate is
+// pinned at; `npm run check` refuses a build where the two differ.
+const SOURCE_COMMIT = '08807f7e9783afae1aaf6cf9058d47a4c7039e21';
 const engineById = new Map(engines.map(engine => [engine.id, engine]));
 const toolById = new Map(engines.flatMap(engine => engine.tools.map(tool => [tool.id, {engine, tool}])));
 
