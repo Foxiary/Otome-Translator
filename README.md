@@ -67,7 +67,7 @@ Nếu npm chặn bước cài Electron, chạy `npm approve-scripts electron` v�
 
 ## Engine
 
-- `engines/otomate/` là submodule của [Foxiary/VE-ES](https://github.com/Foxiary/VE-ES), hiện ở commit `fc4fa68`.
+- `engines/otomate/` là submodule của [Foxiary/VE-ES](https://github.com/Foxiary/VE-ES), hiện ở commit `08807f7`.
 - `engines/unity/` nằm ngay trong repo này. Xem `engines/unity/README.md`; mỗi công cụ đã được chạy trên dữ liệu UNLOGICAL thật và so với bản Việt hóa đã phát hành (`engines/unity/tools/README.md`).
 
 Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js` và `src/catalog-unity.js`; `src/engines.js` khai báo engine, thư mục chép vào workspace, tài liệu và thư viện Python cần có.
