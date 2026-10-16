@@ -8,4 +8,4 @@ The note "Nothing is saved until you approve." is dropped here. The pull request
 
 ## B
 
-Stack B sits on A. It does not add the line "Nothing is saved…" back.
+Stack B sits on A and leaves the dropped note out.
