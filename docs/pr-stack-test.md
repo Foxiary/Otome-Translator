@@ -9,3 +9,7 @@ The note "Nothing is saved until you approve." is dropped here. The pull request
 ## B
 
 Stack B sits on A and leaves the dropped note out.
+
+## C
+
+Stack C sits on B.
