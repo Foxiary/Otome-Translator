@@ -1,94 +1,161 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
   <title>Otome Translator</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="theme.js"></script>
 </head>
 <body>
+  <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M10 5H5v15h15v-5"/></symbol>
+    <symbol id="i-otomate" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></symbol>
+    <symbol id="i-unity" viewBox="0 0 24 24"><path d="m12 3 8 5v9l-8 4-8-4V8l8-5Z"/><path d="m4 8 8 5 8-5M12 13v8"/></symbol>
+    <symbol id="i-chevrons" viewBox="0 0 24 24"><path d="m8 9 4-4 4 4M8 15l4 4 4-4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.6 13.1A8.7 8.7 0 0 1 10.9 3.4a9 9 0 1 0 9.7 9.7Z"/></symbol>
+    <symbol id="i-build" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"/><path d="m12 8 4 4-4 4-4-4 4-4Z"/></symbol>
+    <symbol id="i-font" viewBox="0 0 24 24"><path d="m3 19 6-14 6 14M5 14h8M17 13c4-3 6 0 4 3l-4 3h5"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/></symbol>
+    <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M4 14h16M10 4v16"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+    <symbol id="i-diagnostics" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5 12h4l2-5 3 10 2-5h3"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h10M7 14h6"/></symbol>
+    <symbol id="i-package" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6C9 4 6 4 3 5v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-patch" viewBox="0 0 24 24"><path d="m5 17 12-12 3 3L8 20H5v-3ZM14 8l3 3M5 5h3M6.5 3.5v3M17 18h4M19 16v4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 9a8 8 0 0 0-14-3L3 9m0-5v5h5M4 15a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
+  </svg>
   <div class="app page-form">
-    <aside class="rail">
-      <div class="brand"><div class="brand-mark">O<span>T</span></div><div><strong>OTM</strong><small>OTOME TRANSLATOR</small></div></div>
-      <div class="rail-label">ENGINE</div>
-      <div id="engines" class="engines" role="group" aria-label="Engine"></div>
-      <div class="rail-label">WORKSPACE</div>
-      <button class="workspace" id="workspace-button"><span class="workspace-icon">⌁</span><span class="workspace-text"><strong id="workspace-name">Loading…</strong><small id="workspace-path"></small></span><span class="chevron">›</span></button>
-      <button class="rail-link" id="open-folder"><span>▣</span> Open project folder</button>
-      <div class="rail-label tools-label">TOOL GROUPS</div>
-      <nav id="groups"></nav>
-      <div class="rail-bottom">
-        <button id="nav-patch" class="rail-link" type="button"><span>✎</span> <bdi data-i18n="nav.patch"></bdi></button>
-        <button class="rail-link" id="docs-button"><span>◇</span> Source documentation</button>
-        <button class="rail-link" id="python-button"><span>⌘</span> Python environment</button>
-        <button class="rail-link" id="check-updates"><span>↻</span> Check updates</button>
-        <div class="lang-nav">
-          <button id="lang-en" class="rail-link" type="button" data-i18n="language.en"></button>
-          <button id="lang-vi" class="rail-link" type="button" data-i18n="language.vi"></button>
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark"><svg viewBox="0 0 44 44" fill="none" aria-hidden="true"><rect x="7.5" y="13" width="13" height="18" rx="6.5" stroke="currentColor" stroke-width="3.2"/><path d="M23.5 14.5h13M30 14.5v16" stroke="currentColor" stroke-width="3.2" stroke-linecap="square"/></svg></div><div><div class="wordmark">otome</div><div class="brand-caption">TRANSLATOR</div></div></div>
+
+      <section aria-labelledby="workspace-heading">
+        <div class="section-label"><h2 class="eyebrow" id="workspace-heading" data-i18n="rail.workspace"></h2><span class="local-label"><i class="dot"></i><bdi data-i18n="rail.local"></bdi></span></div>
+        <div class="workspace-card">
+          <div class="workspace-info"><span class="folder-box"><svg class="icon"><use href="#i-folder"/></svg></span><div class="workspace-copy"><div class="workspace-name" id="workspace-name" data-i18n="workspace.loading"></div><div class="workspace-path mono" id="workspace-path"></div></div></div>
+          <div class="workspace-actions"><button type="button" id="open-folder"><svg class="icon"><use href="#i-external"/></svg><bdi data-i18n="workspace.open"></bdi></button><button type="button" class="change-button" id="workspace-button" data-i18n="workspace.change"></button></div>
         </div>
-        <div class="source-note">Powered by the VE-ES and Unity Python engines.<br>Game assets are supplied by you.</div>
+      </section>
+
+      <section class="engine-section" aria-labelledby="engine-heading">
+        <div class="section-label"><h2 class="eyebrow" id="engine-heading" data-i18n="rail.engine"></h2><span class="local-label" id="engine-count"></span></div>
+        <fieldset class="engine-options" id="engines" aria-labelledby="engine-heading" aria-describedby="engine-help"></fieldset>
+        <p class="engine-help" id="engine-help" data-i18n="engine.help"></p>
+      </section>
+
+      <nav class="navigation" aria-labelledby="groups-heading">
+        <div class="section-label"><span class="eyebrow" id="groups-heading" data-i18n="rail.groups"></span><span class="local-label" id="groups-engine"></span></div>
+        <div class="nav-list" id="groups"></div>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <nav class="utility-list">
+          <button class="utility" type="button" id="docs-button"><svg class="icon"><use href="#i-book"/></svg><bdi data-i18n="rail.docs"></bdi></button>
+          <button class="utility" type="button" id="python-button"><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="rail.python"></bdi></button>
+          <button class="utility" type="button" id="check-updates"><svg class="icon"><use href="#i-refresh"/></svg><bdi data-i18n="rail.updates"></bdi></button>
+        </nav>
+        <button class="theme-toggle" type="button" role="switch" id="theme-toggle" aria-checked="true"><svg class="icon"><use href="#i-moon"/></svg><bdi data-i18n="theme.dark"></bdi><span class="theme-state" id="theme-state"></span><span class="theme-track" aria-hidden="true"><span class="theme-thumb"></span></span></button>
+        <div class="language-switcher" id="language-switcher">
+          <button class="language-toggle" type="button" id="language-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu"><svg class="icon"><use href="#i-globe"/></svg><bdi data-i18n="language.label"></bdi><span class="language-code" id="language-code"></span><svg class="icon language-chevron"><use href="#i-chevrons"/></svg></button>
+          <div class="language-menu hidden" id="language-menu" role="menu">
+            <div class="language-menu-title" data-i18n="language.menu"></div>
+            <button class="language-option" type="button" role="menuitemradio" id="lang-en"><span class="language-option-code">EN</span><span lang="en" data-i18n="language.en"></span><svg class="icon"><use href="#i-check"/></svg></button>
+            <button class="language-option" type="button" role="menuitemradio" id="lang-vi"><span class="language-option-code">VI</span><span lang="vi" data-i18n="language.vi"></span><svg class="icon"><use href="#i-check"/></svg></button>
+          </div>
+        </div>
+        <div class="local-footer"><svg class="icon"><use href="#i-device"/></svg><bdi data-i18n="footer.local"></bdi></div>
       </div>
     </aside>
-    <section class="browser-pane">
-      <div class="eyebrow">OPERATIONS</div>
-      <h1 id="group-title">Build</h1>
-      <p id="group-subtitle">Choose a tool to configure a run.</p>
-      <div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="Search all tools…" aria-label="Search tools"></div>
-      <div id="tool-list" class="tool-list"></div>
-      <div class="browser-footer"><strong id="tool-count"></strong><span>commands available</span></div>
+
+    <section class="tool-panel" aria-labelledby="group-title">
+      <div class="tool-heading"><span class="eyebrow" data-i18n="browser.choose"></span><h2 id="group-title"></h2><p id="group-subtitle"></p></div>
+      <div class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="browser.search" aria-label="Search tools" autocomplete="off"></div>
+      <nav class="tool-list" id="tool-list"></nav>
+      <div class="panel-footer"><div class="panel-footer-inner" id="tool-count"></div></div>
     </section>
-    <main class="main-pane">
+
+    <main class="main">
       <section id="patch-view" class="patch-view">
-        <ol class="stages">
-          <li id="stage-choose" data-i18n="stage.choose"></li>
-          <li id="stage-create" data-i18n="stage.create"></li>
-          <li id="stage-try" data-i18n="stage.try"></li>
-        </ol>
-        <div id="patch-choose">
-          <label class="field"><span data-i18n="patch.choose"></span><input id="patch-file" type="text" readonly></label>
-          <div class="run-buttons">
-            <button id="choose-sheet" class="secondary" type="button" data-i18n="patch.choose"></button>
-            <button id="choose-output" class="secondary" type="button" data-i18n="patch.output"></button>
-          </div>
-          <p id="patch-error" class="notice hidden"></p>
-          <button id="create-patch" class="primary" type="button" disabled data-i18n="patch.button"></button>
-          <div id="patch-shortcuts" class="shortcut-row"></div>
-        </div>
-        <div id="patch-working" class="hidden">
+        <header class="page-header">
+          <div class="header-top"><div class="breadcrumbs" id="patch-breadcrumb"></div></div>
+          <h1 id="patch-title"></h1>
+          <p id="patch-scope" class="page-description"></p>
+        </header>
+        <div class="main-content">
           <ol class="stages">
-            <li id="task-prepare" data-i18n="task.prepare"></li>
-            <li id="task-check" data-i18n="task.check"></li>
-            <li id="task-create" data-i18n="task.create"></li>
+            <li id="stage-choose" data-i18n="stage.choose"></li>
+            <li id="stage-create" data-i18n="stage.create"></li>
+            <li id="stage-try" data-i18n="stage.try"></li>
           </ol>
-          <button id="stop-patch" class="secondary" type="button" data-i18n="patch.stop"></button>
-          <pre id="patch-log"></pre>
-        </div>
-        <div id="patch-issues" class="hidden">
-          <p data-i18n="patch.blocked"></p>
-          <ul id="finding-list"></ul>
-          <button id="choose-fixed" class="primary" type="button" data-i18n="patch.another"></button>
-        </div>
-        <div id="patch-done" class="hidden">
-          <div id="patch-actions"></div>
+          <div id="patch-choose">
+            <label class="field patch-file-field"><span class="field-label" data-i18n="patch.choose"></span><input id="patch-file" type="text" readonly></label>
+            <div class="run-buttons">
+              <button id="choose-sheet" class="button" type="button" data-i18n="patch.choose"></button>
+              <button id="choose-output" class="button" type="button" data-i18n="patch.output"></button>
+            </div>
+            <p id="patch-error" class="notice hidden"></p>
+            <button id="create-patch" class="button primary" type="button" disabled data-i18n="patch.button"></button>
+            <div id="patch-shortcuts" class="shortcut-row"></div>
+          </div>
+          <div id="patch-working" class="hidden">
+            <ol class="stages">
+              <li id="task-prepare" data-i18n="task.prepare"></li>
+              <li id="task-check" data-i18n="task.check"></li>
+              <li id="task-create" data-i18n="task.create"></li>
+            </ol>
+            <button id="stop-patch" class="button" type="button" data-i18n="patch.stop"></button>
+            <pre id="patch-log" class="log-body mono"></pre>
+          </div>
+          <div id="patch-issues" class="hidden">
+            <p data-i18n="patch.blocked"></p>
+            <ul id="finding-list"></ul>
+            <button id="choose-fixed" class="button primary" type="button" data-i18n="patch.another"></button>
+          </div>
+          <div id="patch-done" class="hidden">
+            <div id="patch-actions" class="run-buttons"></div>
+          </div>
         </div>
       </section>
+
       <div id="form-view">
-      <header class="main-header"><div><div class="eyebrow" id="breadcrumb">BUILD / COMMAND</div><h2 id="tool-title">Build mod</h2><p id="tool-description"></p></div><div id="python-status" class="env-pill">Checking Python</div></header>
-      <div id="update-banner" class="update-banner hidden" role="status"><div><strong id="update-title"></strong><p id="update-message"></p></div><div class="update-actions"><button id="update-open" class="update-primary hidden">View changes ↗</button><button id="update-dismiss" class="update-secondary">Dismiss</button></div></div>
-      <div id="notice" class="notice hidden"></div>
-      <section class="form-section">
-        <div class="section-heading"><span>01</span><h3>Configuration</h3><p>Paths can be absolute or relative to the project folder.</p></div>
-        <form id="tool-form"><div id="form-fields" class="form-fields"></div></form>
-      </section>
-      <section class="run-section"><div><strong>Ready to run</strong><small id="run-hint">Commands use your selected Python and project folder.</small></div><div class="run-buttons"><button id="cancel-button" class="secondary" disabled>Stop</button><button id="run-button" class="primary">Run tool <span>↗</span></button></div></section>
-      <section class="console-section"><div class="console-header"><div><span class="console-dot"></span><strong>Run log</strong><span id="run-status">No run yet</span></div><button id="clear-log" title="Clear log">Clear</button></div><pre id="log" aria-live="polite">Select a tool, enter its inputs, then run it. Output will appear here.</pre></section>
+        <header class="page-header">
+          <div class="header-top"><div class="breadcrumbs" id="breadcrumb"></div><span id="python-status" class="runtime" data-i18n="python.checking"></span></div>
+          <h1 id="tool-title"></h1>
+          <p class="page-description" id="tool-description"></p>
+        </header>
+        <div class="main-content">
+          <div id="update-banner" class="update-banner hidden" role="status"><div><strong id="update-title"></strong><p id="update-message"></p></div><div class="update-actions"><button id="update-open" class="button primary hidden" data-i18n="update.view"></button><button id="update-dismiss" class="button" data-i18n="update.dismiss"></button></div></div>
+          <div id="notice" class="notice hidden"></div>
+          <div class="section-heading"><span class="section-number mono">01</span><h2 data-i18n="form.configuration"></h2><span class="section-note" data-i18n="form.paths"></span></div>
+          <form id="tool-form"><div id="form-fields" class="form-fields"></div></form>
+          <section class="run-card">
+            <div class="run-copy"><div class="run-status"><span class="dot"></span><bdi data-i18n="form.ready"></bdi></div><div class="run-path mono" id="run-hint"></div></div>
+            <div class="run-actions"><button id="cancel-button" class="button" type="button" disabled data-i18n="patch.stop"></button><button id="run-button" class="button primary" type="button"><svg class="icon"><use href="#i-play"/></svg><bdi data-i18n="form.run"></bdi></button></div>
+          </section>
+          <section class="log" aria-labelledby="log-heading">
+            <div class="log-header"><span class="log-label" id="log-heading"><span class="console-dot"></span><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="log.title"></bdi></span><span class="log-state" id="run-status"></span><button class="log-clear" type="button" id="clear-log" data-i18n="log.clear" data-i18n-title="log.clearTitle"></button></div>
+            <pre id="log" class="log-body mono" aria-live="polite"></pre>
+          </section>
+        </div>
       </div>
     </main>
   </div>
-  <dialog id="info-dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button id="dialog-close" aria-label="Close">×</button></div><div id="dialog-body"></div></dialog>
+  <dialog id="info-dialog"><div class="dialog-header"><h2 id="dialog-title"></h2><button class="icon-button" id="dialog-close" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="dialog-body" id="dialog-body"></div></dialog>
   <script src="i18n.js"></script>
   <script src="patch-ui.js"></script>
+  <script src="file-types.js"></script>
   <script src="renderer.js"></script>
   <script src="update-ui.js"></script>
 </body>

@@ -6,6 +6,7 @@ const {engines} = require('./engines');
 const {checkForUpdate} = require('./update-check');
 const {normalizePatchSettings} = require('./patch-settings');
 const {isXlsx} = require('./patch-ui');
+const {t} = require('./i18n');
 const {recipeFor, setupError} = require('./patch-recipe');
 
 let window;
@@ -97,8 +98,8 @@ function performUpdateCheck() {
       settings.lastNotifiedUpdateTag = result.tag;
       saveSettings();
       if (app.isPackaged && Notification.isSupported()) {
-        const notice = new Notification({title: 'Otome Translator update',
-          body: `Version ${result.latestVersion} is available.`});
+        const notice = new Notification({title: t('update.notice', settings.language),
+          body: t('update.noticeBody', settings.language, {version: result.latestVersion})});
         notice.on('click', () => {window?.show(); window?.focus();});
         notice.show();
       }
@@ -160,8 +161,8 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 app.on('before-quit', () => { if (currentRun) currentRun.child.kill(); });
 
 function publicEngines() {
-  return engines.map(({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools}) =>
-    ({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools}));
+  return engines.map(({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools, vi}) =>
+    ({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools, vi}));
 }
 ipcMain.handle('state', () => ({engines: publicEngines(), settings, workspace: workspace(),
   python: pythonCheck(), running: !!currentRun, sourceCommit: SOURCE_COMMIT, appVersion: app.getVersion()}));
@@ -187,7 +188,7 @@ ipcMain.handle('open-update', () => {
   return shell.openExternal(lastUpdate.url);
 });
 ipcMain.handle('choose-workspace', async () => {
-  const result = await dialog.showOpenDialog(window, {title: `Choose a ${activeEngine().name} project folder`,
+  const result = await dialog.showOpenDialog(window, {title: t('workspace.dialog', settings.language, {engine: activeEngine().name}),
     defaultPath: workspace(), properties: ['openDirectory', 'createDirectory']});
   if (result.canceled) return null;
   prepareWorkspace(result.filePaths[0], activeEngine());
@@ -195,18 +196,25 @@ ipcMain.handle('choose-workspace', async () => {
   saveSettings();
   return {workspace: workspace(), python: pythonCheck()};
 });
-ipcMain.handle('choose-path', async (_event, kind, current) => {
+function dialogFilters(filters) {
+  if (!Array.isArray(filters)) return [];
+  return filters.filter(filter => typeof filter?.name === 'string' && Array.isArray(filter.extensions)
+    && filter.extensions.every(extension => typeof extension === 'string' && /^(\*|[a-z0-9]+)$/i.test(extension)))
+    .map(filter => ({name: filter.name, extensions: filter.extensions}));
+}
+ipcMain.handle('choose-path', async (_event, kind, current, filters) => {
   const defaultPath = current || workspace();
   if (kind === 'save') {
-    const result = await dialog.showSaveDialog(window, {defaultPath});
+    const result = await dialog.showSaveDialog(window, {defaultPath, filters: dialogFilters(filters)});
     return result.canceled ? null : result.filePath;
   }
-  const properties = kind === 'dir' ? ['openDirectory', 'createDirectory'] : ['openFile', 'openDirectory'];
-  const result = await dialog.showOpenDialog(window, {defaultPath, properties});
+  // Windows and Linux cannot show one dialog for both files and folders: it becomes a folder picker.
+  const properties = kind === 'dir' ? ['openDirectory', 'createDirectory'] : ['openFile'];
+  const result = await dialog.showOpenDialog(window, {defaultPath, properties, filters: kind === 'dir' ? [] : dialogFilters(filters)});
   return result.canceled ? null : result.filePaths[0];
 });
 ipcMain.handle('choose-python', async () => {
-  const result = await dialog.showOpenDialog(window, {title: 'Choose a Python executable', properties: ['openFile']});
+  const result = await dialog.showOpenDialog(window, {title: t('python.dialog', settings.language), properties: ['openFile']});
   if (result.canceled) return null;
   settings.python = result.filePaths[0];
   saveSettings();
