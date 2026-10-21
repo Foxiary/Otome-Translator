@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {missingFiles} = require('../src/required-files');
+const {missingFiles, jpNames} = require('../src/required-files');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'otm-required-'));
 const touch = file => {
@@ -25,12 +25,16 @@ try {
   assert.deepEqual(paths('build'), []);
 
   // An accepted alternative counts as present.
-  assert.deepEqual(paths('quarong'), ['STORY.cpk', 'dist/SYSTEM.cpk']);
-  touch('STORY.cpk'); touch('work/out/SYSTEM.cpk');
+  assert.deepEqual(paths('quarong'), ['STORY.cpk', 'dist/SYSTEM.cpk', 'windows.json']);
+  touch('STORY.cpk'); touch('work/out/SYSTEM.cpk'); touch('windows.json');
   assert.deepEqual(paths('quarong'), []);
 
-  assert.deepEqual(paths('chuadich'), ['work/jp/CONTENTS/STORY.cpk']);
-  assert.deepEqual(paths('patch:otomate'), ['work/jp/CONTENTS/STORY.cpk']);
+  // The Japanese build is wherever the engine found it.
+  assert.deepEqual(jpNames('chuadich', workspace), ['STORY.cpk']);
+  assert.deepEqual(paths('chuadich'), ['STORY.cpk (JP)']);
+  // The patch page needs no Japanese build.
+  assert.deepEqual(paths('patch:otomate'), []);
+  assert.deepEqual(missingFiles('chuadich', workspace, {'STORY.cpk': 'game/jp/STORY.cpk'}), []);
 
   // A Unity bundle is matched by its extension, whatever the game names it.
   assert.deepEqual(paths('patch:unity'), ['*.bundle, *.assets', 'text-boxes.json']);

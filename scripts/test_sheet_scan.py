@@ -43,6 +43,23 @@ def workbook(path, translation):
             archive.writestr(name, payload)
 
 
+def openpyxl_style(path, rows):
+    """A workbook laid out the way openpyxl (and so mksheet.py) saves one: text kept
+    inline in each cell, and the worksheet named from the package root."""
+    def cell(ref, value):
+        return f'<c r="{ref}" t="inlineStr"><is><t>{value}</t></is></c>' if value else ""
+    body = "".join(f'<row r="{i}">' + "".join(cell(f"{col}{i}", v) for col, v in zip("ABC", row)) + "</row>"
+                   for i, row in enumerate(rows, 1))
+    files = {
+        "xl/workbook.xml": '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="100" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        "xl/_rels/workbook.xml.rels": '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/xl/worksheets/sheet1.xml"/></Relationships>',
+        "xl/worksheets/sheet1.xml": f'<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>{body}</sheetData></worksheet>',
+    }
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, payload in files.items():
+            archive.writestr(name, payload.encode())
+
+
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -56,7 +73,19 @@ def main():
         assert digest(empty) == before, "empty-cell scan wrote the workbook"
         assert scan.returncode == 2, scan.stderr
         found = json.loads(scan.stdout.strip().splitlines()[-1])
-        assert found == {"sheet": "Dialogue", "row": 2}, found
+        assert found == {"sheet": "Dialogue", "row": 2, "source": "Hello"}, found
+
+        # A sheet mksheet.py wrote: its inline text is read, not taken for empty cells.
+        made = Path(folder) / "made.xlsx"
+        openpyxl_style(made, [("ID", "EN", "VI"), ("5___1A0_title", "KEY@Act 1: Death", ""), ("6___1B0_text", "Done", "Xong")])
+        scan = subprocess.run([sys.executable, str(ROOT / "src" / "sheet_scan.py"), str(made)], capture_output=True, text=True)
+        assert scan.returncode == 2, scan.stderr
+        assert json.loads(scan.stdout.strip()) == {"sheet": "100", "row": 2, "source": "KEY@Act 1: Death"}, scan.stdout
+        keys = subprocess.run([sys.executable, str(ROOT / "src" / "title_keys.py"), str(made)], capture_output=True, text=True)
+        assert json.loads(keys.stdout) == {"titles": 1, "keyed": 1}, keys.stdout + keys.stderr
+        openpyxl_style(made, [("ID", "EN", "VI"), ("5___1A0_title", "Act 1: Death", "")])
+        keys = subprocess.run([sys.executable, str(ROOT / "src" / "title_keys.py"), str(made)], capture_output=True, text=True)
+        assert json.loads(keys.stdout) == {"titles": 1, "keyed": 0}, keys.stdout + keys.stderr
 
         long = Path(folder) / "long.xlsx"
         workbook(long, "this translation is too long for the box")

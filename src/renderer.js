@@ -7,6 +7,24 @@ let page = 'form';
 let patchStage = 'choose';
 let patchPhase = 0;
 let patchMissing = [];
+let patchUntranslated = [];
+let patchResult = {};
+// The chosen workbook's worksheet names, read once per file.
+let patchSheets = {path: '', names: null, error: ''};
+// The measure screen's state: a screenshot, the line on it, and up to three clicked x positions.
+const measure = {image: null, text: '', font: 'advfont1.ffu', screen: 'dialogue', points: [], zoomed: false,
+  widths: null, widthsFor: '', busy: false, error: '', saved: {}, justSaved: ''};
+const MEASURE_POINTS = ['start', 'end', 'edge'];
+const MEASURE_FONTS = {'advfont1.ffu': 'I', 'advfont2.ffu': 'II', 'advfont3.ffu': 'III', 'advfont4.ffu': 'IV'};
+// The screens a width can be saved for, named as in windows.json and the engine.
+const MEASURE_SCREENS = ['dialogue', 'framed', 'backlog', 'narration'];
+// Tools whose checks depend on the measured box widths; their forms show them.
+const WIDTH_TOOLS = ['quarong', 'reflow', 'mksheet'];
+// Advanced options on each engine's patch page, in the order they show.
+const PATCH_OPTIONS = {
+  otomate: [['dryRun', 'bool'], ['sheets', 'sheets'], ['allowOverflow', 'bool']],
+  unity: [['dryRun', 'bool'], ['sheetName', 'sheet'], ['force', 'bool'], ['packer', ['auto', 'lz4', 'lzma', 'none', 'original']], ['tokens', 'lines']]
+};
 let formValues = {};
 let currentLog = '';
 let pythonCheck = null;
@@ -30,6 +48,8 @@ const groupIcons = {Build: 'build', Fonts: 'font', Archives: 'archive', Sheets: 
   Diagnostics: 'diagnostics', Dump: 'download', Inspect: 'search', Text: 'sheet', Layout: 'layout', Release: 'package'};
 // The patch page sits in the group list next to the group whose output it shares.
 const patchAfter = {otomate: 'Build', unity: 'Text'};
+// The measure screen uses the Otomate width tools, so only that engine offers it.
+const measureAfter = {otomate: 'Diagnostics'};
 function elt(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -150,7 +170,16 @@ function renderGroups() {
     });
     nav.append(button);
     if (group === patchAfter[engine().id]) nav.append(patchItem());
+    if (group === measureAfter[engine().id]) nav.append(pageItem('measure', 'ruler', text('nav.measure')));
   }
+}
+function pageItem(name, iconName, label) {
+  const button = elt('button', `nav-item${page === name ? ' active' : ''}`);
+  button.type = 'button';
+  if (page === name) button.setAttribute('aria-current', 'true');
+  button.append(icon(iconName), elt('span', '', label));
+  button.addEventListener('click', () => showPage(name));
+  return button;
 }
 // What the patch page writes depends on the engine, so its name does too.
 function patchItem() {
@@ -250,6 +279,8 @@ function renderForm() {
     fields.append(field);
   }
   checkMissing();
+  if (engine().id === 'otomate' && WIDTH_TOOLS.includes(current.id)) showWidths($('form-widths'));
+  else $('form-widths').classList.add('hidden');
   $('run-hint').textContent = `${current.script}${current.prefix.length ? ' ' + current.prefix.join(' ') : ''} · ${state.workspace}`;
   $('run-button').disabled = running;
   $('cancel-button').disabled = !running;
@@ -295,6 +326,33 @@ async function checkPatchMissing() {
   patchMissing = missing;
   renderMissing($('patch-missing'), patchMissing);
   updatePatchReady();
+  // Before a run only: afterwards the result card says which widths were used.
+  if (engineId === 'otomate' && patchStage === 'choose') showWidths($('patch-widths'));
+  else $('patch-widths').classList.add('hidden');
+}
+// The widths card: what windows.json holds for this project, or that it holds nothing.
+async function showWidths(box) {
+  let saved = {};
+  try { saved = await window.vees.measureSaved(); } catch {}
+  const measured = MEASURE_SCREENS.filter(screen => saved[screen]?.ceiling);
+  box.classList.remove('hidden');
+  box.classList.toggle('none', !measured.length);
+  box.replaceChildren();
+  const iconBox = elt('span', 'pick-icon');
+  iconBox.append(icon('ruler'));
+  const body = elt('div', 'widths-body');
+  body.append(elt('strong', '', text('widths.title')), elt('div', 'pick-hint', text(measured.length ? 'widths.some' : 'widths.none')));
+  if (measured.length) {
+    const chips = elt('div', 'width-chips');
+    for (const screen of MEASURE_SCREENS) {
+      const chip = elt('span', `width-chip${saved[screen]?.ceiling ? '' : ' off'}`);
+      chip.append(elt('span', '', text(`measure.screen.${screen}`)),
+        elt('b', '', saved[screen]?.ceiling ? text('widths.unit', {ceiling: saved[screen].ceiling}) : text('measure.notMeasured')));
+      chips.append(chip);
+    }
+    body.append(chips);
+  }
+  box.append(iconBox, body, actionButton('button', text(measured.length ? 'widths.remeasure' : 'nav.measure'), () => showPage('measure')));
 }
 function breadcrumbs(node, parts, script) {
   node.replaceChildren();
@@ -330,6 +388,7 @@ function renderPatch() {
     step.querySelector('.step-mark').textContent = index < current ? '' : String(index + 1);
   });
   $('patch-setup').classList.toggle('hidden', patchStage !== 'choose');
+  if (patchStage !== 'choose') $('patch-widths').classList.add('hidden');
   $('patch-working').classList.toggle('hidden', patchStage !== 'working');
   $('patch-issues').classList.toggle('hidden', patchStage !== 'issues');
   $('patch-done').classList.toggle('hidden', patchStage !== 'done');
@@ -337,20 +396,420 @@ function renderPatch() {
   $('stop-patch').classList.toggle('hidden', !running);
   renderTasks();
   if (patchStage === 'done') {
-    $('patch-done-body').textContent = text(`patch.done.${engine().id}`);
+    const dry = !!patchResult.dryRun;
+    $('patch-done').classList.toggle('dry', dry);
+    $('patch-done-title').textContent = text(dry ? 'patch.dryTitle' : 'patch.doneTitle');
+    $('patch-done-body').textContent = dry ? text('patch.dryBody') : text(`patch.done.${engine().id}`);
+    // Always say what the width check used: the measured widths, or that there were none.
+    const used = MEASURE_SCREENS.filter(screen => patchResult.widths?.[screen])
+      .map(screen => `${text(`measure.screen.${screen}`)} ${patchResult.widths[screen]}`);
+    $('patch-done-measure').classList.toggle('hidden', engine().id !== 'otomate');
+    // Chapter titles need translated prefixes; say so when the run had none.
+    const labels = tools().find(item => item.id === 'filltitles-prefixes');
+    $('patch-titles').classList.toggle('hidden', !patchResult.titlesSkipped || !labels);
+    if (labels) {
+      $('patch-titles-text').textContent = text('patch.titlesSkipped', {file: 'work\\title_prefixes.xlsx', sheet: 'title_prefix', tool: toolText(labels, 'title')});
+      $('patch-titles-tool').textContent = toolText(labels, 'title');
+    }
+    $('patch-done-widths').textContent = used.length ? text('patch.widthsUsed', {list: used.join(', ')}) : text('patch.unmeasuredDone');
+    $('patch-done-measure-open').querySelector('bdi').textContent = text(used.length ? 'widths.remeasure' : 'nav.measure');
     $('patch-done-path').textContent = outputPath;
+    renderOverflow();
+    renderUntranslated();
     const actions = $('patch-actions');
     actions.replaceChildren();
-    if (engine().id === 'otomate') actions.append(actionButton('button primary', text('patch.nextRepack'), () => openTool('cpk-repack')));
+    const next = engine().id === 'otomate' && !dry;
+    if (next) actions.append(actionButton('button primary', text('patch.nextRepack'), () => openTool('cpk-repack')));
     for (const action of successActions()) {
-      const button = actionButton(action === 'open-folder' && engine().id !== 'otomate' ? 'button primary' : 'button',
+      const button = actionButton(action === 'open-folder' && !next ? 'button primary' : 'button',
         text(action === 'open-folder' ? 'patch.open' : 'patch.another'), () => action === 'open-folder' ? window.vees.openOutput() : chooseSheet());
       button.dataset.action = action;
       actions.append(button);
     }
   }
+  renderPatchOptions();
   updatePatchReady();
   checkPatchMissing();
+}
+// Lines too wide for their box, with their text: held back by default, written when allowed.
+function renderOverflow() {
+  const box = $('patch-overflow');
+  const rows = patchResult.overflow || [];
+  box.classList.toggle('hidden', !rows.length);
+  box.replaceChildren();
+  if (!rows.length) return;
+  const list = elt('ul', 'overflow-lines');
+  for (const row of overflowRows(rows).slice(0, 5)) list.append(rowItem(row));
+  const body = elt('div', 'untranslated-body');
+  body.append(elt('strong', '', text(patchResult.allowOverflow ? 'patch.overflowWritten' : 'patch.overflowHeld', {count: rows.length})), list);
+  const actions = elt('div', 'untranslated-actions');
+  actions.append(actionButton('button primary', text('patch.viewAll', {count: rows.length}),
+    () => showRows(text('patch.overflowTitle'), overflowRows(rows))));
+  actions.append(actionButton('button', text('patch.openOverflow'), async () => {
+    const error = await window.vees.openOverflow();
+    if (error) showPatchError(error);
+  }));
+  body.append(actions);
+  box.append(body);
+}
+// Overflow rows as list rows: where, by how much, and the line with #n as a visible break.
+function overflowRows(rows) {
+  return rows.map(row => ({sheet: row.sheet, id: row.id, copy: row.id,
+    detail: text('patch.overflowBy', {units: row.over}), text: row.text.replace(/#n/g, ' ⏎ ')}));
+}
+function rowItem(row) {
+  const item = elt('li');
+  const where = elt('div', 'overflow-where');
+  where.append(elt('span', 'mono', `${row.sheet} · ${row.id}`));
+  if (row.detail) where.append(elt('span', '', row.detail));
+  item.append(where, elt('div', 'overflow-text', row.text));
+  return item;
+}
+// Every row of a list in a dialog, with a filter and a copy button per row.
+function showRows(title, rows) {
+  dialogContent(title, body => {
+    const filter = elt('input', 'rows-filter');
+    filter.type = 'search'; filter.placeholder = text('rows.filter');
+    const count = elt('div', 'pick-hint');
+    const list = elt('ul', 'overflow-lines rows-list');
+    const items = rows.map(row => {
+      const item = rowItem(row);
+      const copy = actionButton('button rows-copy', text('rows.copy'), async () => {
+        try { await navigator.clipboard.writeText(row.copy); copy.textContent = text('rows.copied'); }
+        catch (error) { copy.textContent = error.message; }
+        setTimeout(() => {copy.textContent = text('rows.copy');}, 1500);
+      });
+      item.querySelector('.overflow-where').append(copy);
+      item.dataset.search = `${row.sheet} ${row.id} ${row.text}`.toLowerCase();
+      list.append(item);
+      return item;
+    });
+    const update = () => {
+      const wanted = filter.value.trim().toLowerCase();
+      let shown = 0;
+      for (const item of items) {
+        const match = !wanted || item.dataset.search.includes(wanted);
+        item.classList.toggle('hidden', !match);
+        shown += match;
+      }
+      count.textContent = text('rows.count', {shown, total: rows.length});
+    };
+    filter.addEventListener('input', update);
+    update();
+    body.append(filter, count, list);
+    setTimeout(() => filter.focus(), 0);
+  }, true);
+}
+// Rows the sheet leaves untranslated: the patch went ahead, they stay in English.
+function renderUntranslated() {
+  const box = $('patch-untranslated');
+  box.classList.toggle('hidden', !patchUntranslated.length);
+  box.replaceChildren();
+  if (!patchUntranslated.length) return;
+  const bySheet = new Map();
+  for (const row of patchUntranslated) bySheet.set(row.sheet, (bySheet.get(row.sheet) || 0) + 1);
+  const sheets = [...bySheet].sort((a, b) => b[1] - a[1]);
+  const list = elt('ul', 'untranslated-sheets');
+  for (const [sheet, count] of sheets.slice(0, 5)) list.append(elt('li', '', text('patch.untranslatedSheet', {sheet, count})));
+  if (sheets.length > 5) list.append(elt('li', '', text('patch.untranslatedMore', {count: sheets.length - 5})));
+  const saved = elt('span', 'untranslated-saved');
+  const save = actionButton('button', text('patch.exportUntranslated'), async () => {
+    try {
+      const file = await window.vees.exportUntranslated(patchUntranslated);
+      if (file) saved.textContent = text('patch.exported', {path: file});
+    } catch (error) {showPatchError(error.message);}
+  });
+  const actions = elt('div', 'untranslated-actions');
+  const rows = patchUntranslated.map(row => ({sheet: row.sheet, id: text('rows.row', {row: row.row}), copy: String(row.row), text: row.source || ''}));
+  actions.append(actionButton('button primary', text('patch.viewAll', {count: rows.length}),
+    () => showRows(text('patch.untranslatedTitle'), rows)), save, saved);
+  const body = elt('div', 'untranslated-body');
+  body.append(elt('strong', '', text('patch.untranslated', {count: patchUntranslated.length})), list, actions);
+  box.append(body);
+}
+function renderMeasure() {
+  breadcrumbs($('measure-breadcrumb'), [engine().name]);
+  showValue($('measure-file'), measure.image?.path || '', 'measure.noImage');
+  if ($('measure-text').value !== measure.text) $('measure-text').value = measure.text;
+  fillSelect($('measure-font'), Object.entries(MEASURE_FONTS).map(([value, n]) => [value, text('measure.fontOption', {n})]), measure.font);
+  fillSelect($('measure-screen'), MEASURE_SCREENS.map(value => [value, text(`measure.screen.${value}`)]), measure.screen);
+  $('measure-stage').classList.toggle('hidden', !measure.image);
+  if (!measure.image) {$('measure-result').classList.add('hidden'); return;}
+  const img = $('measure-img');
+  if (img.dataset.src !== measure.image.path) {img.src = measure.image.dataUrl; img.dataset.src = measure.image.path;}
+  $('measure-canvas').classList.toggle('zoomed', measure.zoomed);
+  $('measure-zoom').textContent = text(measure.zoomed ? 'measure.zoomOut' : 'measure.zoomIn');
+  const next = MEASURE_POINTS[measure.points.length];
+  $('measure-instruction').textContent = text(next ? `measure.click.${next}` : 'measure.click.done');
+  $('measure-step-mark').textContent = next ? String(measure.points.length + 1) : '✓';
+  $('measure-step-mark').classList.toggle('done', !next);
+  renderMeasureMarks();
+  renderMeasureResult();
+}
+// What windows.json already holds for this project, one row per screen.
+async function loadMeasureSaved() {
+  try { measure.saved = await window.vees.measureSaved(); } catch { measure.saved = {}; }
+  if (page === 'measure') {renderMeasureSaved(); renderMeasureResult();}
+}
+function renderMeasureSaved() {
+  const box = $('measure-saved');
+  const screens = MEASURE_SCREENS;
+  const any = screens.some(screen => measure.saved[screen]);
+  box.classList.toggle('hidden', !any);
+  box.replaceChildren();
+  if (!any) return;
+  const table = elt('table');
+  const head = elt('tr');
+  for (const key of ['screen', 'width', 'font', 'when']) head.append(elt('th', '', text(`measure.col.${key}`)));
+  table.append(head);
+  for (const screen of screens) {
+    const saved = measure.saved[screen];
+    const row = elt('tr');
+    row.append(elt('td', '', text(`measure.screen.${screen}`)));
+    if (saved) {
+      row.append(elt('td', 'number', String(saved.ceiling)),
+        elt('td', 'muted', MEASURE_FONTS[saved.font] ? text('measure.fontOption', {n: MEASURE_FONTS[saved.font]}) : saved.font),
+        elt('td', 'muted', measuredWhen(saved.measuredAt)));
+    } else {
+      const empty = elt('td', 'muted', text('measure.notMeasured'));
+      empty.colSpan = 3;
+      row.append(empty);
+    }
+    table.append(row);
+  }
+  box.append(elt('h2', '', text('measure.savedTitle')), elt('div', 'pick-hint', text('measure.savedHint')), table);
+}
+async function saveMeasurement(ceiling) {
+  const [start, end, edge] = measure.points;
+  try {
+    measure.saved = await window.vees.measureSave(measure.screen, {
+      ceiling, font: measure.font, fontFile: measure.widths.font, line: measure.widths.line,
+      lineUnits: measure.widths.widths[measure.font], pixels: {start, end, edge}, image: measure.image.path});
+    measure.justSaved = measure.screen;
+  } catch (error) {
+    measure.error = error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  }
+  renderMeasureSaved();
+  renderMeasureResult();
+}
+function fillSelect(select, options, value) {
+  select.replaceChildren(...options.map(([optionValue, label]) => {
+    const option = elt('option', '', label);
+    option.value = optionValue;
+    return option;
+  }));
+  select.value = value;
+}
+// Vertical lines at each clicked x, and dashed spans for the line and the box.
+function renderMeasureMarks() {
+  const marks = $('measure-marks');
+  marks.replaceChildren();
+  const width = $('measure-img').naturalWidth;
+  if (!width) return;
+  const at = x => `${(x / width) * 100}%`;
+  measure.points.forEach((x, index) => {
+    const mark = elt('div', `measure-mark ${MEASURE_POINTS[index]}`);
+    mark.style.left = at(x);
+    mark.append(elt('span', '', text(`measure.mark.${MEASURE_POINTS[index]}`)));
+    marks.append(mark);
+  });
+  const [start, end, edge] = measure.points;
+  for (const [cls, to] of [['line', end], ['box', edge]]) {
+    if (start === undefined || to === undefined) continue;
+    const span = elt('div', `measure-span ${cls}`);
+    span.style.left = at(Math.min(start, to));
+    span.style.width = `${(Math.abs(to - start) / width) * 100}%`;
+    marks.append(span);
+  }
+}
+async function measureWidths() {
+  const wanted = measure.text.trim();
+  if (!wanted || (measure.widthsFor === wanted && measure.widths) || measure.busy) return;
+  measure.busy = true; measure.error = '';
+  renderMeasureResult();
+  try {
+    measure.widths = await window.vees.measureLine(wanted);
+    measure.widthsFor = wanted;
+  } catch (error) {
+    measure.widths = null; measure.widthsFor = '';
+    measure.error = error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  }
+  measure.busy = false;
+  if (page === 'measure') renderMeasureResult();
+  // The text may have changed while the fonts were being read.
+  if (measure.text.trim() !== wanted) measureWidths();
+}
+// Box width in font units = (edge - start) / (pixels per unit), the scale read off the line.
+function renderMeasureResult() {
+  const box = $('measure-result');
+  box.replaceChildren();
+  box.className = '';
+  if (!measure.image || measure.points.length < 3) {box.classList.add('hidden'); return;}
+  const say = (cls, message) => {box.className = `notice ${cls}`; box.append(elt('div', '', message));};
+  if (!measure.text.trim()) return say('', text('measure.needText'));
+  if (measure.busy) return say('hint', text('measure.working'));
+  if (measure.error) return say('missing', text('measure.failed', {message: measure.error}));
+  if (!measure.widths) {measureWidths(); return say('hint', text('measure.working'));}
+  const [start, end, edge] = measure.points;
+  if (!(end > start && edge > end)) return say('missing', text('measure.order'));
+  const units = measure.widths.widths[measure.font];
+  const pixels = end - start;
+  const scale = pixels / units;
+  const ceiling = Math.round((edge - start) / scale);
+  box.className = 'done-card';
+  const details = elt('ul', 'measure-details');
+  details.append(
+    elt('li', '', text('measure.lineUnits', {units, font: text('measure.fontOption', {n: MEASURE_FONTS[measure.font]}), pixels: Math.round(pixels)})),
+    elt('li', '', text('measure.scale', {scale: scale.toFixed(4), edge: Math.round(edge - start)})));
+  if (measure.widths.lines > 1) details.append(elt('li', '', text('measure.lines', {count: measure.widths.lines})));
+  box.append(elt('div', 'measure-number', text('measure.result', {ceiling})), details);
+  const screenName = text(`measure.screen.${measure.screen}`);
+  const current = measure.saved[measure.screen];
+  const saveRow = elt('div', 'measure-save-row');
+  if (measure.justSaved === measure.screen && current?.ceiling === ceiling) {
+    saveRow.append(elt('strong', '', text('measure.saved', {screen: screenName, ceiling})));
+  } else {
+    saveRow.append(actionButton('button primary', current ? text('measure.replace', {value: current.ceiling, screen: screenName})
+      : text('measure.save', {screen: screenName}), () => saveMeasurement(ceiling)));
+  }
+  saveRow.append(elt('span', 'pick-hint', text('measure.saveHint')));
+  box.append(saveRow);
+  if (measure.widths.stock) {
+    const warn = elt('div', 'notice');
+    warn.append(elt('div', '', text('measure.stock')));
+    box.append(warn);
+  }
+}
+// A date when the file holds one, else what it says ("probe build" for numbers measured that way).
+function measuredWhen(value) {
+  const date = new Date(value);
+  return value && !Number.isNaN(date.getTime()) ? date.toLocaleString(language() === 'vi' ? 'vi-VN' : 'en-GB') : (value || '');
+}
+async function chooseMeasureImage() {
+  try {
+    const image = await window.vees.chooseImage();
+    if (!image) return;
+    measure.image = image;
+    measure.points = [];
+    renderMeasure();
+  } catch (error) {showError(error.message);}
+}
+function measureClick(event) {
+  measure.justSaved = '';
+  if (measure.points.length >= MEASURE_POINTS.length) return;
+  const img = $('measure-img');
+  const rect = img.getBoundingClientRect();
+  // Clicks land on the scaled image; keep positions in the screenshot's own pixels.
+  measure.points.push((event.clientX - rect.left) * img.naturalWidth / rect.width);
+  renderMeasure();
+}
+// The advanced options, built from PATCH_OPTIONS and saved as they change.
+function renderPatchOptions(force = false) {
+  const box = $('patch-options');
+  const options = patchState().options || {};
+  const spec = PATCH_OPTIONS[engine().id] || [];
+  const on = spec.filter(([key, kind]) => kind === 'bool' ? options[key] : kind === 'number' ? options[key] > 0
+    : Array.isArray(kind) ? options[key] && options[key] !== kind[0] : String(options[key] || '').trim()).length;
+  $('patch-advanced-count').textContent = on ? text('patch.advancedOn', {count: on}) : '';
+  if (!force && box.contains(document.activeElement)) return;   // keep the field being typed in
+  if (patchSheets.path !== patchState().sheetPath) loadSheetNames();
+  box.replaceChildren();
+  for (const [key, kind] of spec) {
+    const id = `patch-opt-${key}`;
+    const label = elt('label', '', text(`patch.opt.${key}`));
+    label.htmlFor = id;
+    if (kind === 'sheets' || kind === 'sheet') {
+      const field = elt('div', `field ${kind === 'sheets' ? 'wide' : ''}`);
+      field.append(label, sheetPicker(key, kind, options[key] || '', id), elt('div', 'help', text(`patch.opt.${key}.hint`)));
+      box.append(field);
+      continue;
+    }
+    let input;
+    if (kind === 'bool') {
+      input = elt('input'); input.type = 'checkbox'; input.checked = !!options[key];
+    } else if (Array.isArray(kind)) {
+      input = elt('select');
+      for (const choice of kind) {const option = elt('option', '', choice); option.value = choice; input.append(option);}
+      input.value = options[key] || kind[0];
+    } else {
+      input = elt(kind === 'lines' ? 'textarea' : 'input');
+      if (kind !== 'lines') input.type = kind === 'number' ? 'number' : 'text';
+      if (kind === 'number') input.min = '0';
+      input.value = kind === 'number' ? (options[key] || '') : (options[key] || '');
+    }
+    input.id = id;
+    input.addEventListener('change', () => savePatchOption(key, kind === 'bool' ? input.checked : input.value));
+    const field = elt('div', `field ${kind === 'bool' ? 'toggle-field' : ''} ${kind === 'lines' ? 'wide' : ''}`);
+    const help = elt('div', 'help', text(`patch.opt.${key}.hint`));
+    if (kind === 'bool') {const words = elt('div'); words.append(label, help); field.append(input, words);}
+    else field.append(label, input, help);
+    box.append(field);
+  }
+}
+// The worksheet names of the chosen workbook, fetched when the file changes.
+async function loadSheetNames() {
+  const file = patchState().sheetPath;
+  if (patchSheets.path === file) return;
+  patchSheets = {path: file, names: null, error: ''};
+  if (!isXlsx(file)) return;
+  try { patchSheets.names = await window.vees.sheetNames(); }
+  catch (error) { patchSheets.error = error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); }
+  if (page === 'patch' && patchState().sheetPath === file) renderPatchOptions(true);
+}
+// Ticks for 'sheets' (several, Otomate) or a list for 'sheet' (one, Unity).
+function sheetPicker(key, kind, value, id) {
+  if (!isXlsx(patchState().sheetPath)) return elt('div', 'sheet-empty', text('sheets.needFile'));
+  if (patchSheets.error) return elt('div', 'sheet-empty', text('sheets.failed', {message: patchSheets.error}));
+  if (!patchSheets.names) {loadSheetNames(); return elt('div', 'sheet-empty', text('sheets.loading'));}
+  if (kind === 'sheet') {
+    const select = elt('select');
+    select.id = id;
+    for (const [optionValue, label] of [['', text('sheets.first')], ...patchSheets.names.map(name => [name, name])]) {
+      const option = elt('option', '', label); option.value = optionValue; select.append(option);
+    }
+    select.value = patchSheets.names.includes(value) ? value : '';
+    select.addEventListener('change', () => savePatchOption(key, select.value));
+    return select;
+  }
+  // applyvi patches only the numbered worksheets, so only those are offered.
+  const names = patchSheets.names.filter(name => /^\d+$/.test(name));
+  const ticked = new Set(value.split(/[\n,]/).map(name => name.trim()).filter(name => names.includes(name)));
+  const picker = elt('div', 'sheet-picker');
+  const tools = elt('div', 'sheet-tools');
+  const filter = elt('input');
+  filter.type = 'search'; filter.id = id; filter.placeholder = text('sheets.filter');
+  const count = elt('span', 'sheet-count');
+  const grid = elt('div', 'sheet-grid');
+  const boxes = names.map(name => {
+    const row = elt('label');
+    const tick = elt('input'); tick.type = 'checkbox'; tick.checked = ticked.has(name); tick.value = name;
+    row.append(tick, elt('span', '', name));
+    grid.append(row);
+    return tick;
+  });
+  const save = () => {
+    const chosen = boxes.filter(tick => tick.checked).map(tick => tick.value);
+    count.textContent = chosen.length ? text('sheets.count', {n: chosen.length, total: names.length}) : text('sheets.allNote', {total: names.length});
+    savePatchOption(key, chosen.join(', '));
+  };
+  for (const tick of boxes) tick.addEventListener('change', save);
+  filter.addEventListener('input', () => {
+    const wanted = filter.value.trim();
+    for (const tick of boxes) tick.parentElement.classList.toggle('hidden', !!wanted && !tick.value.includes(wanted));
+  });
+  // Select all ticks only what the filter shows, so a filter then Select all picks a group.
+  const all = actionButton('button', text('sheets.all'), () => {for (const tick of boxes) if (!tick.parentElement.classList.contains('hidden')) tick.checked = true; save();});
+  const none = actionButton('button', text('sheets.clear'), () => {for (const tick of boxes) tick.checked = false; save();});
+  count.textContent = ticked.size ? text('sheets.count', {n: ticked.size, total: names.length}) : text('sheets.allNote', {total: names.length});
+  tools.append(filter, all, none, count);
+  picker.append(tools, grid);
+  return picker;
+}
+async function savePatchOption(key, value) {
+  const options = {...(patchState().options || {}), [key]: value};
+  const saved = await window.vees.setPatch({options});
+  state.settings = saved.settings;
+  renderPatchOptions();
 }
 function showValue(node, value, emptyKey) {
   node.textContent = value || text(emptyKey);
@@ -411,6 +870,11 @@ function render() {
   updateWorkspace();
   renderGroups();
   if (page === 'patch') renderPatch();
+  if (page === 'measure') {
+    if (!measureAfter[engine().id]) {page = 'form'; selectDefault(); return render();}
+    renderMeasure();
+    loadMeasureSaved();
+  }
   if (page === 'form') {renderTools(); renderForm();}
 }
 function showError(message) {
@@ -426,7 +890,8 @@ function status(key, css) {
   document.querySelector('.console-dot').className = `console-dot ${css || ''}`;
   document.querySelector('.log').classList.toggle('running', css === 'running');
 }
-function dialogContent(title, build) {
+function dialogContent(title, build, wide = false) {
+  $('info-dialog').classList.toggle('wide', wide);
   $('dialog-title').textContent = title;
   const body = $('dialog-body');body.replaceChildren();build(body);
   $('info-dialog').showModal();
@@ -472,6 +937,16 @@ async function start() {
   document.addEventListener('click', event => {if (!$('language-switcher').contains(event.target)) toggleLanguageMenu(false);});
   document.addEventListener('keydown', event => {if (event.key === 'Escape') toggleLanguageMenu(false);});
   $('theme-toggle').addEventListener('click', toggleTheme);
+  $('measure-pick').addEventListener('click', chooseMeasureImage);
+  $('measure-img').addEventListener('click', measureClick);
+  $('measure-img').addEventListener('load', renderMeasureMarks);
+  $('measure-redo').addEventListener('click', () => {measure.points = []; measure.justSaved = ''; renderMeasure();});
+  $('measure-zoom').addEventListener('click', () => {measure.zoomed = !measure.zoomed; renderMeasure();});
+  $('measure-text').addEventListener('input', event => {measure.text = event.target.value; renderMeasureResult();});
+  $('measure-font').addEventListener('change', event => {measure.font = event.target.value; renderMeasureResult();});
+  $('measure-screen').addEventListener('change', event => {measure.screen = event.target.value; measure.justSaved = ''; renderMeasureResult();});
+  $('patch-done-measure-open').addEventListener('click', () => showPage('measure'));
+  $('patch-titles-open').addEventListener('click', () => openTool('filltitles-prefixes'));
   // Files are usually copied in from Explorer, so check again on return.
   window.addEventListener('focus', () => {if (page === 'form') checkMissing(); if (page === 'patch') checkPatchMissing();});
   $('choose-sheet').addEventListener('click', chooseSheet);
@@ -526,7 +1001,8 @@ function chooseLanguage(next) {
 async function chooseWorkspace() {
   try {
     const result = await window.vees.chooseWorkspace();
-    if (result) {state.workspace = result.workspace;updateWorkspace();renderForm();updatePython(result.python);}
+    // Every page reads the project folder: its missing files, its saved widths.
+    if (result) {state.workspace = result.workspace;updatePython(result.python);render();}
   } catch(error){showError(error.message);}
 }
 async function chooseSheet() {
@@ -564,14 +1040,16 @@ function applyPatchResult(result) {
   if (result.stopped || result.signal === 'cancelled' || result.code === 130) {
     patchStage = 'choose';
     showPatchError(text('patch.stopped'));
+  } else if (result.code === 0 && result.complete !== false && !result.error) {
+    patchStage = 'done';
+    patchUntranslated = result.untranslated || [];
+    patchResult = result;
+    showPatchError('');
   } else if (result.findings && result.findings.length) {
     patchStage = 'issues';
     const list = $('finding-list');
     list.replaceChildren();
     for (const finding of result.findings) list.append(elt('li', '', `${finding.sheet || ''} · ${finding.row}`));
-  } else if (result.code === 0 && result.complete !== false && !result.error) {
-    patchStage = 'done';
-    showPatchError('');
   } else {
     patchStage = 'choose';
     showPatchError(result.failedStep ? text('patch.failed', {step: result.failedStep}) : text('patch.setup'));

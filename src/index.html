@@ -35,6 +35,8 @@
     <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
     <symbol id="i-device" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
     <symbol id="i-patch" viewBox="0 0 24 24"><path d="m5 17 12-12 3 3L8 20H5v-3ZM14 8l3 3M5 5h3M6.5 3.5v3M17 18h4M19 16v4"/></symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 17 17 3l4 4L7 21Z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 8"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 9a8 8 0 0 0-14-3L3 9m0-5v5h5M4 15a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
   </svg>
   <div class="app page-form">
@@ -99,6 +101,7 @@
             <li class="step" id="step-try"><span class="step-mark">3</span><span data-i18n="stage.try"></span></li>
           </ol>
           <div id="patch-missing" class="notice missing hidden"></div>
+          <section id="patch-widths" class="widths-card hidden"></section>
           <p id="patch-error" class="notice hidden"></p>
 
           <div id="patch-setup" class="patch-setup">
@@ -118,6 +121,10 @@
                 <div class="pick-row"><div class="pick-value mono" id="patch-output"></div><button id="choose-output" class="button" type="button" data-i18n="patch.pickFolder"></button></div>
               </div>
             </section>
+            <details class="advanced-options" id="patch-advanced">
+              <summary><span data-i18n="patch.advanced"></span><span class="advanced-count" id="patch-advanced-count"></span></summary>
+              <div class="advanced-body" id="patch-options"></div>
+            </details>
             <section class="run-card">
               <div class="run-copy"><div class="run-status"><span class="dot" id="patch-ready-dot"></span><bdi id="patch-ready"></bdi></div><div class="run-path" id="patch-reason"></div></div>
               <div class="run-actions"><button id="create-patch" class="button primary" type="button" disabled><svg class="icon"><use href="#i-play"/></svg><bdi data-i18n="patch.button"></bdi></button></div>
@@ -135,9 +142,13 @@
           <div id="patch-issues" class="notice missing hidden"><div><strong data-i18n="patch.blocked"></strong><ul id="finding-list"></ul><button id="choose-fixed" class="button primary" type="button" data-i18n="patch.another"></button></div></div>
 
           <section id="patch-done" class="done-card hidden">
-            <div class="done-head"><span class="done-mark"><svg class="icon"><use href="#i-check"/></svg></span><strong data-i18n="patch.doneTitle"></strong></div>
+            <div class="done-head"><span class="done-mark"><svg class="icon"><use href="#i-check"/></svg></span><strong id="patch-done-title"></strong></div>
             <div class="pick-hint" id="patch-done-body"></div>
             <code class="pick-value mono" id="patch-done-path"></code>
+            <div id="patch-titles" class="notice hint hidden"><div class="hint-body"><span id="patch-titles-text"></span><button class="button" type="button" id="patch-titles-open"><bdi id="patch-titles-tool"></bdi><svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
+            <div id="patch-overflow" class="notice overflow hidden"></div>
+            <div id="patch-untranslated" class="notice untranslated hidden"></div>
+            <div id="patch-done-measure" class="notice hint hidden"><div class="hint-body"><span id="patch-done-widths"></span><button class="button" type="button" id="patch-done-measure-open"><bdi data-i18n="nav.measure"></bdi><svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
             <div id="patch-actions" class="run-buttons"></div>
           </section>
 
@@ -145,6 +156,44 @@
             <div class="log-header"><span class="log-label"><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="log.title"></bdi></span><button id="stop-patch" class="button log-stop" type="button" data-i18n="patch.stop"></button></div>
             <pre id="patch-log" class="log-body mono"></pre>
           </section>
+        </div>
+      </section>
+
+      <section id="measure-view" class="measure-view">
+        <header class="page-header">
+          <div class="header-top"><div class="breadcrumbs" id="measure-breadcrumb"></div></div>
+          <h1 data-i18n="nav.measure"></h1>
+          <p class="page-description" data-i18n="measure.scope"></p>
+        </header>
+        <div class="main-content">
+          <div class="measure-inputs">
+            <section class="pick-card">
+              <span class="pick-icon"><svg class="icon"><use href="#i-image"/></svg></span>
+              <div class="pick-body">
+                <div class="pick-label" data-i18n="measure.image"></div>
+                <div class="pick-hint" data-i18n="measure.imageHint"></div>
+                <div class="pick-row"><div class="pick-value mono" id="measure-file"></div><button id="measure-pick" class="button" type="button" data-i18n="measure.pickImage"></button></div>
+              </div>
+            </section>
+            <section class="pick-card">
+              <span class="pick-icon"><svg class="icon"><use href="#i-sheet"/></svg></span>
+              <div class="pick-body">
+                <div class="pick-label" data-i18n="measure.line"></div>
+                <div class="pick-hint" data-i18n="measure.lineHint"></div>
+                <div class="pick-row"><input id="measure-text" class="measure-input" type="text" autocomplete="off" spellcheck="false"></div>
+                <div class="measure-options">
+                  <label><span data-i18n="measure.font"></span><select id="measure-font"></select></label>
+                  <label><span data-i18n="measure.screen"></span><select id="measure-screen"></select></label>
+                </div>
+              </div>
+            </section>
+          </div>
+          <section class="measure-stage hidden" id="measure-stage">
+            <div class="measure-step"><span class="measure-step-mark" id="measure-step-mark"></span><span id="measure-instruction"></span><button id="measure-zoom" class="button" type="button"></button><button id="measure-redo" class="button" type="button" data-i18n="measure.redo"></button></div>
+            <div class="measure-canvas" id="measure-canvas"><div class="measure-frame" id="measure-frame"><img id="measure-img" alt=""><div id="measure-marks"></div></div></div>
+          </section>
+          <div id="measure-result" class="hidden"></div>
+          <section id="measure-saved" class="measure-saved hidden"></section>
         </div>
       </section>
 
@@ -157,8 +206,9 @@
         <div class="main-content">
           <div id="update-banner" class="update-banner hidden" role="status"><div><strong id="update-title"></strong><p id="update-message"></p></div><div class="update-actions"><button id="update-open" class="button primary hidden" data-i18n="update.view"></button><button id="update-dismiss" class="button" data-i18n="update.dismiss"></button></div></div>
           <div id="missing" class="notice missing hidden"></div>
+          <section id="form-widths" class="widths-card hidden"></section>
           <div id="notice" class="notice hidden"></div>
-          <div class="section-heading"><span class="section-number mono">01</span><h2 data-i18n="form.configuration"></h2><span class="section-note" data-i18n="form.paths"></span></div>
+          <div class="section-heading"><h2 data-i18n="form.configuration"></h2><span class="section-note" data-i18n="form.paths"></span></div>
           <form id="tool-form"><div id="form-fields" class="form-fields"></div></form>
           <section class="run-card">
             <div class="run-copy"><div class="run-status"><span class="dot"></span><bdi data-i18n="form.ready"></bdi></div><div class="run-path mono" id="run-hint"></div></div>

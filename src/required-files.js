@@ -13,8 +13,12 @@ function fontsConfig(workspace) {
 // alternatives, `pattern` when any file whose name matches will do, and `hint`
 // naming where the file comes from.
 const STORY = {path: 'STORY.cpk', hint: 'game'};
-const JP_STORY = {path: 'work/jp/CONTENTS/STORY.cpk', hint: 'jp'};
+// The Japanese build can be anywhere in the project folder; the engine's jpfiles.py
+// finds it, and the caller passes what it found as `jp`.
+const JP_STORY = {path: 'STORY.cpk (JP)', jp: 'STORY.cpk', hint: 'jp'};
 const BUILT_FONTS = {path: 'dist/SYSTEM.cpk', also: ['work/out/SYSTEM.cpk'], hint: 'built'};
+// Box widths come from here for every game; without it the width checks skip.
+const WINDOWS = {path: 'windows.json', hint: 'measure'};
 const REQUIRED = {
   // build.py reads the CPK and every source font named in fonts.json.
   build(workspace) {
@@ -26,15 +30,19 @@ const REQUIRED = {
   },
   chuadich: () => [STORY, JP_STORY],
   // quarong.py measures with the built fonts and only falls back to the stock ones.
-  quarong: () => [STORY, BUILT_FONTS],
-  // The patch page runs quarong with the translators' sheet, which also reads the
-  // Japanese script, then writes STORY.cpk's scripts with applyvi.
-  'patch:otomate': () => [STORY, JP_STORY, BUILT_FONTS],
+  quarong: () => [STORY, BUILT_FONTS, WINDOWS],
+  reflow: () => [WINDOWS],
+  // Not required by the patch page, which runs without it, but worth saying.
+  windows: () => [WINDOWS],
+  // The patch page writes STORY.cpk's scripts with applyvi, measuring the lines
+  // with the built fonts. It reads no Japanese script.
+  'patch:otomate': () => [STORY, BUILT_FONTS],
   'patch:unity': () => [{path: '*.bundle, *.assets', pattern: /\.(bundle|assets)$/i, hint: 'game'},
     {path: 'text-boxes.json', hint: 'boxes'}]
 };
 
-function present(item, workspace) {
+function present(item, workspace, jp) {
+  if (item.jp) return !!jp[item.jp];
   if (item.pattern) {
     try { return fs.readdirSync(workspace).some(name => item.pattern.test(name)); }
     catch { return false; }
@@ -42,11 +50,17 @@ function present(item, workspace) {
   return [item.path, ...(item.also || [])].some(file => fs.existsSync(path.join(workspace, file)));
 }
 
-function missingFiles(toolId, workspace) {
+// The Japanese archives a tool needs, for the caller to look up before missingFiles().
+function jpNames(toolId, workspace) {
+  const rule = REQUIRED[toolId];
+  return rule && workspace ? rule(workspace).filter(item => item.jp).map(item => item.jp) : [];
+}
+
+function missingFiles(toolId, workspace, jp = {}) {
   const rule = REQUIRED[toolId];
   if (!rule || !workspace) return [];
-  return rule(workspace).filter(item => !present(item, workspace))
+  return rule(workspace).filter(item => !present(item, workspace, jp))
     .map(({path: file, hint}) => ({path: file, hint}));
 }
 
-module.exports = {missingFiles};
+module.exports = {missingFiles, jpNames};

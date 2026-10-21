@@ -4,10 +4,11 @@ const path = require('node:path');
 const {spawn, spawnSync} = require('node:child_process');
 const {engines} = require('./engines');
 const {checkForUpdate} = require('./update-check');
-const {normalizePatchSettings} = require('./patch-settings');
+const {normalizePatchSettings, cleanPatchOptions} = require('./patch-settings');
 const {isXlsx} = require('./patch-ui');
 const {t} = require('./i18n');
-const {missingFiles} = require('./required-files');
+const {missingFiles, jpNames} = require('./required-files');
+const {readWindows, saveWindow} = require('./windows-config');
 const {recipeFor, setupError} = require('./patch-recipe');
 
 let window;
@@ -19,7 +20,7 @@ let updateRequest = null;
 // engines/otomate is pinned at; `npm run check` refuses a build where the
 // two differ. Update notices compare the app version with the latest
 // Otome Translator release, not with a new engine commit.
-const SOURCE_COMMIT = '08807f7e9783afae1aaf6cf9058d47a4c7039e21';
+const SOURCE_COMMIT = '6124baef6734c9c5d74a4531f91f3b5cc855b3ff';
 const engineById = new Map(engines.map(engine => [engine.id, engine]));
 const toolById = new Map(engines.flatMap(engine => engine.tools.map(tool => [tool.id, {engine, tool}])));
 
@@ -69,10 +70,13 @@ function copyMissing(source, target, relative, previousHashes) {
     for (const name of fs.readdirSync(source)) copyMissing(path.join(source, name), path.join(target, name), `${relative}/${name}`, previousHashes);
   } else if (!fs.existsSync(target)) fs.copyFileSync(source, target);
   else if (previousHashes[relative]) {
+    // Every earlier version the file has had (scripts/update-engine-hashes.js): an
+    // untouched copy of any of them is replaced, an edited one is kept.
+    const earlier = [].concat(previousHashes[relative]);
     // Hashes are recorded over LF text, so a CRLF checkout must match too.
     const data = fs.readFileSync(target);
     const lf = Buffer.from(data.toString('latin1').split('\r\n').join('\n'), 'latin1');
-    if ([sha256(data), sha256(lf)].includes(previousHashes[relative])) fs.copyFileSync(source, target);
+    if ([sha256(data), sha256(lf)].some(hash => earlier.includes(hash))) fs.copyFileSync(source, target);
   }
 }
 function prepareWorkspace(folder, engine) {
@@ -188,7 +192,17 @@ ipcMain.handle('open-update', () => {
   if (lastUpdate?.status !== 'available') return false;
   return shell.openExternal(lastUpdate.url);
 });
-ipcMain.handle('missing-files', (_event, toolId) => missingFiles(toolId, workspace()));
+ipcMain.handle('missing-files', async (_event, toolId) => {
+  const folder = workspace();
+  const names = jpNames(toolId, folder);
+  let jp = {};
+  if (names.length && folder && fs.existsSync(path.join(folder, 'tools', 'jpfiles.py'))) {
+    // Asked of the engine itself, so the app finds the same file the tool will read.
+    const result = await runHelper(path.join(__dirname, 'find_jp.py'), names, folder);
+    try { jp = JSON.parse(result.stdout.trim().split(/\r?\n/).pop() || '{}'); } catch {}
+  }
+  return missingFiles(toolId, folder, jp);
+});
 ipcMain.handle('choose-workspace', async () => {
   const result = await dialog.showOpenDialog(window, {title: t('workspace.dialog', settings.language, {engine: activeEngine().name}),
     defaultPath: workspace(), properties: ['openDirectory', 'createDirectory']});
@@ -309,13 +323,27 @@ ipcMain.handle('set-language', (_event, language) => {
 });
 ipcMain.handle('set-patch', (_event, fields) => {
   const current = settings.patch[settings.engine];
-  if (Object.prototype.hasOwnProperty.call(fields, 'sheetPath')) current.sheetPath = String(fields.sheetPath || '');
+  if (Object.prototype.hasOwnProperty.call(fields, 'sheetPath')) {
+    const next = String(fields.sheetPath || '');
+    // Worksheets picked from the old workbook may not exist in the new one.
+    if (next !== current.sheetPath) current.options = cleanPatchOptions(settings.engine, {...current.options, sheets: '', sheetName: ''});
+    current.sheetPath = next;
+  }
   if (Object.prototype.hasOwnProperty.call(fields, 'outputPath')) current.outputPath = String(fields.outputPath || '');
   if (Object.prototype.hasOwnProperty.call(fields, 'group')) current.group = fields.group || null;
+  if (Object.prototype.hasOwnProperty.call(fields, 'options')) current.options = cleanPatchOptions(settings.engine, fields.options);
   saveSettings();
   return {settings};
 });
 ipcMain.handle('open-output', () => shell.openPath(settings.patch[settings.engine].outputPath));
+// Worksheet names of the chosen translation sheet, for picking them on the patch page.
+ipcMain.handle('sheet-names', async () => {
+  const sheet = settings.patch[settings.engine].sheetPath;
+  if (!isXlsx(path.basename(sheet || '')) || !fs.existsSync(sheet)) return [];
+  const result = await runHelper(path.join(__dirname, 'sheet_names.py'), [sheet], path.dirname(sheet));
+  try { return JSON.parse(result.stdout); }
+  catch { throw new Error(result.stderr.trim().split('\n').pop() || 'sheet_names.py failed'); }
+});
 
 function projectAssets(engineId) {
   const folder = settings.workspaces[engineId];
@@ -360,6 +388,15 @@ function patchFindings(stdout) {
     try { return JSON.parse(line); } catch { return null; }
   }).filter(Boolean);
 }
+// Removes the app's own run folders (named by timestamp) and then `runs` if that
+// leaves it empty. Anything else someone keeps in a folder called runs is left alone.
+function clearRuns(folder) {
+  if (!fs.existsSync(folder)) return;
+  for (const name of fs.readdirSync(folder)) {
+    if (/^\d+$/.test(name)) fs.rmSync(path.join(folder, name), {recursive: true, force: true});
+  }
+  if (!fs.readdirSync(folder).length) fs.rmdirSync(folder);
+}
 ipcMain.handle('run-patch', async (_event, options = {}) => {
   if (currentRun) throw new Error('Another command is already running.');
   const engineId = settings.engine;
@@ -370,9 +407,12 @@ ipcMain.handle('run-patch', async (_event, options = {}) => {
   if (!isXlsx(path.basename(originalPath || ''))) return {error: 'xlsx', skip: false};
   if (setupError({projectPath, outputPath, ...projectAssets(engineId)})) return {error: 'setup', skip: false};
   if (outputHasPatch(outputPath) && options.confirmed !== true) return {needsConfirm: true, skip: false};
-  const runDirectory = path.join(outputPath, 'runs', `${Date.now()}`);
+  const runsFolder = path.join(outputPath, 'runs');
+  // Each run copies the whole sheet here. Earlier runs go when a new one starts,
+  // and a run that succeeds removes its own: only a failed run stays to look at.
+  clearRuns(runsFolder);
+  const runDirectory = path.join(runsFolder, `${Date.now()}`);
   const copyPath = path.join(runDirectory, 'sheet.xlsx');
-  const reportPath = path.join(runDirectory, 'quarong-report.xlsx');
   let copied = false;
   try {
     fs.mkdirSync(runDirectory, {recursive: true});
@@ -385,26 +425,42 @@ ipcMain.handle('run-patch', async (_event, options = {}) => {
   currentRun = {runId, child: null, cancelled: false, id: 'patch'};
   emit('run-start', {runId, id: 'patch', title: 'Create patch', started: new Date().toISOString(), command: ['patch', engineId]});
   const recipe = recipeFor(engineId);
+  const patchOptions = cleanPatchOptions(engineId, patch.options);
+  const list = value => value.split(/[\n,]/).map(item => item.trim()).filter(Boolean);
+  // A dry run checks everything and writes nothing; the result says which it was.
+  // Lines too wide for their box: held back unless allowed, and always listed.
+  const overflowPath = path.join(outputPath, 'overflow.csv');
+  const extraResult = {dryRun: patchOptions.dryRun, allowOverflow: patchOptions.allowOverflow, overflow: [],
+    unmeasured: engineId === 'otomate' && !fs.existsSync(path.join(projectPath, 'windows.json')),
+    widths: engineId === 'otomate' ? Object.fromEntries(Object.entries(readWindows(projectPath)).map(([screen, entry]) => [screen, entry.ceiling])) : {}};
   const findings = [];
+  const untranslated = [];
   let blocked = false;
   let failedStep = null;
   const finish = (code, extra) => {
     const cancelled = currentRun?.cancelled;
     currentRun = null;
+    if (code === 0 && !cancelled) clearRuns(runsFolder);
     emit('run-end', {runId, id: 'patch', code: cancelled ? 130 : code, signal: cancelled ? 'cancelled' : null, ...extra});
     return {started: true, runDirectory, copied, skip: false, ...extra, code: cancelled ? 130 : code};
   };
   const noteFailure = step => {blocked = true; failedStep = failedStep || step.id;};
+  // sheet_scan.py exits 2 when it lists rows with no translation. Those rows stay
+  // in English, so they are reported with the result instead of stopping the patch.
+  const scanSheet = async step => {
+    const scan = await spawnPython(path.join(__dirname, 'sheet_scan.py'), [copyPath], projectPath);
+    untranslated.push(...patchFindings(scan.stdout));
+    if (scan.code !== 0 && scan.code !== 2) noteFailure(step);
+    return scan;
+  };
   try {
   for (const step of recipe) {
-    if (currentRun.cancelled) return finish(130, {stopped: true, findings, failedStep});
-    if (step.phase === 'create' && blocked) return finish(2, {findings, skip: false, failedStep});
+    if (currentRun.cancelled) return finish(130, {stopped: true, findings, untranslated, failedStep});
+    if (step.phase === 'create' && blocked) return finish(2, {findings, untranslated, skip: false, failedStep});
     emit('run-output', {runId, stream: 'stdout', text: `\n${step.phase}: ${step.id}\n`});
     let result = {code: 0, stdout: ''};
     if (step.id === 'empty-scan') {
-      result = await spawnPython(path.join(__dirname, 'sheet_scan.py'), [copyPath], projectPath);
-      findings.push(...patchFindings(result.stdout));
-      if (result.code !== 0) noteFailure(step);
+      result = await scanSheet(step);
     } else if (step.id === 'unity-sheetfit') {
       const boxes = path.join(projectPath, 'text-boxes.json');
       const bundle = fs.readdirSync(projectPath).find(name => /\.(bundle|assets)$/i.test(name));
@@ -417,36 +473,153 @@ ipcMain.handle('run-patch', async (_event, options = {}) => {
         findings.push(...patchFindings(result.stdout));
         if (result.code !== 0) noteFailure(step);
       }
-    } else if (step.id === 'quarong') {
-      const script = path.join(projectPath, 'tools', 'quarong.py');
-      result = await spawnPython(script, [copyPath, reportPath, copyPath], projectPath);
-      const readable = fs.existsSync(reportPath) && fs.readFileSync(reportPath).subarray(0, 2).toString() === 'PK';
-      if (!readable || result.code !== 0) noteFailure(step);
-      const scan = await spawnPython(path.join(__dirname, 'sheet_scan.py'), [copyPath], projectPath);
-      findings.push(...patchFindings(scan.stdout));
-      if (scan.code !== 0) noteFailure(step);
     } else if (step.id === 'filltitles-fill') {
-      result = await spawnPython(path.join(projectPath, 'tools', 'filltitles.py'),
-        ['fill', copyPath, copyPath], projectPath);
-      if (result.code !== 0) noteFailure(step);
+      // Only titles spelled `<japanese key>@<text>` are composed. A game whose titles
+      // carry no key (the fan disc) has nothing here, so the step is skipped quietly.
+      const keys = await runHelper(path.join(__dirname, 'title_keys.py'), [copyPath], runDirectory);
+      let keyed = 1;
+      try { keyed = JSON.parse(keys.stdout).keyed; } catch {}
+      if (keyed === 0) {
+        emit('run-output', {runId, stream: 'stdout', text: 'khong co ten chuong mang khoa <tieng Nhat>@ - bo qua ghep ten chuong\n'});
+        continue;
+      }
+      // Composing chapter titles needs the translated prefixes from Export chapter
+      // labels: filltitles reads them from a `title_prefix` worksheet, which can be
+      // in the translation sheet itself or in work/title_prefixes.xlsx. A project
+      // with neither still patches, its titles as they are.
+      const names = await runHelper(path.join(__dirname, 'sheet_names.py'), [copyPath], runDirectory);
+      let inSheet = false;
+      try { inSheet = JSON.parse(names.stdout).includes('title_prefix'); } catch {}
+      const projectFile = path.join(projectPath, 'work', 'title_prefixes.xlsx');
+      const prefixes = inSheet ? copyPath : fs.existsSync(projectFile) ? projectFile : null;
+      if (!prefixes) {
+        extraResult.titlesSkipped = true;
+        emit('run-output', {runId, stream: 'stdout', text: 'bo qua ghep ten chuong: khong co sheet title_prefix trong bang dich, cung khong co work/title_prefixes.xlsx\n'});
+      } else {
+        emit('run-output', {runId, stream: 'stdout', text: `tien to chuong lay tu: ${inSheet ? 'sheet title_prefix trong bang dich' : projectFile}\n`});
+        result = await spawnPython(path.join(projectPath, 'tools', 'filltitles.py'),
+          ['fill', copyPath, copyPath, '--prefixes', prefixes], projectPath);
+        if (result.code !== 0) noteFailure(step);
+      }
     } else if (step.id === 'applyvi') {
+      // applyvi writes the report only when a line overflows, so an old one must not linger.
+      fs.rmSync(overflowPath, {force: true});
       result = await spawnPython(path.join(projectPath, 'tools', 'applyvi.py'),
-        [copyPath, path.join(projectPath, 'STORY.cpk'), outputPath], projectPath);
-      if (result.code !== 0) return finish(result.code, {findings, skip: false, failedStep: step.id});
+        [copyPath, path.join(projectPath, 'STORY.cpk'), outputPath,
+          ...(patchOptions.dryRun ? ['--dry-run'] : []),
+          ...list(patchOptions.sheets).flatMap(sheet => ['--sheet', sheet]),
+          ...(patchOptions.allowOverflow ? [] : ['--fit-width']),
+          '--report', overflowPath], projectPath);
+      extraResult.overflow = readOverflow(overflowPath);
+      if (result.code !== 0) return finish(result.code, {findings, untranslated, skip: false, failedStep: step.id});
     } else if (step.id === 'unity-sheet-apply') {
       const bundle = fs.readdirSync(projectPath).find(name => /\.(bundle|assets)$/i.test(name));
-      if (!bundle) return finish(1, {findings, skip: false, failedStep: step.id});
+      if (!bundle) return finish(1, {findings, untranslated, skip: false, failedStep: step.id});
       result = await spawnPython(path.join(projectPath, 'tools', 'jsonsheet.py'),
-        ['apply', path.join(projectPath, bundle), copyPath, '--out', path.join(outputPath, 'patched.bundle'), '--apply'], projectPath);
-      if (result.code !== 0) return finish(result.code, {findings, skip: false, failedStep: step.id});
+        ['apply', path.join(projectPath, bundle), copyPath, '--out', path.join(outputPath, 'patched.bundle'),
+          ...(patchOptions.dryRun ? [] : ['--apply']),
+          ...(patchOptions.sheetName.trim() ? ['--sheet-name', patchOptions.sheetName.trim()] : []),
+          ...(patchOptions.force ? ['--force'] : []),
+          ...(patchOptions.packer !== 'auto' ? ['--packer', patchOptions.packer] : []),
+          // Tokens are regular expressions, which may hold commas: one per line only.
+          ...patchOptions.tokens.split(/\r?\n/).map(token => token.trim()).filter(Boolean)
+            .flatMap(token => ['--token', token])], projectPath);
+      if (result.code !== 0) return finish(result.code, {findings, untranslated, skip: false, failedStep: step.id});
     }
-    if (step.phase === 'prepare' && blocked) return finish(result.code || 1, {findings, skip: false, failedStep});
+    if (step.phase === 'prepare' && blocked) return finish(result.code || 1, {findings, untranslated, skip: false, failedStep});
   }
-  return finish(0, {findings, complete: !blocked, skip: false, failedStep});
+  return finish(0, {findings, untranslated, ...extraResult, complete: !blocked, skip: false, failedStep});
   } catch (error) {
     emit('run-output', {runId, stream: 'stderr', text: `${error.message}\n`});
-    return finish(1, {findings, skip: false, failedStep});
+    return finish(1, {findings, untranslated, skip: false, failedStep});
   }
+});
+
+// overflow.csv from applyvi --report: sheet, id, vi_bytes, en_bytes, vi_px, over_px, vietnamese.
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {cell += '"'; i++;}
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') {row.push(cell); cell = '';}
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell || row.length) {row.push(cell); rows.push(row);}
+  return rows;
+}
+function readOverflow(file) {
+  if (!fs.existsSync(file)) return [];
+  const [header, ...rows] = parseCsv(fs.readFileSync(file, 'utf8').replace(/^\ufeff/, ''));
+  const at = name => (header || []).indexOf(name);
+  return rows.filter(row => row.length > 1).map(row => ({sheet: row[at('sheet')], id: row[at('id')],
+    over: Number(row[at('over_px')]) || 0, text: row[at('vietnamese')] || ''}));
+}
+ipcMain.handle('open-overflow', () => {
+  const file = path.join(settings.patch[settings.engine].outputPath || '', 'overflow.csv');
+  return fs.existsSync(file) ? shell.openPath(file) : 'overflow.csv was not found.';
+});
+// A short Python helper outside the run log: no output events, no Stop button.
+function runHelper(script, args, cwd) {
+  return new Promise(resolve => {
+    const child = spawn(settings.python, ['-u', script, ...args],
+      {cwd, env: {...process.env, PYTHONIOENCODING: 'utf-8'}, windowsHide: true, shell: false});
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', data => {stdout += data.toString('utf8');});
+    child.stderr.on('data', data => {stderr += data.toString('utf8');});
+    child.on('error', error => resolve({code: 1, stdout, stderr: error.message}));
+    child.on('close', code => resolve({code: code ?? 1, stdout, stderr}));
+  });
+}
+// The measure screen: a screenshot to click on, and one line's width in font units.
+const IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.bmp': 'image/bmp'};
+ipcMain.handle('choose-image', async () => {
+  const result = await dialog.showOpenDialog(window, {properties: ['openFile'],
+    filters: [{name: 'Images', extensions: Object.keys(IMAGE_TYPES).map(ext => ext.slice(1))}]});
+  if (result.canceled) return null;
+  const file = result.filePaths[0];
+  const type = IMAGE_TYPES[path.extname(file).toLowerCase()];
+  if (!type) throw new Error('Choose a PNG, JPG, WEBP or BMP image.');
+  // The page only loads data: images, so the file is handed over inline.
+  return {path: file, dataUrl: `data:${type};base64,${fs.readFileSync(file).toString('base64')}`};
+});
+ipcMain.handle('measure-line', async (_event, text) => {
+  const result = await runHelper(path.join(__dirname, 'measure_line.py'), [String(text || '')], workspace());
+  const line = result.stdout.trim().split(/\r?\n/).pop() || '';
+  let parsed = null;
+  try { parsed = JSON.parse(line); } catch {}
+  if (result.code !== 0 || !parsed || parsed.error) {
+    throw new Error(parsed?.error === 'font' ? `No font file at ${parsed.path}` : (result.stderr.trim().split(/\r?\n/).pop() || 'measure_line.py failed'));
+  }
+  return parsed;
+});
+ipcMain.handle('measure-saved', () => readWindows(workspace()));
+ipcMain.handle('measure-save', (_event, screen, entry) => {
+  const folder = workspace();
+  // The font is recorded relative to the project folder when it lives there.
+  const relative = entry?.fontFile && folder ? path.relative(folder, entry.fontFile) : '';
+  const fontFile = relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative.split(path.sep).join('/') : entry?.fontFile;
+  return saveWindow(folder, screen, {...entry, fontFile});
+});
+// Saves the rows the last patch left untranslated, for handing to translators.
+ipcMain.handle('export-untranslated', async (_event, rows) => {
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const defaultPath = path.join(settings.patch[settings.engine].outputPath || workspace(), 'untranslated.csv');
+  const result = await dialog.showSaveDialog(window, {defaultPath, filters: [{name: 'CSV', extensions: ['csv']}]});
+  if (result.canceled) return null;
+  const cell = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const lines = [['Sheet', 'Row', 'Source'], ...rows.map(row => [row.sheet, row.row, row.source])].map(row => row.map(cell).join(','));
+  // The byte order mark lets Excel read the file as UTF-8.
+  fs.writeFileSync(result.filePath, `\ufeff${lines.join('\r\n')}\r\n`, 'utf8');
+  return result.filePath;
 });
 
 module.exports = {makeArgs};
