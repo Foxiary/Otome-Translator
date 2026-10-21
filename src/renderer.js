@@ -3,8 +3,7 @@ let state;
 let activeGroup = null;
 let activeId = null;
 let running = false;
-let page = 'patch';
-let toolPage = 1;
+let page = 'form';
 let patchStage = 'choose';
 let formValues = {};
 let currentLog = '';
@@ -27,7 +26,7 @@ function selectDefault() {
   activeId = tools().find(t => t.group === activeGroup)?.id;
 }
 function language() { return state.settings.language === 'vi' ? 'vi' : 'en'; }
-function text(key) { return window.vees.t(key, language()); }
+function text(key) { return t(key, language()); }
 function applyLanguage() {
   document.documentElement.lang = language();
   for (const node of document.querySelectorAll('[data-i18n]')) node.textContent = text(node.dataset.i18n);
@@ -44,14 +43,14 @@ function renderEngines() {
     button.type = 'button';
     button.title = item.subtitle;
     button.append(elt('strong', '', item.name), elt('small', '', item.subtitle));
-    button.disabled = running && !window.vees.canSwitchEngine(running);
+    button.disabled = running && !canSwitchEngine(running);
     button.addEventListener('click', () => switchEngine(item.id));
     box.append(button);
   }
 }
 async function switchEngine(id) {
   if (id === state.settings.engine) return;
-  if (!window.vees.canSwitchEngine(running)) {showError(text('engine.blocked')); return;}
+  if (!canSwitchEngine(running)) {showError(text('engine.blocked')); return;}
   captureValues();
   try {
     const result = await window.vees.setEngine(id);
@@ -73,19 +72,13 @@ function renderGroups() {
   const {groups, symbols} = engine();
   for (const group of groups) {
     const count = tools().filter(t => t.group === group).length;
-    const button = elt('button', `group-button ${activeGroup === group ? 'active' : ''}`);
+    const button = elt('button', `group-button ${page === 'form' && activeGroup === group ? 'active' : ''}`);
     button.type = 'button';
     button.append(elt('span', 'icon', symbols[group]), elt('span', '', group), elt('span', 'count', String(count)));
     button.disabled = running;
     button.addEventListener('click', () => {
       if (running) {showError(text('engine.blocked')); return;}
-      captureValues(); activeGroup = group; $('search').value = ''; toolPage = 1;
-      if (page === 'tools') window.vees.setPatch({group}).then(result => {state.settings = result.settings;});
-      else {
-        const first = tools().find(t => t.group === group);
-        if (first) activeId = first.id;
-      }
-      render();
+      openToolGroup(group);
     });
     nav.append(button);
   }
@@ -174,25 +167,19 @@ function renderForm() {
   $('run-button').disabled = running;
   $('cancel-button').disabled = !running;
 }
-function rememberedGroup() { return patchState().group || null; }
 function showPage(next) {
-  if ((next === 'tools' || next === 'form') && !window.vees.canOpenTools(running)) {
+  if (next === 'form' && !canOpenTools(running)) {
     showError(text('engine.blocked'));
     return;
   }
   page = next;
-  if (next === 'tools') {
-    activeGroup = rememberedGroup();
-    toolPage = 1;
-    $('search').value = '';
-  }
   if (next === 'form') selectDefault();
   render();
 }
 function renderPatch() {
   const chosen = patchState().sheetPath;
   $('patch-file').value = chosen;
-  $('create-patch').disabled = running || !window.vees.isXlsx(chosen);
+  $('create-patch').disabled = running || !isXlsx(chosen);
   const stageName = patchStage === 'done' ? 'try' : patchStage === 'choose' ? 'choose' : 'create';
   for (const name of ['choose', 'create', 'try']) $('stage-' + name).classList.toggle('active', name === stageName);
   $('patch-choose').classList.toggle('hidden', patchStage !== 'choose');
@@ -211,7 +198,7 @@ function renderPatch() {
   if (patchStage === 'done') {
     const actions = $('patch-actions');
     actions.replaceChildren();
-    for (const action of window.vees.successActions()) {
+    for (const action of successActions()) {
       const button = elt('button', action === 'open-folder' ? 'primary' : 'secondary', text(action === 'open-folder' ? 'patch.open' : 'patch.another'));
       button.type = 'button';
       button.dataset.action = action;
@@ -221,61 +208,25 @@ function renderPatch() {
   }
 }
 async function openToolGroup(group) {
-  if (!window.vees.canOpenTools(running)) {showError(text('engine.blocked')); return;}
-  await window.vees.setPatch({group});
-  state.settings.patch[state.settings.engine].group = group;
+  if (!canOpenTools(running)) {showError(text('engine.blocked')); return;}
+  captureValues();
   activeGroup = group;
-  page = 'tools';
-  toolPage = 1;
+  const first = tools().find(t => t.group === group);
+  if (first) activeId = first.id;
+  page = 'form';
   $('search').value = '';
   render();
-}
-function renderToolBrowser() {
-  const query = $('search').value;
-  if (!query.trim()) activeGroup = rememberedGroup();
-  const result = window.vees.browse(tools(), {group: query.trim() ? rememberedGroup() : activeGroup, query, page: toolPage});
-  $('group-title').textContent = result.searching ? text('tools.search') : (activeGroup || text('tools.chooseGroup'));
-  $('group-subtitle').textContent = `${result.total}`;
-  $('tool-count').textContent = String(result.total);
-  $('pager').classList.toggle('hidden', result.pageCount <= 1);
-  $('page-label').textContent = `${result.page} / ${result.pageCount}`;
-  $('page-prev').disabled = result.page <= 1;
-  $('page-next').disabled = result.page >= result.pageCount;
-  const list = $('tool-list');
-  list.replaceChildren();
-  for (const item of result.tools) {
-    const button = elt('button', 'tool-card');
-    button.type = 'button';
-    button.append(elt('div', 'tool-card-title', item.title), elt('small', '', item.description));
-    button.addEventListener('click', () => showToolDetail(item));
-    list.append(button);
-  }
-}
-function showToolDetail(item) {
-  const detail = window.vees.selectTool(item);
-  if (detail.runRequest) return;
-  dialogContent(detail.originalName, body => {
-    paragraph(body, detail.purpose);
-    if (detail.caution) paragraph(body, detail.caution);
-    paragraph(body, detail.command, 'mono');
-    action(body, text('tools.use'), () => {
-      $('info-dialog').close();
-      activeId = item.id;
-      activeGroup = item.group;
-      page = 'form';
-      render();
-    });
-  });
+  const saved = await window.vees.setPatch({group});
+  state.settings = saved.settings;
 }
 function render() {
   applyLanguage();
   document.querySelector('.app').className = `app page-${page}`;
-  $('nav-tools').disabled = running;
   renderEngines();
   updateWorkspace();
+  renderGroups();
   if (page === 'patch') renderPatch();
-  if (page === 'tools') {renderGroups(); renderToolBrowser();}
-  if (page === 'form') {renderGroups(); renderTools(); renderForm();}
+  if (page === 'form') {renderTools(); renderForm();}
 }
 function showError(message) {
   if (page === 'patch') showPatchError(message);
@@ -327,13 +278,10 @@ async function start() {
   selectDefault();
   updatePython(state.python);
   render();
-  $('search').addEventListener('input', () => {toolPage = 1; page === 'tools' ? render() : renderTools();});
+  $('search').addEventListener('input', renderTools);
   $('nav-patch').addEventListener('click', () => showPage('patch'));
-  $('nav-tools').addEventListener('click', () => showPage('tools'));
   $('lang-en').addEventListener('click', () => chooseLanguage('en'));
   $('lang-vi').addEventListener('click', () => chooseLanguage('vi'));
-  $('page-prev').addEventListener('click', () => {toolPage -= 1; render();});
-  $('page-next').addEventListener('click', () => {toolPage += 1; render();});
   $('choose-sheet').addEventListener('click', chooseSheet);
   $('choose-fixed').addEventListener('click', chooseSheet);
   $('choose-output').addEventListener('click', chooseOutput);
@@ -384,13 +332,13 @@ async function start() {
   });
 }
 function chooseLanguage(next) {
-  if (window.vees.languageChange().workbookPath) return;
+  if (languageChange().workbookPath) return;
   window.vees.setLanguage(next).then(result => {state.settings = result.settings; render();});
 }
 async function chooseSheet() {
   const selected = await window.vees.choosePath('file', patchState().sheetPath);
   if (!selected) return;
-  if (!window.vees.isXlsx(selected)) {
+  if (!isXlsx(selected)) {
     showPatchError(text('patch.reject'));
     const cleared = await window.vees.setPatch({sheetPath: ''});
     state.settings = cleared.settings;
@@ -438,7 +386,7 @@ function applyPatchResult(result) {
   render();
 }
 async function startPatch(confirmed) {
-  if (running || !window.vees.isXlsx(patchState().sheetPath)) return;
+  if (running || !isXlsx(patchState().sheetPath)) return;
   showPatchError('');
   try {
     const result = await window.vees.runPatch({confirmed});

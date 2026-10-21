@@ -18,4 +18,5 @@ function languageChange() {
   return {workbookPath: null};
 }
 
-module.exports = {isXlsx, successActions, canSwitchEngine, canOpenTools, languageChange};
+// Loaded by main and the tests through require, and by the page as a plain script.
+if (typeof module !== 'undefined') module.exports = {isXlsx, successActions, canSwitchEngine, canOpenTools, languageChange};

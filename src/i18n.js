@@ -38,4 +38,5 @@ function t(key, language) {
 
 function entries() { return strings; }
 
-module.exports = {t, entries};
+// Loaded by main and the tests through require, and by the page as a plain script.
+if (typeof module !== 'undefined') module.exports = {t, entries};
