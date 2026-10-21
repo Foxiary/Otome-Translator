@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Report empty translation cells in column C. This script only reads the workbook."""
+"""Report empty translation cells in column C, with the source text from column B.
+
+This script only reads the workbook."""
 import json
 import sys
 import zipfile
@@ -33,13 +35,22 @@ def sheet_targets(archive):
     for sheet in workbook.findall("m:sheets/m:sheet", NS):
         relation = sheet.attrib["{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"]
         target = targets[relation]
-        if not target.startswith("xl/"):
-            target = "xl/" + target.lstrip("/")
+        # Excel writes targets relative to xl/ ("worksheets/sheet1.xml"); openpyxl,
+        # which mksheet.py saves with, writes them from the package root
+        # ("/xl/worksheets/sheet1.xml").
+        if target.startswith("/"):
+            target = target.lstrip("/")
+        elif not target.startswith("xl/"):
+            target = "xl/" + target
         found.append((sheet.attrib.get("name") or "Sheet", target))
     return found
 
 
 def cell_text(cell, strings):
+    # openpyxl, which mksheet.py saves with, keeps text in the cell itself rather
+    # than in the shared strings table; read that or every such cell looks empty.
+    if cell.attrib.get("t") == "inlineStr":
+        return "".join(node.text or "" for node in cell.iter(MAIN + "t"))
     value = cell.find("m:v", NS)
     if value is None or value.text is None:
         return ""
@@ -60,7 +71,7 @@ def findings(path):
                 rows.setdefault(row, {})[column] = cell_text(cell, strings).strip()
             for row, columns in sorted(rows.items()):
                 if columns.get("B") and not columns.get("C"):
-                    reported.append({"sheet": name, "row": row})
+                    reported.append({"sheet": name, "row": row, "source": columns["B"]})
     return reported
 
 

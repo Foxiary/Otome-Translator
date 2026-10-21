@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
-const {normalizePatchSettings, setSheetPath} = require('../src/patch-settings');
+const {normalizePatchSettings, setSheetPath, cleanPatchOptions} = require('../src/patch-settings');
 const {entries} = require('../src/i18n');
 const {browse, clearSearch, selectTool, toolsForEngine} = require('../src/tool-browser');
 const {isXlsx, successActions, canSwitchEngine, languageChange} = require('../src/patch-ui');
@@ -21,6 +21,14 @@ assert.equal(normalized.patch.otomate.sheetPath, '');
 assert.equal(normalized.patch.otomate.outputPath, '');
 assert.equal(normalized.patch.otomate.group, null);
 assert.equal(normalized.patch.unity.group, null);
+// Advanced options default off, and only known keys of the right kind survive.
+// Lines too wide for their box are held back unless allowed.
+assert.deepEqual(normalized.patch.otomate.options, {dryRun: false, sheets: '', allowOverflow: false});
+assert.equal(normalized.patch.unity.options.packer, 'auto');
+// maxBytes is gone: the game has no byte limit, width is what overflows (DICH.md).
+assert.deepEqual(cleanPatchOptions('otomate', {dryRun: 'yes', maxBytes: '84', sheets: 7, extra: true}),
+  {dryRun: false, sheets: '', allowOverflow: false});
+assert.equal(cleanPatchOptions('unity', {packer: 'zip'}).packer, 'auto');
 
 const kept = normalizePatchSettings({
   language: 'vi',
@@ -77,7 +85,7 @@ for (const id of ['unity-romfs', 'unity-tmpfont-add']) {
   assert.equal(selectTool(tool).runRequest, null);
 }
 
-assert.deepEqual(recipeFor('otomate').map(step => step.id), ['filltitles-fill', 'quarong', 'applyvi']);
+assert.deepEqual(recipeFor('otomate').map(step => step.id), ['filltitles-fill', 'empty-scan', 'applyvi']);
 assert.deepEqual(recipeFor('unity').map(step => step.id), ['empty-scan', 'unity-sheetfit', 'unity-sheet-apply']);
 for (const engine of ['otomate', 'unity']) {
   for (const id of excludedIds()) assert.ok(!recipeFor(engine).some(step => step.id === id), id);
@@ -92,6 +100,8 @@ assert.deepEqual(planCommands({engine: 'otomate', originalPath: original, copy: 
 const base = {originalPath: original, copy, outputPath: '/out', runStep: () => ({code: 0})};
 assert.equal(runRecipe('otomate', {...base, findings: [{sheet: 'Dialogue', row: 24}]}).createCalled, false);
 assert.equal(runRecipe('otomate', {...base, checkExit: 1}).createCalled, false);
+// Untranslated rows stay in English and are reported; they do not stop the patch.
+assert.equal(runRecipe('otomate', {...base, untranslated: [{sheet: 'Dialogue', row: 24}]}).createCalled, true);
 assert.equal(runRecipe('otomate', {...base, reportReadable: false}).createCalled, false);
 assert.equal(runRecipe('otomate', {...base, findings: [{sheet: 'Dialogue', row: 24}]}).skip, false);
 

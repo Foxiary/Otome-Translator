@@ -3,7 +3,7 @@ const EXCLUDED = ['build', 'release', 'translate-glossary', 'unity-release'];
 const RECIPES = {
   otomate: [
     {id: 'filltitles-fill', phase: 'prepare'},
-    {id: 'quarong', phase: 'check'},
+    {id: 'empty-scan', phase: 'check'},
     {id: 'applyvi', phase: 'create'}
   ],
   unity: [
@@ -25,15 +25,11 @@ function setupError({projectPath, outputPath, hasGameFiles, hasFonts}) {
 }
 
 function planStep(step, {copyPath, originalPath, outputPath, runDirectory}) {
-  const report = `${runDirectory}/quarong-report.xlsx`;
   let outputs;
   let argv;
   if (step.id === 'applyvi' || step.id === 'unity-sheet-apply') {
     outputs = [outputPath];
     argv = [copyPath, outputPath];
-  } else if (step.id === 'quarong') {
-    outputs = [report];
-    argv = [copyPath, report];
   } else if (step.id === 'filltitles-fill') {
     outputs = [copyPath];
     argv = [copyPath, copyPath];
