@@ -7,6 +7,7 @@ const {checkForUpdate} = require('./update-check');
 const {normalizePatchSettings} = require('./patch-settings');
 const {isXlsx} = require('./patch-ui');
 const {t} = require('./i18n');
+const {missingFiles} = require('./required-files');
 const {recipeFor, setupError} = require('./patch-recipe');
 
 let window;
@@ -187,6 +188,7 @@ ipcMain.handle('open-update', () => {
   if (lastUpdate?.status !== 'available') return false;
   return shell.openExternal(lastUpdate.url);
 });
+ipcMain.handle('missing-files', (_event, toolId) => missingFiles(toolId, workspace()));
 ipcMain.handle('choose-workspace', async () => {
   const result = await dialog.showOpenDialog(window, {title: t('workspace.dialog', settings.language, {engine: activeEngine().name}),
     defaultPath: workspace(), properties: ['openDirectory', 'createDirectory']});

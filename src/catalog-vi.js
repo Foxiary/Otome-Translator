@@ -4,7 +4,7 @@
 const DRY = 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Nếu lưu đè lên file gốc, app giữ một bản sao lưu .bak.';
 
 const tools = {
-  'build': {title: 'Vá giao diện', description: 'Tạo bản vá giao diện hoàn chỉnh: vẽ font tiếng Việt, đưa bản dịch menu từ bảng dịch vào, rồi đóng gói tất cả thành file SYSTEM.cpk.', note: 'Cần các file CPK của game và file font trong thư mục dự án. Tùy chọn Install chép kết quả vào Ryujinx và chỉ chạy trên Windows.'},
+  'build': {title: 'Vá giao diện', description: 'Tạo bản vá giao diện hoàn chỉnh: vẽ font tiếng Việt, đưa bản dịch menu từ bảng dịch vào, rồi đóng gói tất cả thành file SYSTEM.cpk.', note: 'Tùy chọn Install chép kết quả vào Ryujinx và chỉ chạy trên Windows.'},
   'ffugen': {title: 'Tạo font cho game', description: 'Chuyển một font thông thường (TTF hoặc OTF) sang định dạng font riêng của game (.ffu) và thêm chữ tiếng Việt. Cần một file .ffu gốc của game làm mẫu.', note: 'Đặt sai kích thước hoặc dùng font lỗi có thể làm game bị treo. Luôn thử font mới trong game.'},
   'ffu-inspect': {title: 'Kiểm tra font game', description: 'Cho biết font game (.ffu) có bao nhiêu chữ và kích thước ra sao. Gõ thử vài chữ để xem font có vẽ được không.'},
 

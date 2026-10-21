@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('vees', {
   choosePython: () => ipcRenderer.invoke('choose-python'),
   setupPython: () => ipcRenderer.invoke('setup-python'),
   openWorkspace: () => ipcRenderer.invoke('open-workspace'),
+  missingFiles: toolId => ipcRenderer.invoke('missing-files', toolId),
   openDocument: name => ipcRenderer.invoke('open-document', name),
   run: (id, values) => ipcRenderer.invoke('run-tool', id, values),
   runPatch: options => ipcRenderer.invoke('run-patch', options),

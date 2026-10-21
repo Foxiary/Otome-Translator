@@ -5,6 +5,8 @@ let activeId = null;
 let running = false;
 let page = 'form';
 let patchStage = 'choose';
+let patchPhase = 0;
+let patchMissing = [];
 let formValues = {};
 let currentLog = '';
 let pythonCheck = null;
@@ -247,9 +249,52 @@ function renderForm() {
     }
     fields.append(field);
   }
+  checkMissing();
   $('run-hint').textContent = `${current.script}${current.prefix.length ? ' ' + current.prefix.join(' ') : ''} · ${state.workspace}`;
   $('run-button').disabled = running;
   $('cancel-button').disabled = !running;
+}
+// The red notice for files a tool reads from the project folder and cannot find.
+// The likeliest cause is a wrong project folder, so it asks about that first.
+function renderMissing(container, missing) {
+  container.classList.toggle('hidden', !missing.length);
+  container.replaceChildren();
+  if (!missing.length) return;
+  const body = elt('div');
+  const actions = elt('div', 'missing-actions');
+  const change = elt('button', 'button primary', text('missing.change'));
+  change.type = 'button';
+  change.addEventListener('click', chooseWorkspace);
+  const open = elt('button', 'button', text('workspace.open'));
+  open.type = 'button';
+  open.addEventListener('click', async () => {const error = await window.vees.openWorkspace(); if (error) showError(error);});
+  actions.append(elt('code', 'missing-folder mono', state.workspace), change, open);
+  const list = elt('ul', 'missing-list');
+  for (const item of missing) {
+    const row = elt('li');
+    row.append(elt('code', 'mono', item.path.replace(/\//g, '\\')), elt('span', '', ` · ${text(`missing.hint.${item.hint}`)}`));
+    list.append(row);
+  }
+  body.append(elt('strong', '', text('missing.title', {count: missing.length})), elt('div', 'missing-where', text('missing.where')),
+    actions, elt('div', 'missing-files', text('missing.files')), list, elt('div', 'missing-next', text('missing.next')));
+  container.append(body);
+}
+async function checkMissing() {
+  const current = tool();
+  if (!current) return;
+  let missing = [];
+  try { missing = await window.vees.missingFiles(current.id); } catch {}
+  if (tool() !== current || page !== 'form') return;
+  renderMissing($('missing'), missing);
+}
+async function checkPatchMissing() {
+  const engineId = engine().id;
+  let missing = [];
+  try { missing = await window.vees.missingFiles(`patch:${engineId}`); } catch {}
+  if (page !== 'patch' || engine().id !== engineId) return;
+  patchMissing = missing;
+  renderMissing($('patch-missing'), patchMissing);
+  updatePatchReady();
 }
 function breadcrumbs(node, parts, script) {
   node.replaceChildren();
@@ -268,39 +313,82 @@ function showPage(next) {
   if (next === 'form') selectDefault();
   render();
 }
+const PHASES = ['prepare', 'check', 'create'];
 function renderPatch() {
-  const chosen = patchState().sheetPath;
+  const {sheetPath, outputPath} = patchState();
   breadcrumbs($('patch-breadcrumb'), [engine().name]);
   $('patch-title').textContent = text(`nav.patch.${engine().id}`);
   $('patch-scope').textContent = text(`patch.scope.${engine().id}`);
-  $('patch-file').value = chosen;
-  $('create-patch').disabled = running || !isXlsx(chosen);
-  const stageName = patchStage === 'done' ? 'try' : patchStage === 'choose' ? 'choose' : 'create';
-  for (const name of ['choose', 'create', 'try']) $('stage-' + name).classList.toggle('active', name === stageName);
-  $('patch-choose').classList.toggle('hidden', patchStage !== 'choose');
+  showValue($('patch-file'), sheetPath, 'patch.noSheet');
+  showValue($('patch-output'), outputPath, 'patch.noOutput');
+  // Steps: choose, then patch (running or stopped on issues), then try it in game.
+  const current = patchStage === 'done' ? 2 : patchStage === 'choose' ? 0 : 1;
+  ['choose', 'create', 'try'].forEach((name, index) => {
+    const step = $(`step-${name}`);
+    step.classList.toggle('done', index < current);
+    step.classList.toggle('active', index === current);
+    step.querySelector('.step-mark').textContent = index < current ? '' : String(index + 1);
+  });
+  $('patch-setup').classList.toggle('hidden', patchStage !== 'choose');
   $('patch-working').classList.toggle('hidden', patchStage !== 'working');
   $('patch-issues').classList.toggle('hidden', patchStage !== 'issues');
   $('patch-done').classList.toggle('hidden', patchStage !== 'done');
-  const shortcuts = $('patch-shortcuts');
-  shortcuts.replaceChildren();
-  for (const group of engine().groups) {
-    const button = elt('button', 'button', groupName(group));
-    button.type = 'button';
-    button.disabled = running;
-    button.addEventListener('click', () => openToolGroup(group));
-    shortcuts.append(button);
-  }
+  $('patch-log-card').classList.toggle('hidden', !$('patch-log').textContent);
+  $('stop-patch').classList.toggle('hidden', !running);
+  renderTasks();
   if (patchStage === 'done') {
+    $('patch-done-body').textContent = text(`patch.done.${engine().id}`);
+    $('patch-done-path').textContent = outputPath;
     const actions = $('patch-actions');
     actions.replaceChildren();
+    if (engine().id === 'otomate') actions.append(actionButton('button primary', text('patch.nextRepack'), () => openTool('cpk-repack')));
     for (const action of successActions()) {
-      const button = elt('button', action === 'open-folder' ? 'button primary' : 'button', text(action === 'open-folder' ? 'patch.open' : 'patch.another'));
-      button.type = 'button';
+      const button = actionButton(action === 'open-folder' && engine().id !== 'otomate' ? 'button primary' : 'button',
+        text(action === 'open-folder' ? 'patch.open' : 'patch.another'), () => action === 'open-folder' ? window.vees.openOutput() : chooseSheet());
       button.dataset.action = action;
-      button.addEventListener('click', () => action === 'open-folder' ? window.vees.openOutput() : chooseSheet());
       actions.append(button);
     }
   }
+  updatePatchReady();
+  checkPatchMissing();
+}
+function showValue(node, value, emptyKey) {
+  node.textContent = value || text(emptyKey);
+  node.classList.toggle('is-empty', !value);
+  node.title = value || '';
+}
+function actionButton(className, label, callback) {
+  const button = elt('button', className, label);
+  button.type = 'button';
+  button.addEventListener('click', callback);
+  return button;
+}
+// Each task is done, running, failed (the check that found problems) or waiting.
+function renderTasks() {
+  PHASES.forEach((name, index) => {
+    const task = $(`task-${name}`);
+    task.classList.toggle('done', patchStage === 'done' || index < patchPhase);
+    task.classList.toggle('active', running && patchStage === 'working' && index === patchPhase);
+    task.classList.toggle('failed', patchStage === 'issues' && index === patchPhase);
+  });
+}
+// The run card says what is still needed before a patch can be made.
+function updatePatchReady() {
+  const {sheetPath, outputPath} = patchState();
+  const reason = !isXlsx(sheetPath) ? 'patch.need.sheet' : !outputPath ? 'patch.need.output' : patchMissing.length ? 'patch.need.files' : null;
+  $('patch-ready').textContent = text(reason ? 'patch.notReady' : 'patch.ready');
+  $('patch-ready-dot').className = `dot${reason ? '' : ' ready'}`;
+  $('patch-reason').textContent = reason ? text(reason) : `${sheetPath.split(/[\\/]/).pop()} → ${outputPath}`;
+  $('create-patch').disabled = running || !!reason;
+}
+function openTool(id) {
+  const target = tools().find(item => item.id === id);
+  if (!target || !canOpenTools(running)) return;
+  activeGroup = target.group;
+  activeId = target.id;
+  page = 'form';
+  $('search').value = '';
+  render();
 }
 async function openToolGroup(group) {
   if (!canOpenTools(running)) {showError(text('engine.blocked')); return;}
@@ -334,8 +422,9 @@ function setLog(text) {currentLog = text; $('log').textContent = text; $('log').
 function status(key, css) {
   runStatus = {key, css};
   $('run-status').textContent = text(key);
-  const dot = document.querySelector('.console-dot');
-  dot.className = `console-dot ${css || ''}`;
+  $('run-status').className = `log-state ${css || ''}`;
+  document.querySelector('.console-dot').className = `console-dot ${css || ''}`;
+  document.querySelector('.log').classList.toggle('running', css === 'running');
 }
 function dialogContent(title, build) {
   $('dialog-title').textContent = title;
@@ -383,17 +472,14 @@ async function start() {
   document.addEventListener('click', event => {if (!$('language-switcher').contains(event.target)) toggleLanguageMenu(false);});
   document.addEventListener('keydown', event => {if (event.key === 'Escape') toggleLanguageMenu(false);});
   $('theme-toggle').addEventListener('click', toggleTheme);
+  // Files are usually copied in from Explorer, so check again on return.
+  window.addEventListener('focus', () => {if (page === 'form') checkMissing(); if (page === 'patch') checkPatchMissing();});
   $('choose-sheet').addEventListener('click', chooseSheet);
   $('choose-fixed').addEventListener('click', chooseSheet);
   $('choose-output').addEventListener('click', chooseOutput);
   $('create-patch').addEventListener('click', () => startPatch(false));
   $('stop-patch').addEventListener('click', () => window.vees.cancel());
-  $('workspace-button').addEventListener('click', async () => {
-    try {
-      const result = await window.vees.chooseWorkspace();
-      if (result) {state.workspace = result.workspace;updateWorkspace();renderForm();updatePython(result.python);}
-    } catch(error){showError(error.message);}
-  });
+  $('workspace-button').addEventListener('click', chooseWorkspace);
   $('open-folder').addEventListener('click', async () => {const error=await window.vees.openWorkspace();if(error)showError(error);});
   $('docs-button').addEventListener('click',showDocs);
   $('python-button').addEventListener('click',showPython);
@@ -411,7 +497,7 @@ async function start() {
   $('cancel-button').addEventListener('click',async()=>{await window.vees.cancel();});
   window.vees.on('run-start',event=>{
     running=true;render();setLog(`$ ${event.command.map(x=>/\s/.test(String(x))&&/\s/.test(x)?JSON.stringify(x):x).join(' ')}\n\n`);
-    if (event.id === 'patch') {$('patch-log').textContent = ''; patchStage = 'working';}
+    if (event.id === 'patch') {$('patch-log').textContent = ''; patchStage = 'working'; patchPhase = 0;}
     status('status.running','running');
     render();
   });
@@ -419,8 +505,9 @@ async function start() {
     setLog(currentLog+event.text);
     if (page === 'patch') {
       $('patch-log').textContent += event.text;
+      $('patch-log-card').classList.remove('hidden');
       const phase = String(event.text).match(/^(prepare|check|create):/m);
-      if (phase) for (const name of ['prepare', 'check', 'create']) $('task-' + name).classList.toggle('active', name === phase[1]);
+      if (phase) {patchPhase = PHASES.indexOf(phase[1]); renderTasks();}
     }
   });
   window.vees.on('run-end',event=>{
@@ -435,6 +522,12 @@ async function start() {
 function chooseLanguage(next) {
   if (languageChange().workbookPath) return;
   window.vees.setLanguage(next).then(result => {state.settings = result.settings; render();});
+}
+async function chooseWorkspace() {
+  try {
+    const result = await window.vees.chooseWorkspace();
+    if (result) {state.workspace = result.workspace;updateWorkspace();renderForm();updatePython(result.python);}
+  } catch(error){showError(error.message);}
 }
 async function chooseSheet() {
   const selected = await window.vees.choosePath('file', patchState().sheetPath, filtersFor({name: 'xlsx'}));
@@ -469,9 +562,8 @@ function applyPatchResult(result) {
   running = false;
   if (result.needsConfirm) return;
   if (result.stopped || result.signal === 'cancelled' || result.code === 130) {
-    patchStage = 'working';
-    const stopped = text('patch.stopped');
-    if (!$('patch-log').textContent.includes(stopped)) $('patch-log').textContent += `\n${stopped}`;
+    patchStage = 'choose';
+    showPatchError(text('patch.stopped'));
   } else if (result.findings && result.findings.length) {
     patchStage = 'issues';
     const list = $('finding-list');
@@ -482,7 +574,7 @@ function applyPatchResult(result) {
     showPatchError('');
   } else {
     patchStage = 'choose';
-    showPatchError(result.failedStep || text('patch.setup'));
+    showPatchError(result.failedStep ? text('patch.failed', {step: result.failedStep}) : text('patch.setup'));
   }
   render();
 }
