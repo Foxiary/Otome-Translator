@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('vees', {
   state: () => ipcRenderer.invoke('state'),
   setEngine: id => ipcRenderer.invoke('set-engine', id),
   chooseWorkspace: () => ipcRenderer.invoke('choose-workspace'),
-  choosePath: (kind, current) => ipcRenderer.invoke('choose-path', kind, current),
+  choosePath: (kind, current, filters) => ipcRenderer.invoke('choose-path', kind, current, filters),
   choosePython: () => ipcRenderer.invoke('choose-python'),
   setupPython: () => ipcRenderer.invoke('setup-python'),
   openWorkspace: () => ipcRenderer.invoke('open-workspace'),
