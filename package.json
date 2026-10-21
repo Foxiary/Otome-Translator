@@ -9,7 +9,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node scripts/check-source-commit.js && node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/catalog-otomate.js && node --check src/catalog-unity.js && node --check src/engines.js && node --check src/update-check.js && node --check src/update-ui.js && node --check src/patch-settings.js && node --check src/i18n.js && node --check src/tool-browser.js && node --check src/patch-ui.js && node --check src/patch-recipe.js && node --check src/file-types.js && node --check src/catalog-vi.js && node scripts/test-catalog-vi.js && node scripts/test-file-types.js && node scripts/test-receive-sheet.js && node scripts/test-update-check.js",
+    "check": "node scripts/check-source-commit.js && node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/catalog-otomate.js && node --check src/catalog-unity.js && node --check src/engines.js && node --check src/update-check.js && node --check src/update-ui.js && node --check src/patch-settings.js && node --check src/i18n.js && node --check src/tool-browser.js && node --check src/patch-ui.js && node --check src/patch-recipe.js && node --check src/file-types.js && node --check src/catalog-vi.js && node scripts/test-catalog-vi.js && node --check src/required-files.js && node scripts/test-required-files.js && node scripts/test-file-types.js && node scripts/test-receive-sheet.js && node scripts/test-update-check.js",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux"

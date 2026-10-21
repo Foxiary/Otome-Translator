@@ -75,7 +75,6 @@
             <button class="language-option" type="button" role="menuitemradio" id="lang-vi"><span class="language-option-code">VI</span><span lang="vi" data-i18n="language.vi"></span><svg class="icon"><use href="#i-check"/></svg></button>
           </div>
         </div>
-        <div class="local-footer"><svg class="icon"><use href="#i-device"/></svg><bdi data-i18n="footer.local"></bdi></div>
       </div>
     </aside>
 
@@ -94,38 +93,58 @@
           <p id="patch-scope" class="page-description"></p>
         </header>
         <div class="main-content">
-          <ol class="stages">
-            <li id="stage-choose" data-i18n="stage.choose"></li>
-            <li id="stage-create" data-i18n="stage.create"></li>
-            <li id="stage-try" data-i18n="stage.try"></li>
+          <ol class="stepper">
+            <li class="step" id="step-choose"><span class="step-mark">1</span><span data-i18n="stage.choose"></span></li>
+            <li class="step" id="step-create"><span class="step-mark">2</span><span data-i18n="stage.create"></span></li>
+            <li class="step" id="step-try"><span class="step-mark">3</span><span data-i18n="stage.try"></span></li>
           </ol>
-          <div id="patch-choose">
-            <label class="field patch-file-field"><span class="field-label" data-i18n="patch.choose"></span><input id="patch-file" type="text" readonly></label>
-            <div class="run-buttons">
-              <button id="choose-sheet" class="button" type="button" data-i18n="patch.choose"></button>
-              <button id="choose-output" class="button" type="button" data-i18n="patch.output"></button>
-            </div>
-            <p id="patch-error" class="notice hidden"></p>
-            <button id="create-patch" class="button primary" type="button" disabled data-i18n="patch.button"></button>
-            <div id="patch-shortcuts" class="shortcut-row"></div>
+          <div id="patch-missing" class="notice missing hidden"></div>
+          <p id="patch-error" class="notice hidden"></p>
+
+          <div id="patch-setup" class="patch-setup">
+            <section class="pick-card">
+              <span class="pick-icon"><svg class="icon"><use href="#i-sheet"/></svg></span>
+              <div class="pick-body">
+                <div class="pick-label" data-i18n="patch.choose"></div>
+                <div class="pick-hint" data-i18n="patch.hint"></div>
+                <div class="pick-row"><div class="pick-value mono" id="patch-file"></div><button id="choose-sheet" class="button" type="button" data-i18n="patch.pickFile"></button></div>
+              </div>
+            </section>
+            <section class="pick-card">
+              <span class="pick-icon"><svg class="icon"><use href="#i-folder"/></svg></span>
+              <div class="pick-body">
+                <div class="pick-label" data-i18n="patch.output"></div>
+                <div class="pick-hint" data-i18n="patch.outputHint"></div>
+                <div class="pick-row"><div class="pick-value mono" id="patch-output"></div><button id="choose-output" class="button" type="button" data-i18n="patch.pickFolder"></button></div>
+              </div>
+            </section>
+            <section class="run-card">
+              <div class="run-copy"><div class="run-status"><span class="dot" id="patch-ready-dot"></span><bdi id="patch-ready"></bdi></div><div class="run-path" id="patch-reason"></div></div>
+              <div class="run-actions"><button id="create-patch" class="button primary" type="button" disabled><svg class="icon"><use href="#i-play"/></svg><bdi data-i18n="patch.button"></bdi></button></div>
+            </section>
           </div>
+
           <div id="patch-working" class="hidden">
-            <ol class="stages">
-              <li id="task-prepare" data-i18n="task.prepare"></li>
-              <li id="task-check" data-i18n="task.check"></li>
-              <li id="task-create" data-i18n="task.create"></li>
-            </ol>
-            <button id="stop-patch" class="button" type="button" data-i18n="patch.stop"></button>
-            <pre id="patch-log" class="log-body mono"></pre>
+            <ul class="task-list">
+              <li class="task" id="task-prepare"><span class="task-mark"></span><span data-i18n="task.prepare"></span></li>
+              <li class="task" id="task-check"><span class="task-mark"></span><span data-i18n="task.check"></span></li>
+              <li class="task" id="task-create"><span class="task-mark"></span><span data-i18n="task.create"></span></li>
+            </ul>
           </div>
-          <div id="patch-issues" class="hidden">
-            <p data-i18n="patch.blocked"></p>
-            <ul id="finding-list"></ul>
-            <button id="choose-fixed" class="button primary" type="button" data-i18n="patch.another"></button>
-          </div>
-          <div id="patch-done" class="hidden">
+
+          <div id="patch-issues" class="notice missing hidden"><div><strong data-i18n="patch.blocked"></strong><ul id="finding-list"></ul><button id="choose-fixed" class="button primary" type="button" data-i18n="patch.another"></button></div></div>
+
+          <section id="patch-done" class="done-card hidden">
+            <div class="done-head"><span class="done-mark"><svg class="icon"><use href="#i-check"/></svg></span><strong data-i18n="patch.doneTitle"></strong></div>
+            <div class="pick-hint" id="patch-done-body"></div>
+            <code class="pick-value mono" id="patch-done-path"></code>
             <div id="patch-actions" class="run-buttons"></div>
-          </div>
+          </section>
+
+          <section class="log hidden" id="patch-log-card">
+            <div class="log-header"><span class="log-label"><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="log.title"></bdi></span><button id="stop-patch" class="button log-stop" type="button" data-i18n="patch.stop"></button></div>
+            <pre id="patch-log" class="log-body mono"></pre>
+          </section>
         </div>
       </section>
 
@@ -137,6 +156,7 @@
         </header>
         <div class="main-content">
           <div id="update-banner" class="update-banner hidden" role="status"><div><strong id="update-title"></strong><p id="update-message"></p></div><div class="update-actions"><button id="update-open" class="button primary hidden" data-i18n="update.view"></button><button id="update-dismiss" class="button" data-i18n="update.dismiss"></button></div></div>
+          <div id="missing" class="notice missing hidden"></div>
           <div id="notice" class="notice hidden"></div>
           <div class="section-heading"><span class="section-number mono">01</span><h2 data-i18n="form.configuration"></h2><span class="section-note" data-i18n="form.paths"></span></div>
           <form id="tool-form"><div id="form-fields" class="form-fields"></div></form>
