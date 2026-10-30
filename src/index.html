@@ -67,6 +67,7 @@
           <button class="utility" type="button" id="docs-button"><svg class="icon"><use href="#i-book"/></svg><bdi data-i18n="rail.docs"></bdi></button>
           <button class="utility" type="button" id="python-button"><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="rail.python"></bdi></button>
           <button class="utility" type="button" id="check-updates"><svg class="icon"><use href="#i-refresh"/></svg><bdi data-i18n="rail.updates"></bdi></button>
+          <button class="utility" type="button" id="tour-button"><svg class="icon"><use href="#i-info"/></svg><bdi data-i18n="rail.tour"></bdi></button>
         </nav>
         <button class="theme-toggle" type="button" role="switch" id="theme-toggle" aria-checked="true"><svg class="icon"><use href="#i-moon"/></svg><bdi data-i18n="theme.dark"></bdi><span class="theme-state" id="theme-state"></span><span class="theme-track" aria-hidden="true"><span class="theme-thumb"></span></span></button>
         <div class="language-switcher" id="language-switcher">
@@ -208,12 +209,45 @@
           <div id="missing" class="notice missing hidden"></div>
           <section id="form-widths" class="widths-card hidden"></section>
           <div id="notice" class="notice hidden"></div>
+          <!-- Make game font: choose the stock files and a font for each, instead of the flag form. -->
+          <div id="fonts-panel" class="fonts-panel hidden">
+          <div id="fonts-unpack" class="notice hint"><div class="hint-body"><span data-i18n="fonts.unpack"></span><button class="button" type="button" id="fonts-unpack-open"><bdi id="fonts-unpack-tool"></bdi><svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
+          <section class="pick-card">
+            <span class="pick-icon"><svg class="icon"><use href="#i-font"/></svg></span>
+            <div class="pick-body">
+              <div class="pick-label" data-i18n="fonts.stock"></div>
+              <div class="pick-hint" data-i18n="fonts.stockHint"></div>
+              <div class="pick-row"><div class="pick-value mono" id="fonts-stock-value"></div><button id="fonts-pick-ffu" class="button" type="button" data-i18n="fonts.pickFfu"></button></div>
+              <div id="fonts-table" class="fonts-table hidden"></div>
+            </div>
+          </section>
+          <section class="pick-card">
+            <span class="pick-icon"><svg class="icon"><use href="#i-archive"/></svg></span>
+            <div class="pick-body">
+              <div class="pick-label" data-i18n="fonts.output"></div>
+              <div class="pick-hint" data-i18n="fonts.outputHint"></div>
+              <div class="pick-row"><div class="pick-value mono" id="fonts-output-value"></div><button id="fonts-pick-output" class="button" type="button" data-i18n="patch.pickFolder"></button></div>
+            </div>
+          </section>
+          <details class="pick-card fonts-options" id="fonts-options-card">
+            <summary><span class="pick-label" data-i18n="fonts.options"></span></summary>
+            <div class="pick-hint" data-i18n="fonts.optionsHint"></div>
+            <div id="fonts-options" class="form-fields"></div>
+          </details>
+          <section class="run-card">
+            <div class="run-copy"><div class="run-status"><span class="dot" id="fonts-ready-dot"></span><bdi id="fonts-ready"></bdi></div><div class="run-path" id="fonts-reason"></div></div>
+            <div class="run-actions"><button id="fonts-stop" class="button" type="button" disabled data-i18n="patch.stop"></button><button id="fonts-run" class="button primary" type="button"><svg class="icon"><use href="#i-play"/></svg><bdi data-i18n="fonts.run"></bdi></button></div>
+          </section>
+          <div id="fonts-result" class="notice hidden"></div>
+          </div>
+          <div id="form-generic">
           <div class="section-heading"><h2 data-i18n="form.configuration"></h2><span class="section-note" data-i18n="form.paths"></span></div>
           <form id="tool-form"><div id="form-fields" class="form-fields"></div></form>
           <section class="run-card">
             <div class="run-copy"><div class="run-status"><span class="dot"></span><bdi data-i18n="form.ready"></bdi></div><div class="run-path mono" id="run-hint"></div></div>
             <div class="run-actions"><button id="cancel-button" class="button" type="button" disabled data-i18n="patch.stop"></button><button id="run-button" class="button primary" type="button"><svg class="icon"><use href="#i-play"/></svg><bdi data-i18n="form.run"></bdi></button></div>
           </section>
+          </div>
           <section class="log" aria-labelledby="log-heading">
             <div class="log-header"><span class="log-label" id="log-heading"><span class="console-dot"></span><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="log.title"></bdi></span><span class="log-state" id="run-status"></span><button class="log-clear" type="button" id="clear-log" data-i18n="log.clear" data-i18n-title="log.clearTitle"></button></div>
             <pre id="log" class="log-body mono" aria-live="polite"></pre>
@@ -226,6 +260,8 @@
   <script src="i18n.js"></script>
   <script src="patch-ui.js"></script>
   <script src="file-types.js"></script>
+  <script src="font-map.js"></script>
+  <script src="tour.js"></script>
   <script src="renderer.js"></script>
   <script src="update-ui.js"></script>
 </body>
