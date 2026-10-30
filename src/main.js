@@ -21,7 +21,7 @@ let updateRequest = null;
 // engines/otomate is pinned at; `npm run check` refuses a build where the
 // two differ. Update notices compare the app version with the latest
 // Otome Translator release, not with a new engine commit.
-const SOURCE_COMMIT = '6124baef6734c9c5d74a4531f91f3b5cc855b3ff';
+const SOURCE_COMMIT = 'ba464becab5ef2f6e7705e49b891b25303b63e32';
 const engineById = new Map(engines.map(engine => [engine.id, engine]));
 const toolById = new Map(engines.flatMap(engine => engine.tools.map(tool => [tool.id, {engine, tool}])));
 
