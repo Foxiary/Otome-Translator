@@ -1,4 +1,4 @@
-// Shared update banner for the two desktop apps.
+// Shared update banner and dialog for the two desktop apps.
 (() => {
   const api = window.ffu || window.vees;
   const byId = id => document.getElementById(id);
@@ -39,59 +39,68 @@
     }
   }
 
-  // Floating notice for manual checks, visible whichever view is open.
-  const toast = document.createElement('div');
-  toast.className = 'update-toast';
-  toast.setAttribute('role', 'status');
-  const toastBody = document.createElement('div');
-  const closeToast = document.createElement('button');
-  closeToast.type = 'button';
-  closeToast.className = 'update-toast-close';
-  closeToast.innerHTML = '<svg class="icon"><use href="#i-close"/></svg>';
-  toast.append(toastBody, closeToast);
-  document.body.appendChild(toast);
-  let toastTimer = null;
+  // Update dialog: shown for manual checks, and once per release when the
+  // background check finds one the user has not skipped.
+  const dialog = document.createElement('dialog');
+  dialog.className = 'update-dialog';
+  dialog.innerHTML = '<div class="dialog-header"><h2></h2><button class="icon-button" type="button"><svg class="icon"><use href="#i-close"/></svg></button></div>'
+    + '<div class="dialog-body"><p></p></div><div class="update-dialog-actions"></div>';
+  document.body.appendChild(dialog);
+  const dialogTitle = dialog.querySelector('h2');
+  const dialogMessage = dialog.querySelector('.dialog-body p');
+  const dialogClose = dialog.querySelector('.dialog-header button');
+  const dialogActions = dialog.querySelector('.update-dialog-actions');
+  let dialogResult = null;
+  let promptedTag = null;
 
-  function hideToast() {
-    clearTimeout(toastTimer);
-    toast.classList.remove('open');
+  function action(label, className, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.textContent = label;
+    button.addEventListener('click', onClick);
+    return button;
   }
-  // Auto-hide, but never while the pointer is resting on the notice.
-  function scheduleHide() {
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(hideToast, 6000);
+
+  function fillDialog() {
+    const result = dialogResult;
+    dialog.classList.toggle('error', result.status === 'error');
+    dialogClose.title = dialogClose.ariaLabel = say('tools.close', 'Close');
+    if (result.status === 'available') {
+      dialogTitle.textContent = say('update.available', 'Otome Translator {version} is available', {version: result.latestVersion});
+      dialogMessage.textContent = say('update.installed', 'Installed version: {version}.', {version: result.currentVersion});
+      dialogActions.replaceChildren(
+        action(say('update.later', 'Later'), 'button', () => dialog.close()),
+        action(say('update.view', 'View changes ↗'), 'button primary', async () => {
+          dialog.close();
+          await api.openUpdate();
+        }));
+    } else {
+      if (result.status === 'current') {
+        dialogTitle.textContent = say('update.current', 'Otome Translator is up to date');
+        dialogMessage.textContent = say('update.version', 'This app is version {version}.', {version: result.currentVersion});
+      } else {
+        dialogTitle.textContent = say('update.failed', 'Could not check for updates');
+        dialogMessage.textContent = result.message || say('update.offline', 'Check your internet connection and try again.');
+      }
+      dialogActions.replaceChildren(action(say('tools.close', 'Close'), 'button primary', () => dialog.close()));
+    }
   }
 
   function notify(result) {
-    const title = document.createElement('strong');
-    const message = document.createElement('p');
-    if (result.status === 'available') {
-      title.textContent = say('update.available', 'Otome Translator {version} is available', {version: result.latestVersion});
-      message.textContent = say('update.installed', 'Installed version: {version}.', {version: result.currentVersion});
-    } else if (result.status === 'current') {
-      title.textContent = say('update.current', 'Otome Translator is up to date');
-      message.textContent = say('update.version', 'This app is version {version}.', {version: result.currentVersion});
-    } else {
-      title.textContent = say('update.failed', 'Could not check for updates');
-      message.textContent = result.message || say('update.offline', 'Check your internet connection and try again.');
-    }
-    toastBody.replaceChildren(title, message);
-    closeToast.title = closeToast.ariaLabel = say('tools.close', 'Close');
-    toast.className = `update-toast ${result.status === 'available' ? '' : result.status === 'error' ? 'error' : 'info'}`;
-    void toast.offsetWidth; // restart the entrance animation on repeat checks
-    toast.classList.add('open');
-    if (!toast.matches(':hover')) scheduleHide();
+    dialogResult = result;
+    if (result.status === 'available') promptedTag = result.tag;
+    fillDialog();
+    if (!dialog.open) dialog.showModal();
+    dialogActions.lastChild.focus();
   }
-  toast.addEventListener('mouseenter', () => clearTimeout(toastTimer));
-  toast.addEventListener('mouseleave', () => {if (toast.classList.contains('open')) scheduleHide();});
-  closeToast.addEventListener('click', event => {
-    event.stopPropagation();
-    hideToast();
-  });
-  toast.addEventListener('click', async () => {
-    hideToast();
-    if (latest?.status === 'available') await api.openUpdate();
-  });
+  dialogClose.addEventListener('click', () => dialog.close());
+
+  // The background check opens the dialog only for a release not yet shown.
+  function onBackground(result) {
+    render(result, false);
+    if (result.status === 'available' && !result.dismissed && result.tag !== promptedTag) notify(result);
+  }
 
   checkButton.addEventListener('click', async () => {
     const label = checkLabel.textContent;
@@ -112,7 +121,10 @@
     banner.classList.add('hidden');
     shown = null;
   });
-  document.addEventListener('languagechange', () => {if (shown) render(shown, true);});
-  api.on('update-status', result => render(result, false));
-  api.checkUpdates().then(result => render(result, false)).catch(() => {});
+  document.addEventListener('languagechange', () => {
+    if (shown) render(shown, true);
+    if (dialog.open) fillDialog();
+  });
+  api.on('update-status', onBackground);
+  api.checkUpdates().then(onBackground).catch(() => {});
 })();
