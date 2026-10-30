@@ -247,6 +247,7 @@ const strings = {
   'update.checking': {en: 'Checking…', vi: 'Đang kiểm tra…'},
   'update.view': {en: 'View changes ↗', vi: 'Xem thay đổi ↗'},
   'update.dismiss': {en: 'Dismiss', vi: 'Bỏ qua'},
+  'update.later': {en: 'Later', vi: 'Để sau'},
   'update.notice': {en: 'Otome Translator update', vi: 'Cập nhật Otome Translator'},
   'update.noticeBody': {en: 'Version {version} is available.', vi: 'Đã có phiên bản {version}.'},
   'fonts.unpack': {en: 'No original .ffu yet? Run Unpack CPK on the game\'s SYSTEM.cpk with the filter font and an empty output folder. You get sysfont.ffu (the menu font) and advfont1.ffu to advfont4.ffu (the 4 choices in Options → Display → Font).', vi: 'Chưa có file .ffu gốc? Dùng Giải nén CPK với SYSTEM.cpk của game, Filter là font và Output folder là một thư mục trống. Bạn sẽ có sysfont.ffu (font menu) và advfont1.ffu đến advfont4.ffu (4 lựa chọn font trong Options → Display → Font).'},
