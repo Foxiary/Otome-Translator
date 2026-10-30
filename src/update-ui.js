@@ -39,13 +39,70 @@
     }
   }
 
+  // Floating notice for manual checks, visible whichever view is open.
+  const toast = document.createElement('div');
+  toast.className = 'update-toast';
+  toast.setAttribute('role', 'status');
+  const toastBody = document.createElement('div');
+  const closeToast = document.createElement('button');
+  closeToast.type = 'button';
+  closeToast.className = 'update-toast-close';
+  closeToast.innerHTML = '<svg class="icon"><use href="#i-close"/></svg>';
+  toast.append(toastBody, closeToast);
+  document.body.appendChild(toast);
+  let toastTimer = null;
+
+  function hideToast() {
+    clearTimeout(toastTimer);
+    toast.classList.remove('open');
+  }
+  // Auto-hide, but never while the pointer is resting on the notice.
+  function scheduleHide() {
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 6000);
+  }
+
+  function notify(result) {
+    const title = document.createElement('strong');
+    const message = document.createElement('p');
+    if (result.status === 'available') {
+      title.textContent = say('update.available', 'Otome Translator {version} is available', {version: result.latestVersion});
+      message.textContent = say('update.installed', 'Installed version: {version}.', {version: result.currentVersion});
+    } else if (result.status === 'current') {
+      title.textContent = say('update.current', 'Otome Translator is up to date');
+      message.textContent = say('update.version', 'This app is version {version}.', {version: result.currentVersion});
+    } else {
+      title.textContent = say('update.failed', 'Could not check for updates');
+      message.textContent = result.message || say('update.offline', 'Check your internet connection and try again.');
+    }
+    toastBody.replaceChildren(title, message);
+    closeToast.title = closeToast.ariaLabel = say('tools.close', 'Close');
+    toast.className = `update-toast ${result.status === 'available' ? '' : result.status === 'error' ? 'error' : 'info'}`;
+    void toast.offsetWidth; // restart the entrance animation on repeat checks
+    toast.classList.add('open');
+    if (!toast.matches(':hover')) scheduleHide();
+  }
+  toast.addEventListener('mouseenter', () => clearTimeout(toastTimer));
+  toast.addEventListener('mouseleave', () => {if (toast.classList.contains('open')) scheduleHide();});
+  closeToast.addEventListener('click', event => {
+    event.stopPropagation();
+    hideToast();
+  });
+  toast.addEventListener('click', async () => {
+    hideToast();
+    if (latest?.status === 'available') await api.openUpdate();
+  });
+
   checkButton.addEventListener('click', async () => {
     const label = checkLabel.textContent;
     checkButton.disabled = true;
     checkLabel.textContent = say('update.checking', 'Checking…');
-    try { render(await api.checkUpdates(), true); }
-    catch (error) { render({status: 'error', message: error.message}, true); }
+    let result;
+    try { result = await api.checkUpdates(); }
+    catch (error) { result = {status: 'error', message: error.message}; }
     finally {checkButton.disabled = false; checkLabel.textContent = label || originalLabel;}
+    render(result, true);
+    notify(result);
   });
   openButton.addEventListener('click', async () => {
     if (latest?.status === 'available') await api.openUpdate();

@@ -10,6 +10,7 @@ const {t} = require('./i18n');
 const {missingFiles, jpNames} = require('./required-files');
 const {readWindows, saveWindow} = require('./windows-config');
 const {recipeFor, setupError} = require('./patch-recipe');
+const {MAPPED_ARGS, argValue, ffugenArgs, fontJobProblem, strokeFor, withOverrides} = require('./font-map');
 
 let window;
 let currentRun = null;
@@ -608,6 +609,82 @@ ipcMain.handle('measure-save', (_event, screen, entry) => {
   const relative = entry?.fontFile && folder ? path.relative(folder, entry.fontFile) : '';
   const fontFile = relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative.split(path.sep).join('/') : entry?.fontFile;
   return saveWindow(folder, screen, {...entry, fontFile});
+});
+// The replace-fonts page: stock .ffu files, a TTF/OTF for each, and ffugen run on every pair.
+function helperJson(result, fallback) {
+  const line = result.stdout.trim().split(/\r?\n/).pop() || '';
+  try { return JSON.parse(line); } catch {}
+  throw new Error(result.stderr.trim().split(/\r?\n/).pop() || fallback);
+}
+async function ffuInfo(files) {
+  return helperJson(await runHelper(path.join(__dirname, 'font_info.py'), ['ffu', ...files], workspace()), 'font_info.py failed');
+}
+ipcMain.handle('choose-ffu', async (_event, current) => {
+  const result = await dialog.showOpenDialog(window, {defaultPath: current || workspace(),
+    properties: ['openFile', 'multiSelections'], filters: [{name: 'Game fonts (.ffu)', extensions: ['ffu']}]});
+  return result.canceled ? [] : result.filePaths;
+});
+ipcMain.handle('ffu-info', (_event, files) => ffuInfo((Array.isArray(files) ? files : []).map(String)));
+ipcMain.handle('font-info', async (_event, file) =>
+  helperJson(await runHelper(path.join(__dirname, 'font_info.py'), ['font', String(file)], workspace()), 'font_info.py failed'));
+ipcMain.handle('run-fonts', async (_event, jobs, output, options) => {
+  if (currentRun) throw new Error('Another command is already running.');
+  output = String(output || '').trim();
+  if (output && !path.isAbsolute(output)) return {problem: 'output'};
+  const root = path.resolve(workspace());
+  const script = path.join(root, 'tools', 'ffugen.py');
+  if (!fs.existsSync(script)) throw new Error('tools/ffugen.py is missing from the project folder.');
+  // The advanced settings, parsed like the tool form would; each replaces the automatic one.
+  const ffugen = toolById.get('ffugen').tool;
+  const given = makeArgs({prefix: [], args: ffugen.args.filter(arg => !MAPPED_ARGS.includes(arg.name))},
+    options && typeof options === 'object' ? options : {});
+  const chosen = (Array.isArray(jobs) ? jobs : []).map(job => ({path: String(job.template || ''),
+    fonts: (Array.isArray(job.fonts) ? job.fonts : []).map(String).filter(Boolean).map(file => ({path: file}))}));
+  // Read the files again here rather than trust the page: the flags come from them.
+  const infos = await ffuInfo(chosen.map(job => job.path));
+  const templates = chosen.map((job, index) => ({...job, info: infos[index]}));
+  const problem = fontJobProblem(templates, output);
+  if (problem) return {problem};
+  settings.values.ffugen = {...options};
+  saveSettings();
+  const runId = `fonts-${Date.now()}`;
+  currentRun = {runId, child: null, cancelled: false, id: 'fonts'};
+  const todo = templates.filter(job => job.fonts.length);
+  emit('run-start', {runId, id: 'fonts', title: 'Make game font', started: new Date().toISOString(), command: ['ffugen', `${todo.length} fonts`, ...given]});
+  const made = [];
+  let failed = null;
+  try {
+    fs.mkdirSync(output, {recursive: true});
+    for (const item of todo) {
+      const name = path.basename(item.path);
+      emit('run-output', {runId, stream: 'stdout', text: `\n== ${name} <- ${item.fonts.map(font => path.basename(font.path)).join(' + ')}\n`});
+      // ffugen sizes the chain by its first font, so that is the one fitted to the cell.
+      let px = argValue(given, '--px');
+      if (!px) {
+        const cell = argValue(given, '--cell') || item.info.cell;
+        const stroke = argValue(given, '--stroke') ?? strokeFor(item.info);
+        px = helperJson(await runHelper(path.join(__dirname, 'font_info.py'),
+          ['fit', String(cell), String(stroke), item.fonts[0].path], root), 'font_info.py fit failed').px;
+      }
+      if (currentRun.cancelled) break;
+      const result = await spawnPython(script, ['--template', item.path, '--out', path.join(output, name),
+        ...item.fonts.flatMap(font => ['--font', font.path]), ...withOverrides(ffugenArgs(item.info, px), given)], root);
+      if (currentRun.cancelled) break;
+      if (result.code !== 0) {failed = name; break;}
+      made.push(name);
+    }
+  } catch (error) {
+    emit('run-output', {runId, stream: 'stderr', text: `${error.message}\n`});
+    failed = failed || 'output';
+  }
+  const cancelled = currentRun.cancelled;
+  currentRun = null;
+  const code = cancelled ? 130 : failed ? 1 : 0;
+  // What Repack CPK needs next: the game's SYSTEM.cpk when the project has one.
+  const archive = path.join(root, 'SYSTEM.cpk');
+  const repack = {archive: fs.existsSync(archive) ? archive : '', output: path.join(path.dirname(output), 'SYSTEM_vn.cpk'), folder: output};
+  emit('run-end', {runId, id: 'fonts', code, signal: cancelled ? 'cancelled' : null, made, failed, output, repack});
+  return {started: true, code};
 });
 // Saves the rows the last patch left untranslated, for handing to translators.
 ipcMain.handle('export-untranslated', async (_event, rows) => {

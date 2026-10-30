@@ -50,6 +50,9 @@ const groupIcons = {Build: 'build', Fonts: 'font', Archives: 'archive', Sheets: 
 const patchAfter = {otomate: 'Build', unity: 'Text'};
 // The measure screen uses the Otomate width tools, so only that engine offers it.
 const measureAfter = {otomate: 'Diagnostics'};
+// Make game font opens on a row per stock .ffu instead of its flag form.
+const FONT_TOOL = 'ffugen';
+const fontPage = {templates: [], output: '', outputChosen: false, result: null};
 function elt(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -237,9 +240,18 @@ function renderForm() {
   $('tool-description').textContent = toolText(current, 'description');
   $('notice').classList.toggle('hidden', !current.note);
   $('notice').textContent = toolText(current, 'note');
+  // Make game font fills template, output and fonts from its rows; the rest of
+  // its arguments are the advanced settings inside the panel.
+  const mapping = current.id === FONT_TOOL;
+  $('fonts-panel').classList.toggle('hidden', !mapping);
+  $('form-generic').classList.toggle('hidden', mapping);
+  if (mapping) renderFonts();
   const values = formValues[current.id] || state.settings.values[current.id] || {};
-  const fields = $('form-fields'); fields.replaceChildren();
+  $('form-fields').replaceChildren();
+  $('fonts-options').replaceChildren();
+  const fields = mapping ? $('fonts-options') : $('form-fields');
   for (const [index, arg] of current.args.entries()) {
+    if (mapping && MAPPED_ARGS.includes(arg.name)) continue;
     const field = elt('div',`field ${arg.kind === 'bool' ? 'toggle-field' : ''} ${arg.repeat || arg.help?.length > 85 ? 'wide' : ''}`);
     const label = elt('label','',titleOf(arg.name));
     label.htmlFor = `arg-${index}`;
@@ -284,6 +296,17 @@ function renderForm() {
   $('run-hint').textContent = `${current.script}${current.prefix.length ? ' ' + current.prefix.join(' ') : ''} · ${state.workspace}`;
   $('run-button').disabled = running;
   $('cancel-button').disabled = !running;
+}
+// Opens a tool with some of its fields filled in. Without `replace`, a field the
+// user already filled keeps its value.
+function openToolWith(id, values, replace = false) {
+  if (page === 'form') captureValues();
+  const current = {...(formValues[id] || state.settings.values[id] || {})};
+  for (const [name, value] of Object.entries(values)) {
+    if (value && (replace || !String(current[name] ?? '').trim())) current[name] = value;
+  }
+  formValues[id] = current;
+  openTool(id);
 }
 // The red notice for files a tool reads from the project folder and cannot find.
 // The likeliest cause is a wrong project folder, so it asks about that first.
@@ -832,6 +855,161 @@ function renderTasks() {
   });
 }
 // The run card says what is still needed before a patch can be made.
+// Make game font: a row per stock .ffu, each with the TTF/OTF to render it from.
+function renderFonts() {
+  const unpack = tools().find(item => item.id === 'cpk-unpack');
+  $('fonts-unpack').classList.toggle('hidden', !unpack || fontPage.templates.length > 0);
+  if (unpack) $('fonts-unpack-tool').textContent = toolText(unpack, 'title');
+  const list = fontPage.templates;
+  showValue($('fonts-stock-value'), list.length ? text('fonts.ffuCount', {count: list.length}) : '', 'fonts.noFfu');
+  $('fonts-stock-value').title = list.map(item => item.path).join('\n');
+  const table = $('fonts-table');
+  table.replaceChildren();
+  table.classList.toggle('hidden', !list.length);
+  for (const item of list) table.append(fontRow(item));
+  showValue($('fonts-output-value'), fontPage.output, 'patch.noOutput');
+  $('fonts-pick-ffu').disabled = running;
+  $('fonts-pick-output').disabled = running;
+  updateFontsReady();
+  renderFontsResult();
+}
+function fontRow(item) {
+  const row = elt('div', 'font-row');
+  const about = elt('div');
+  const role = item.info?.error ? text('fonts.notFfu')
+    : [text(`fonts.role.${fontRole(item.path) || 'other'}`), item.info ? text('fonts.cell', {cell: item.info.cell}) : ''].filter(Boolean).join(' · ');
+  about.append(elt('div', 'font-name mono', baseName(item.path)), elt('div', 'font-role', role));
+  // The first font is the main one; the others draw what it lacks, in order.
+  const chain = elt('div', 'font-chain');
+  const slots = item.fonts.length ? item.fonts : [null];
+  slots.forEach((font, index) => {
+    const pick = elt('div', 'pick-row');
+    const value = elt('div', 'pick-value mono');
+    showValue(value, font?.path || '', 'fonts.noFont');
+    if (index) value.prepend(elt('span', 'font-fallback', text('fonts.fallback')));
+    pick.append(value);
+    if (!index) {
+      const choose = actionButton('button', text('fonts.pickFont'), () => chooseSourceFont(item, 0));
+      choose.disabled = running || !!item.info?.error;
+      pick.append(choose);
+    }
+    if (font) {
+      const clear = actionButton('button', text('fonts.clear'), () => {item.fonts.splice(index, 1); fontPage.result = null; renderFonts();});
+      clear.disabled = running;
+      pick.append(clear);
+    }
+    chain.append(pick);
+  });
+  if (item.fonts.length) {
+    const add = actionButton('link-button', text('fonts.addFallback'), () => chooseSourceFont(item, item.fonts.length));
+    add.disabled = running;
+    chain.append(add);
+  }
+  row.append(about, chain);
+  if (item.fonts.length) row.append(fontStatus(item));
+  return row;
+}
+function fontStatus(item) {
+  const fonts = item.fonts;
+  if (fonts.some(font => font.coverage?.error)) return elt('div', 'font-status bad', text('fonts.notFont'));
+  const missing = chainMissing(fonts);
+  if (missing === null) return elt('div', 'font-status', text('fonts.checking'));
+  const names = fonts.map(font => font.coverage.name).join(' + ');
+  const total = fonts[0].coverage.total;
+  if (!missing) return elt('div', 'font-status good', text('fonts.coverageOk', {font: names, total}));
+  return elt('div', 'font-status bad', text('fonts.coverageMissing',
+    {font: names, count: [...missing].length, total, chars: [...missing].join(' ')}));
+}
+async function chooseStockFonts() {
+  try {
+    const first = fontPage.templates[0]?.path || '';
+    const files = (await window.vees.chooseFfu(first)).sort((a, b) => baseName(a).localeCompare(baseName(b)));
+    if (!files.length) return;
+    const infos = await window.vees.ffuInfo(files);
+    // Choosing again keeps the fonts already picked for files that are still there.
+    const before = new Map(fontPage.templates.map(item => [item.path, item]));
+    fontPage.templates = files.map((file, index) => ({path: file, info: infos[index], fonts: before.get(file)?.fonts || []}));
+    if (!fontPage.outputChosen) fontPage.output = defaultOutput(files);
+    fontPage.result = null;
+    renderFonts();
+  } catch (error) {showFontsError(error.message);}
+}
+// Puts a font at `index` in the row's chain: 0 replaces the main font, the
+// chain's length adds a fallback.
+async function chooseSourceFont(item, index) {
+  try {
+    const last = item.fonts[index]?.path || fontPage.templates.flatMap(other => other.fonts).pop()?.path || '';
+    const selected = await window.vees.choosePath('file', last, [{name: 'Fonts (TTF, OTF)', extensions: ['ttf', 'otf', 'ttc']}]);
+    if (!selected) return;
+    const font = {path: selected, coverage: null};
+    item.fonts[index] = font;
+    fontPage.result = null;
+    renderFonts();
+    try { font.coverage = await window.vees.fontInfo(selected); } catch (error) { font.coverage = {error: 'not-font', message: error.message}; }
+    renderFonts();
+  } catch (error) {showFontsError(error.message);}
+}
+async function chooseFontsOutput() {
+  try {
+    const selected = await window.vees.choosePath('dir', fontPage.output, []);
+    if (!selected) return;
+    fontPage.output = selected;
+    fontPage.outputChosen = true;
+    fontPage.result = null;
+    renderFonts();
+  } catch (error) {showFontsError(error.message);}
+}
+function updateFontsReady() {
+  const problem = fontJobProblem(fontPage.templates, fontPage.output);
+  const count = fontPage.templates.filter(item => item.fonts.length).length;
+  $('fonts-ready').textContent = running ? text('fonts.working') : text(problem ? 'fonts.notReady' : 'fonts.ready', {count});
+  $('fonts-ready-dot').className = `dot${problem || running ? '' : ' ready'}`;
+  $('fonts-reason').textContent = problem && !running ? text(`fonts.need.${problem}`) : '';
+  $('fonts-run').disabled = running || !!problem;
+  $('fonts-stop').disabled = !running;
+}
+function showFontsError(message) {
+  fontPage.result = {error: message};
+  renderFontsResult();
+}
+function renderFontsResult() {
+  const box = $('fonts-result');
+  const result = fontPage.result;
+  box.replaceChildren();
+  box.className = 'notice hidden';
+  if (!result) return;
+  if (result.error || result.failed) {
+    box.className = 'notice missing';
+    box.append(elt('span', '', result.error || text('fonts.failed', {file: result.failed})));
+  } else if (result.signal) {
+    box.className = 'notice';
+    box.append(elt('span', '', text('fonts.stopped')));
+  } else {
+    box.className = 'notice done';
+    const body = elt('div', 'hint-body');
+    body.append(elt('span', '', text('fonts.done', {files: result.made.join(', ')})));
+    const repack = tools().find(item => item.id === 'cpk-repack');
+    if (repack) {
+      const open = actionButton('button', '', () => openToolWith('cpk-repack',
+        {archive: result.repack.archive, 'output CPK': result.repack.output, 'replacement folder': result.repack.folder}, true));
+      open.append(elt('bdi', '', toolText(repack, 'title')), icon('arrow'));
+      body.append(open);
+    }
+    box.append(body);
+  }
+}
+async function startFonts() {
+  if (running) return;
+  fontPage.result = null;
+  // The advanced settings, kept like any tool's values so they survive a restart.
+  captureValues();
+  const options = Object.fromEntries(Object.entries(formValues[FONT_TOOL] || {}).filter(([name]) => !MAPPED_ARGS.includes(name)));
+  try {
+    const reply = await window.vees.runFonts(fontPage.templates.map(item => ({template: item.path, fonts: item.fonts.map(font => font.path)})),
+      fontPage.output, options);
+    if (reply?.problem) showFontsError(text(`fonts.need.${reply.problem}`));
+  } catch (error) {showFontsError(error.message);}
+}
 function updatePatchReady() {
   const {sheetPath, outputPath} = patchState();
   const reason = !isXlsx(sheetPath) ? 'patch.need.sheet' : !outputPath ? 'patch.need.output' : patchMissing.length ? 'patch.need.files' : null;
@@ -961,6 +1139,11 @@ async function start() {
   $('dialog-close').addEventListener('click',()=>$('info-dialog').close());
   $('clear-log').addEventListener('click',()=>setLog(''));
   $('tool-form').addEventListener('submit',event=>event.preventDefault());
+  $('fonts-unpack-open').addEventListener('click', () => openToolWith('cpk-unpack', {filter: 'font'}));
+  $('fonts-pick-ffu').addEventListener('click', chooseStockFonts);
+  $('fonts-pick-output').addEventListener('click', chooseFontsOutput);
+  $('fonts-run').addEventListener('click', startFonts);
+  $('fonts-stop').addEventListener('click', () => window.vees.cancel());
   $('run-button').addEventListener('click',async()=>{
     if(running)return;
     captureValues();
@@ -990,9 +1173,14 @@ async function start() {
     setLog(`${currentLog}\n${ok?text('log.success'):event.signal?text('status.stopped'):text('log.exit', {code: event.code})}\n`);
     status(ok?'status.complete':event.signal?'status.stopped':'status.failed',ok?'success':'failed');
     if (event.id === 'patch') applyPatchResult(event);
-    else render();
+    else {
+      if (event.id === 'fonts') fontPage.result = event;
+      render();
+    }
     window.vees.state().then(fresh=>{state.settings=fresh.settings;state.workspace=fresh.workspace;updatePython(fresh.python);}).catch(()=>{});
   });
+  $('tour-button').addEventListener('click', tour.start);
+  tour.firstRun();
 }
 function chooseLanguage(next) {
   if (languageChange().workbookPath) return;
