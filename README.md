@@ -50,7 +50,7 @@ Workspace, bảng dịch và dữ liệu game chỉ nằm trên máy người d�
 ## Chạy từ mã nguồn
 
 1. Cài Node.js và Python 3.
-2. Clone kèm submodule engine: `git clone --recursive https://github.com/Foxiary/Otome-Translator.git`. Nếu đã clone rồi thì chạy `git submodule update --init`.
+2. Clone kèm engine Otomate: `git clone --recurse-submodules=engines/otomate https://github.com/Foxiary/Otome-Translator.git`. Nếu đã clone rồi thì chạy `git submodule update --init engines/otomate`. Hai submodule trong `projects/` không cần để chạy app.
 3. Trong thư mục repo, chạy `npm install` rồi `npm start`.
 4. Trong ứng dụng, chọn **Python environment → Set up Python packages** để tạo môi trường riêng và cài thư viện cho cả hai engine (Pillow, fontTools, openpyxl, NumPy, UnityPy, pycryptodome, lz4). Bạn cũng có thể chọn một Python đã cài các thư viện này.
 5. Chọn thư mục chứa dữ liệu dự án trong **Workspace**. Xem **Source documentation** để biết bố cục và quy trình dịch.
@@ -69,6 +69,7 @@ Nếu npm chặn bước cài Electron, chạy `npm approve-scripts electron` v�
 
 - `engines/otomate/` là submodule của [Foxiary/VE-ES](https://github.com/Foxiary/VE-ES), hiện ở commit `08807f7`.
 - `engines/unity/` nằm ngay trong repo này. Xem `engines/unity/README.md`; mỗi công cụ đã được chạy trên dữ liệu UNLOGICAL thật và so với bản Việt hóa đã phát hành (`engines/unity/tools/README.md`).
+- `projects/ul-vi-patch/` là submodule của [Foxiary/ul-vi-patch](https://github.com/Foxiary/ul-vi-patch). `projects/CxM-VI/` là submodule của [Foxiary/CxM-VI](https://github.com/Foxiary/CxM-VI). Cả hai không được đóng vào bản cài. Lấy về bằng `git submodule update --init projects/ul-vi-patch projects/CxM-VI`.
 
 Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js` và `src/catalog-unity.js`; `src/engines.js` khai báo engine, thư mục chép vào workspace, tài liệu và thư viện Python cần có.
 

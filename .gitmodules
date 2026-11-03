@@ -1,3 +1,9 @@
 [submodule "engine"]
 	path = engines/otomate
 	url = https://github.com/Foxiary/VE-ES.git
+[submodule "ul-vi-patch"]
+	path = projects/ul-vi-patch
+	url = https://github.com/Foxiary/ul-vi-patch.git
+[submodule "CxM-VI"]
+	path = projects/CxM-VI
+	url = https://github.com/Foxiary/CxM-VI.git
