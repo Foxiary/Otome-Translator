@@ -122,7 +122,7 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 .tool-item:disabled{opacity:.6}
 .tool-name{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink)}
 .tool-name .icon{width:13px;height:13px;color:var(--accent-text)}
-.tool-description{display:block;color:var(--muted);font-size:11px;margin-top:5px;line-height:1.7}
+.tool-description{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--muted);font-size:11px;margin-top:5px;line-height:1.5}
 .tool-item.active .tool-name{color:var(--selected-ink)}.tool-item.active .tool-description{color:var(--secondary)}
 .tool-group-tag{display:block;font-size:11px;color:var(--muted);margin-top:7px}
 .panel-empty{font-size:12px;line-height:1.6;color:var(--secondary);padding:17px 9px}
