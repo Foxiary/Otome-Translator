@@ -1,5 +1,6 @@
 const {app, BrowserWindow, dialog, ipcMain, shell, Notification} = require('electron');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const {spawn, spawnSync} = require('node:child_process');
 const {engines} = require('./engines');
@@ -13,6 +14,7 @@ const {recipeFor, setupError} = require('./patch-recipe');
 const {MAPPED_ARGS, argValue, ffugenArgs, fontJobProblem, strokeFor, withOverrides} = require('./font-map');
 const {detect} = require('./detect-engine');
 const {extractGame} = require('./game-extract');
+const {linkedNotes, documentationPage} = require('./markdown');
 
 let window;
 let currentRun = null;
@@ -179,7 +181,7 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { if (currentRun) currentRun.child.kill(); });
+app.on('before-quit', () => { if (currentRun) currentRun.child.kill(); docsServer?.close(); });
 
 function publicEngines() {
   return engines.map(({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools, vi}) =>
@@ -452,16 +454,45 @@ function documentFile(name) {
   }
   return null;
 }
-ipcMain.handle('read-document', (_event, name) => {
-  const file = documentFile(name);
-  if (!file) return {missing: true};
-  return {text: fs.readFileSync(file, 'utf8')};
-});
-ipcMain.handle('open-link', (_event, url) => {
-  let parsed;
-  try { parsed = new URL(String(url)); } catch { return false; }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
-  return shell.openExternal(parsed.href);
+let docsServer = null;
+let docsHtml = '';
+function docsPort() {
+  if (docsServer) return Promise.resolve(docsServer.address().port);
+  return new Promise((resolve, reject) => {
+    docsServer = http.createServer((_req, res) => {
+      res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'});
+      res.end(docsHtml);
+    });
+    docsServer.listen(0, '127.0.0.1', () => resolve(docsServer.address().port));
+    docsServer.on('error', reject);
+  });
+}
+ipcMain.handle('open-documentation', async (_event, language) => {
+  const engine = activeEngine();
+  const lang = language === 'vi' ? 'vi' : 'en';
+  const pages = [];
+  const seen = new Set();
+  const queue = engine.docs.map(([label, name]) => ({name, label}));
+  while (queue.length && pages.length < 40) {
+    const {name, label} = queue.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const file = documentFile(name);
+    if (!file) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    const title = (lang === 'vi' && engine.vi?.docs?.[name]) || label || name;
+    pages.push({name, label: title, text});
+    for (const linked of linkedNotes(name, text)) if (!seen.has(linked)) queue.push({name: linked});
+  }
+  const flow = (lang === 'vi' && engine.vi?.flow) || engine.flow;
+  docsHtml = documentationPage({
+    title: `${t('rail.docs', lang)} — ${engine.name}`,
+    intro: pages.length ? `${t('docs.body', lang, {engine: engine.name})} ${t('docs.flow', lang, {flow})}` : t('docs.none', lang),
+    pages
+  });
+  const port = await docsPort();
+  await shell.openExternal(`http://127.0.0.1:${port}/`);
+  return '';
 });
 ipcMain.handle('run-tool', (_event, id, values) => {
   if (currentRun) throw new Error('Another command is already running.');

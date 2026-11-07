@@ -248,4 +248,133 @@ function renderMarkdown(parent, source, onLink) {
   renderBlocks(parent, parseMarkdown(source), onLink);
 }
 
-if (typeof module !== 'undefined') module.exports = {parseMarkdown, resolveDocLink, renderMarkdown};
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
+}
+function noteId(name) {
+  return `note-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+function linkedNotes(name, text) {
+  const found = [];
+  const walk = nodes => {
+    for (const node of nodes || []) {
+      if (node.type === 'link') {
+        const target = resolveDocLink(name, node.href);
+        if (target?.file) found.push(target.file);
+      }
+      if (node.children) walk(node.children);
+    }
+  };
+  const walkBlocks = blocks => {
+    for (const block of blocks) {
+      if (block.inlines) walk(block.inlines);
+      if (block.items) for (const item of block.items) {
+        walk(item.inlines);
+        if (item.blocks) walkBlocks(item.blocks);
+        if (item.children) walkBlocks([item.children]);
+      }
+      if (block.header) for (const cell of block.header) walk(cell);
+      if (block.rows) for (const row of block.rows) for (const cell of row) walk(cell);
+    }
+  };
+  walkBlocks(parseMarkdown(text));
+  return found;
+}
+function hrefFor(current, href, known) {
+  const target = resolveDocLink(current, href);
+  if (!target) return null;
+  if (target.external) return {href: target.external, external: true};
+  const file = target.file || current;
+  if (target.file && !known.has(file)) return null;
+  const hash = target.hash ? `${noteId(file)}-${target.hash.slice(1)}` : noteId(file);
+  return {href: `#${hash}`, external: false};
+}
+function inlinesToHtml(nodes, current, known) {
+  return nodes.map(node => {
+    if (node.type === 'text') return escapeHtml(node.text);
+    if (node.type === 'code') return `<code>${escapeHtml(node.text)}</code>`;
+    if (node.type === 'strong' || node.type === 'em') {
+      const tag = node.type === 'strong' ? 'strong' : 'em';
+      return `<${tag}>${inlinesToHtml(node.children, current, known)}</${tag}>`;
+    }
+    if (node.type === 'link') {
+      const dest = hrefFor(current, node.href, known);
+      const inner = inlinesToHtml(node.children, current, known);
+      if (!dest) return inner;
+      const extra = dest.external ? ' target="_blank" rel="noopener noreferrer"' : '';
+      return `<a href="${escapeHtml(dest.href)}"${extra}>${inner}</a>`;
+    }
+    return '';
+  }).join('');
+}
+function blocksToHtml(blocks, file, known, used = new Set()) {
+  return blocks.map(block => {
+    if (block.type === 'heading') {
+      const id = `${noteId(file)}-${slugify(plainText(block.inlines), used)}`;
+      return `<h${block.level} id="${id}">${inlinesToHtml(block.inlines, file, known)}</h${block.level}>`;
+    }
+    if (block.type === 'paragraph') return `<p>${inlinesToHtml(block.inlines, file, known)}</p>`;
+    if (block.type === 'quote') return `<blockquote><p>${inlinesToHtml(block.inlines, file, known)}</p></blockquote>`;
+    if (block.type === 'code') return `<pre><code>${escapeHtml(block.text)}</code></pre>`;
+    if (block.type === 'hr') return '<hr>';
+    if (block.type === 'list') {
+      const tag = block.ordered ? 'ol' : 'ul';
+      const start = block.ordered && block.start > 1 ? ` start="${block.start}"` : '';
+      const items = block.items.map(item => `<li>${inlinesToHtml(item.inlines, file, known)}${item.blocks ? blocksToHtml(item.blocks, file, known, used) : ''}${item.children ? blocksToHtml([item.children], file, known, used) : ''}</li>`).join('');
+      return `<${tag}${start}>${items}</${tag}>`;
+    }
+    if (block.type === 'table') {
+      const head = block.header.map(cell => `<th>${inlinesToHtml(cell, file, known)}</th>`).join('');
+      const rows = block.rows.map(row => `<tr>${row.map(cell => `<td>${inlinesToHtml(cell, file, known)}</td>`).join('')}</tr>`).join('');
+      return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    return '';
+  }).join('\n');
+}
+function documentationPage({title, intro, pages}) {
+  const known = new Set(pages.map(page => page.name));
+  const nav = pages.map(page => `<a href="#${noteId(page.name)}">${escapeHtml(page.label)}</a>`).join('');
+  const articles = pages.map(page => `<article id="${noteId(page.name)}"><h1>${escapeHtml(page.label)}</h1>${blocksToHtml(parseMarkdown(page.text), page.name, known)}</article>`).join('\n');
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+:root{color-scheme:light;--ink:#241f33;--muted:#5c5670;--line:#e6e3ee;--field:#f4f2f8;--accent:#4c32b3}
+*{box-sizing:border-box}
+body{margin:0;background:#f7f6fb;color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh}
+nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:28px 18px;border-right:1px solid var(--line);background:#fcfbfe}
+nav p{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5}
+nav a{display:block;margin:2px 0;padding:8px 10px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px}
+nav a:hover{background:#efeafc}
+main{padding:36px 40px 64px;max-width:820px}
+article{padding-bottom:28px;margin-bottom:28px;border-bottom:1px solid var(--line)}
+article:last-child{border-bottom:0}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.03em;margin:0 0 16px}
+h2{font-size:22px;margin:28px 0 10px}
+h3,h4{font-size:18px;margin:22px 0 8px}
+p,li{font-size:16px}
+a{color:var(--accent)}
+code{font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:13px;background:var(--field);padding:1px 5px;border-radius:4px}
+pre{padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:auto}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:0 0 16px}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--field)}
+blockquote{margin:0 0 14px;padding-left:12px;border-left:1px solid var(--line);color:var(--muted)}
+@media(max-width:800px){.layout{grid-template-columns:1fr}nav{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}main{padding:24px 18px 48px}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav><p>${escapeHtml(intro)}</p>${nav}</nav>
+<main>${articles}</main>
+</div>
+</body>
+</html>`;
+}
+
+if (typeof module !== 'undefined') module.exports = {parseMarkdown, resolveDocLink, renderMarkdown, linkedNotes, documentationPage};

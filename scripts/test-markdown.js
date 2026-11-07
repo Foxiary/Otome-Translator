@@ -60,3 +60,14 @@ assert.equal(parseMarkdown('  ```\n  x\n  ```')[0].type, 'code');
 // A numbered list that resumes after a paragraph keeps its own numbering.
 assert.equal(parseMarkdown('Intro.\n\n3. Third\n4. Fourth')[1].start, 3);
 assert.equal(parseMarkdown('1. First')[0].start, 1);
+
+const {documentationPage} = require('../src/markdown');
+const page = documentationPage({
+  title: 'Notes',
+  intro: 'Hello',
+  pages: [{name: 'A.md', label: 'Workflow', text: 'See [tools](tools/README.md) and <script>alert(1)</script>.'}, {name: 'tools/README.md', label: 'Tools', text: '# Tools'}]
+});
+assert.match(page, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+assert.doesNotMatch(page, /<script>alert\(1\)<\/script>/);
+assert.match(page, /href="#note-tools-readme-md"/);
+assert.match(page, /id="note-a-md"/);
