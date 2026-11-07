@@ -71,8 +71,7 @@ const tools = [
     [SCREEN, A('output folder', 'dir', 'Where the images go; leave it empty to only see the list', true)]),
   T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder made by "See and take out a screen\'s images": every image that differs from the game is pasted back at its place, the screen\'s files are rebuilt and checked, untouched files byte for byte.', 'tools/sprite.py', ['import'],
     [SCREEN, A('image folder', 'dir', 'The folder you redrew, as it was taken out (file names unchanged)'),
-      V('--out', 'dir', 'Where the rebuilt pair goes: romfs/spec_win/ssdata inside your mod', true), B('--apply', 'Write the files')],
-    'Runs as a dry run first and asks before writing. Each image must keep its size; nothing outside it is drawn.'),
+      V('--out', 'dir', 'Where the rebuilt pair goes: romfs/spec_win/ssdata inside your mod', true), B('--apply', 'Write the files')]),
   T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
     [SCREEN])
 ];
