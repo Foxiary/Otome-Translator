@@ -180,7 +180,7 @@ function publicEngines() {
   return engines.map(({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools, vi}) =>
     ({id, name, subtitle, docs, flow, modules, groups, symbols, summaries, tools, vi}));
 }
-ipcMain.handle('state', () => ({engines: publicEngines(), settings, workspace: workspace(),
+ipcMain.handle('state', () => ({engines: publicEngines(), settings, workspace: workspace(), platform: process.platform,
   python: pythonCheck(), running: !!currentRun, sourceCommit: SOURCE_COMMIT, appVersion: app.getVersion()}));
 ipcMain.handle('set-engine', (_event, id) => {
   if (currentRun) throw new Error('Wait for the current command to finish before switching engines.');
@@ -376,8 +376,48 @@ function dialogFilters(filters) {
     && filter.extensions.every(extension => typeof extension === 'string' && /^(\*|[a-z0-9]+)$/i.test(extension)))
     .map(filter => ({name: filter.name, extensions: filter.extensions}));
 }
-ipcMain.handle('choose-path', async (_event, kind, current, filters) => {
-  const defaultPath = current || workspace();
+// The first of `relatives` that is a directory inside the project folder.
+function hintedStart(root, relatives) {
+  if (typeof root !== 'string' || !root || !Array.isArray(relatives)) return '';
+  for (const rel of relatives) {
+    if (typeof rel !== 'string' || !/^(?:[a-z0-9_-]+\/)*[a-z0-9_-]+$/i.test(rel)) continue;
+    const dir = path.join(root, rel);
+    try { if (fs.statSync(dir).isDirectory()) return dir; } catch {}
+  }
+  return '';
+}
+ipcMain.handle('file-exists', (_event, file) => {
+  if (typeof file !== 'string' || !path.isAbsolute(file)) return false;
+  try { return fs.statSync(file).isFile(); } catch { return false; }
+});
+// A path typed into a tool, absolute or relative to the project folder.
+function resolveUserPath(target) {
+  if (typeof target !== 'string' || !target.trim()) return '';
+  if (path.isAbsolute(target.trim())) return path.resolve(target.trim());
+  const root = workspace();
+  return root ? path.resolve(root, target.trim()) : '';
+}
+function pathKindOf(target) {
+  const full = resolveUserPath(target);
+  if (!full) return '';
+  try {
+    const stat = fs.statSync(full);
+    if (stat.isDirectory()) return 'dir';
+    if (stat.isFile()) return 'file';
+  } catch {}
+  return '';
+}
+ipcMain.handle('path-kind', (_event, target) => pathKindOf(target));
+ipcMain.handle('reveal-path', async (_event, target) => {
+  const full = resolveUserPath(target);
+  const kind = pathKindOf(target);
+  if (!full || !kind) return t('run.missing', settings.language);
+  if (kind === 'dir') return shell.openPath(full);
+  shell.showItemInFolder(full);
+  return '';
+});
+ipcMain.handle('choose-path', async (_event, kind, current, filters, startIn) => {
+  const defaultPath = (typeof current === 'string' && current) || hintedStart(workspace(), startIn) || workspace();
   if (kind === 'save') {
     const result = await dialog.showSaveDialog(window, {defaultPath, filters: dialogFilters(filters)});
     return result.canceled ? null : result.filePath;

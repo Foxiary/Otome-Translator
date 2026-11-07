@@ -383,6 +383,8 @@ dialog::backdrop{background:#0008}
 .font-row .font-status.bad{color:var(--bad-ink)}
 .notice.done{background:var(--accent-soft);border-color:var(--accent-line);color:var(--ink)}
 .notice.done::before{content:'✓';background:var(--accent);color:var(--accent-ink)}
+.notice.run-reveal{margin:16px 0 0}
+.notice.run-reveal .mono{display:block;margin-top:3px;color:var(--secondary);font-size:11px;overflow-wrap:anywhere}
 @media (max-width:720px){.font-row{grid-template-columns:1fr}.font-row .font-status{grid-column:1}}
 /* First-run tour: the window is dimmed except for one lit area, with a card beside it. */
 .tour{position:fixed;inset:0;z-index:2000}

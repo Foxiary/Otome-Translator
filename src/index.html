@@ -284,6 +284,7 @@
             <div class="run-copy"><div class="run-status"><span class="dot"></span><bdi data-i18n="form.ready"></bdi></div><div class="run-path mono" id="run-hint"></div></div>
             <div class="run-actions"><button id="cancel-button" class="button" type="button" disabled data-i18n="patch.stop"></button><button id="run-button" class="button primary" type="button"><svg class="icon"><use href="#i-play"/></svg><bdi data-i18n="form.run"></bdi></button></div>
           </section>
+          <div id="run-reveal" class="notice done run-reveal hidden"></div>
           </div>
           <section class="log" aria-labelledby="log-heading">
             <div class="log-header"><span class="log-label" id="log-heading"><span class="console-dot"></span><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="log.title"></bdi></span><span class="log-state" id="run-status"></span><button class="log-clear" type="button" id="clear-log" data-i18n="log.clear" data-i18n-title="log.clearTitle"></button></div>
@@ -297,6 +298,7 @@
   <script src="i18n.js"></script>
   <script src="patch-ui.js"></script>
   <script src="file-types.js"></script>
+  <script src="reveal.js"></script>
   <script src="font-map.js"></script>
   <script src="tour.js"></script>
   <!-- Before renderer.js: its hooks must be in place before start() runs. -->

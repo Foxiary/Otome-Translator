@@ -347,6 +347,8 @@ function captureValues() {
 const APPLY = '--apply';
 const appliesLater = item => item.args.some(arg => arg.kind === 'bool' && arg.name === APPLY);
 let applyOffer = null;   // {id, values, output} while such a dry run is going
+let runRequest = null;   // {id, values} for the run in progress, including a hidden --apply
+let runReveal = null;    // {id, path} after a run that left files to open
 function offerApply(offer) {
   const item = tools().find(t => t.id === offer.id);
   if (!item) return;
@@ -366,8 +368,9 @@ function offerApply(offer) {
       };
       add(text('apply.write'), async () => {
         $('info-dialog').close();
-        try {await window.vees.run(offer.id, {...offer.values, [APPLY]: true});}
-        catch (error) {showError(error.message);}
+        const values = {...offer.values, [APPLY]: true};
+        try {runRequest = {id: offer.id, values}; await window.vees.run(offer.id, values);}
+        catch (error) {runRequest = null; showError(error.message);}
       }, 'button primary');
       add(text('apply.notNow'), () => $('info-dialog').close(), 'button quiet');
       body.append(actions);
@@ -420,8 +423,14 @@ function renderForm() {
         const button = elt('button','browse',label); button.type = 'button';
         button.addEventListener('click', async () => {
           try {
-            const selected = await window.vees.choosePath(kind, arg.repeat ? '' : input.value, kind === 'dir' ? [] : filtersFor(arg));
-            if (selected) input.value = arg.repeat && input.value.trim() ? `${input.value.trim()}\n${selected}` : selected;
+            const selected = await window.vees.choosePath(kind, arg.repeat ? '' : input.value, kind === 'dir' ? [] : filtersFor(arg), kind === 'file' ? startCandidates(arg) : []);
+            if (selected) {
+              const extension = companionFor(arg);
+              const other = extension && companionPath(selected, extension);
+              if (extension && (!other || !await window.vees.fileExists(other))) {
+                showError(text('field.needBody', {file: other ? other.split(/[/\\]/).pop() : `.${extension}`}));
+              } else input.value = arg.repeat && input.value.trim() ? `${input.value.trim()}\n${selected}` : selected;
+            }
             input.focus();
           } catch (error) {showError(error.message);}
         });
@@ -435,6 +444,7 @@ function renderForm() {
     fields.append(field);
   }
   checkMissing();
+  renderRunReveal();
   if (engine().id === 'otomate' && WIDTH_TOOLS.includes(current.id)) showWidths($('form-widths'));
   else $('form-widths').classList.add('hidden');
   // A built-in tool has no script and does not run in the project folder.
@@ -1147,6 +1157,38 @@ function updateFontsReady() {
   $('fonts-run').disabled = running || !!problem;
   $('fonts-stop').disabled = !running;
 }
+function pathText(file) {
+  const node = elt('span', 'mono');
+  for (const part of String(file).split(/([\\/])/)) {
+    node.append(part);
+    if (part === '/' || part === '\\') node.append(document.createElement('wbr'));
+  }
+  return node;
+}
+function revealButton(target, onError, className = 'button') {
+  const button = actionButton(className, '', async () => {
+    try {
+      const error = await window.vees.revealPath(target);
+      if (error) onError(error);
+    } catch (error) { onError(error.message); }
+  });
+  const showKey = state.platform === 'darwin' ? 'run.show.darwin' : state.platform === 'win32' ? 'run.show.win32' : 'run.show';
+  button.append(icon('folder'), elt('bdi', '', text(showKey)));
+  return button;
+}
+function renderRunReveal() {
+  const box = $('run-reveal');
+  const current = tool();
+  const show = !!(runReveal && current && runReveal.id === current.id && !running);
+  box.classList.toggle('hidden', !show);
+  box.replaceChildren();
+  if (!show) return;
+  const words = elt('span');
+  words.append(elt('strong', '', text('run.saved')), pathText(runReveal.path));
+  const body = elt('div', 'hint-body');
+  body.append(words, revealButton(runReveal.path, showError, 'button primary'));
+  box.append(body);
+}
 function showFontsError(message) {
   fontPage.result = {error: message};
   renderFontsResult();
@@ -1167,6 +1209,7 @@ function renderFontsResult() {
     box.className = 'notice done';
     const body = elt('div', 'hint-body');
     body.append(elt('span', '', text('fonts.done', {files: result.made.join(', ')})));
+    if (result.output) body.append(revealButton(result.output, showError));
     const repack = tools().find(item => item.id === 'cpk-repack');
     if (repack) {
       const open = actionButton('button', '', () => openToolWith('cpk-repack',
@@ -1395,12 +1438,13 @@ async function start() {
     applyOffer = null;
     if (appliesLater(current)) {delete values[APPLY]; applyOffer = {id: current.id, values, output: ''};}
     try {
+      runRequest = {id: current.id, values};
       await window.vees.run(current.id,values);
-    } catch(error){applyOffer = null; showError(error.message);}
+    } catch(error){applyOffer = null; runRequest = null; showError(error.message);}
   });
   $('cancel-button').addEventListener('click',async()=>{await window.vees.cancel();});
   window.vees.on('run-start',event=>{
-    running=true;render();setLog(`$ ${event.command.map(x=>/\s/.test(String(x))&&/\s/.test(x)?JSON.stringify(x):x).join(' ')}\n\n`);
+    running=true;runReveal=null;render();setLog(`$ ${event.command.map(x=>/\s/.test(String(x))&&/\s/.test(x)?JSON.stringify(x):x).join(' ')}\n\n`);
     if (event.id === 'patch') {$('patch-log').textContent = ''; patchStage = 'working'; patchPhase = 0;}
     status('status.running','running');
     render();
@@ -1415,10 +1459,18 @@ async function start() {
       if (phase) {patchPhase = PHASES.indexOf(phase[1]); renderTasks();}
     }
   });
-  window.vees.on('run-end',event=>{
+  window.vees.on('run-end',async event=>{
     running=false;const ok=event.code===0;
     setLog(`${currentLog}\n${ok?text('log.success'):event.signal?text('status.stopped'):text('log.exit', {code: event.code})}\n`);
     status(ok?'status.complete':event.signal?'status.stopped':'status.failed',ok?'success':'failed');
+    if (!event.id) {
+      const current = tool();
+      const values = current && runRequest?.id === current.id ? runRequest.values : {};
+      const target = ok && current ? outputTarget(current, values) : '';
+      let kind = '';
+      try { kind = target ? await window.vees.pathKind(target) : ''; } catch { kind = ''; }
+      runReveal = kind && current ? {id: current.id, path: target} : null;
+    }
     if (event.id === 'patch') applyPatchResult(event);
     else {
       if (event.id === 'fonts') fontPage.result = event;
