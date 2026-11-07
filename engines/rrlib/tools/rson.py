@@ -15,9 +15,11 @@ Only the node types script.memfs uses are known; anything else raises.
     0x41 / 0x21 / 0x48 xx   int 1 / true / int8 - kept as raw bytes
 
 The writer lays nodes out depth first - a map's values, then its keys, then the
-map itself - and pads with NUL so an array's or map's payload after its 3-byte
-header is 4-aligned. That reproduces both the JP and the VI file byte for byte,
-which is what makes widening an entry safe: every offset is recomputed, none is
+map itself - and pads with NUL so the payload after a 3-byte header is aligned:
+4 for a map and a u32 array, 2 for a u16 array. That reproduces the JP and the
+VI script.memfs and all 51 image archives under spec_win byte for byte (the
+small ones need the 2: their u16 arrays sit right after a 1-byte node), which
+is what makes widening an entry safe: every offset is recomputed, none is
 patched in place. Patching in place is what breaks the file.
 """
 import argparse
@@ -84,8 +86,8 @@ def parse(m):
 def write(root):
     out = bytearray(b'RSON' + b'\0' * 12)
 
-    def align(hdr):
-        while (len(out) + hdr) % 4:
+    def align(hdr, n=4):
+        while (len(out) + hdr) % n:
             out.append(0)
 
     def emit(v):
@@ -95,7 +97,7 @@ def write(root):
             b = v.t.encode('utf-16le')
             p = len(out); out.extend(bytes([0x88, len(b)]) + b + b'\0\0'); return p
         if isinstance(v, Arr):
-            align(3); p = len(out)
+            align(3, struct.calcsize(ETYPE[v.etype])); p = len(out)
             out.extend(bytes([0xc8, len(v.vals), v.etype]))
             out.extend(struct.pack('<%d%s' % (len(v.vals), ETYPE[v.etype]), *v.vals))
             return p

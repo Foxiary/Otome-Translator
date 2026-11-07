@@ -12,7 +12,7 @@ các bẫy đã gặp, nằm ở `CLAUDE.md` (tiếng Anh).
 
 Trong Otome Translator, thả file `.nsp` hoặc thư mục mod của game vào cửa sổ là app tự chuyển sang engine này và điền sẵn đường dẫn; mọi công cụ bên dưới đều có biểu mẫu trong app. Có thể chạy thẳng bằng dòng lệnh như dưới đây.
 
-Chỉ cần Python 3. Riêng `sheetfix.py` và `applysheet.py` cần thêm openpyxl. `nsp.py` dùng
+Chỉ cần Python 3. Riêng `sheetfix.py` và `applysheet.py` cần thêm openpyxl, `sprite.py` cần Pillow. `nsp.py` dùng
 pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không chứa dữ liệu game.
 
 ## Quy trình
@@ -73,7 +73,28 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Sửa sheet là để lần build sau không mất tag lại.
 
-6. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
+6. **Dịch chữ vẽ trong ảnh giao diện.** Chữ ở menu tiêu đề, nút bấm và câu chú thích (新しく始める, ロード, 戻る, セーブデータをロードします。…) không phải chuỗi chữ mà là ảnh, nên sheet dịch không có. Mỗi màn hình là một cặp `romfs/spec_win/ssdata/<tên>.memfs` + `.membody`: menu tiêu đề là `ttlm_nam`; các gói khác đặt tên theo màn hình (`opt` cài đặt, `log` backlog, `dialog` hộp thoại…).
+
+   ```
+   python tools/nsp.py romfs "<game>.nsp" jp "spec_win/ssdata/ttlm_nam.*"
+   python tools/sprite.py export jp/spec_win/ssdata/ttlm_nam.memfs anh_menu
+   ```
+
+   Thư mục `anh_menu/` có:
+   - `mat_ttlm.png`: cả tấm ảnh 4096×4096, để xem tổng thể;
+   - `mat_ttlm/<tên ô>.png`: mỗi ô một file, tên lấy theo phần hình dùng nó. Ví dụ `mat_ttlm_com01_off.png` / `_on.png` là chữ 新しく始める lúc chưa chọn / đang chọn, `mat_ttlm_com01_setu.png` là câu chú thích dọc của nó, `mat_nam_bodoru_txt.png` là 戻る;
+   - `cells.csv`: vị trí và kích thước từng ô.
+
+   Vẽ lại ô cần dịch bằng phần mềm sửa ảnh bất kỳ (Photoshop, GIMP, Krita…), **giữ nguyên kích thước và tên file**, nền trong suốt vẫn trong suốt. Muốn sửa thẳng trên ảnh lớn cũng được; nếu sửa cả hai thì ô nhỏ được dán sau nên đè lên. Rồi chạy thử, sau đó ghi:
+
+   ```
+   python tools/sprite.py import jp/spec_win/ssdata/ttlm_nam.memfs anh_menu --out <thư mục mod>/romfs/spec_win/ssdata
+   python tools/sprite.py import jp/spec_win/ssdata/ttlm_nam.memfs anh_menu --out <thư mục mod>/romfs/spec_win/ssdata --apply
+   ```
+
+   Công cụ chỉ dán những ô khác bản game. Nó báo ô sai kích thước, file đặt sai tên, và ô nào đè lên ô khác. Bản dựng được tự kiểm: file không sửa phải giữ nguyên từng byte, ảnh đã sửa phải đúng từng điểm ảnh. Chữ vẽ ra ngoài khung ô sẽ không hiện, vì game chỉ cắt đúng khung đó.
+
+7. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
 
 ## Những điều cần nhớ
 
@@ -89,6 +110,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
 - Không tạo hay sửa font (`romfs/spec_win/font/*.font.memfs`): `applysheet.py` cần font của một bản mod có sẵn. Chữ hoa nào bản mod chưa từng dùng (lần này là `Ể`, `Ổ`, mỗi chữ một lần) thì ghi bằng chữ thường và báo lại.
 - `#T` và `#KW` bị mất phải sửa tay theo cột JP; công cụ chỉ liệt kê.
+- `sprite.py` chỉ ghi được ảnh RGBA8 thường. Mọi ảnh chữ giao diện của game đều thuộc loại này. Nền nén khối (BC), như 5 ảnh nền `mat_ttlm_bg_chr0N` của menu tiêu đề, và các mặt nạ chuyển cảnh 8/16/24-bit thì được liệt kê rồi bỏ qua. Công cụ không tự vẽ chữ: người dịch tự vẽ lại từng ô.
 - Chỉ mới thử với Matsurika no Kei. Game khác dùng `rrlib/memfs` có thể cần chỉnh lại các số đo trong `tools/tags.py`.
 
 `tools/README.md` liệt kê từng công cụ và kết quả đã kiểm trên dữ liệu thật.

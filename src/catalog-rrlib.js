@@ -9,13 +9,16 @@ const T = (id, group, title, description, script, prefix, args, note = '') => ({
 const KEYS = V('--keys', 'file', 'prod.keys; defaults to ~/.switch/prod.keys');
 const EXE = V('--exe', 'file', 'Patched exefs/main, to follow the read redirects it carries');
 
-const groups = ['Dump', 'Inspect', 'Patch', 'Sheets'];
-const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦'};
+const SCREEN = A('screen', 'file', 'A screen\'s .memfs under romfs/spec_win/ssdata, e.g. ttlm_nam.memfs (title menu); its data file must sit next to it');
+
+const groups = ['Dump', 'Inspect', 'Patch', 'Sheets', 'Images'];
+const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦', Images: '▣'};
 const summaries = {
   Dump: 'Take the whole game, or single files, out of your .nsp or .xci, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
   Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it.',
-  Sheets: 'Turn the translation sheet into a list of tag fixes.'
+  Sheets: 'Turn the translation sheet into a list of tag fixes.',
+  Images: 'Menu labels, buttons and help lines are painted into textures: take them out as images, redraw them and put them back.'
 };
 
 const tools = [
@@ -62,7 +65,18 @@ const tools = [
     'Only shows what would change until you tick Apply. Try the result in the game before you share it.'),
 
   T('sheetfix', 'Sheets', 'Tag fixes for the sheet', 'Reads the translation sheet (.xlsx) and writes a workbook of fixes, by tab and row: #P tags to add, lines to leave untagged, and #T / #KW lines to fix by hand.', 'tools/sheetfix.py', [],
-    [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx)', true)])
+    [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx)', true)]),
+
+  T('sprite-list', 'Images', 'List a screen\'s images', 'Shows the textures of one screen and every named piece cut from them (the menu label 新しく始める is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu), with place and size. Nothing is changed.', 'tools/sprite.py', ['list'],
+    [SCREEN]),
+  T('sprite-export', 'Images', 'Take a screen\'s images out', 'Saves every texture of one screen as an image, and every piece of it as its own image named after the part that draws it, plus cells.csv with where each piece sits. Redraw the pieces you want in any image editor, keeping their size.', 'tools/sprite.py', ['export'],
+    [SCREEN, A('output folder', 'dir', 'Where the images go')]),
+  T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder made by "Take a screen\'s images out": every image that differs from the game is pasted back at its place, the screen\'s files are rebuilt and checked, untouched files byte for byte.', 'tools/sprite.py', ['import'],
+    [SCREEN, A('image folder', 'dir', 'The folder you redrew, as it was taken out (file names unchanged)'),
+      V('--out', 'dir', 'Where the rebuilt pair goes: romfs/spec_win/ssdata inside your mod', true), B('--apply', 'Write the files')],
+    'Only shows what would change until you tick Apply. Each image must keep its size; nothing outside it is drawn.'),
+  T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
+    [SCREEN])
 ];
 
 module.exports = {tools, groups, symbols, summaries};

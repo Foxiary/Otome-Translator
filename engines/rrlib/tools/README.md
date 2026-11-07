@@ -14,6 +14,7 @@ Mỗi script tự mô tả trong docstring đầu file (`python tools/<tên>.py 
 | `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng, mã hoá theo font của mod, trả `#P`, tự kiểm |
 | `patch.py` | | Dựng lại `script.memfs` + `script.membody`: trả `#P`, trỏ thẳng chunk, nới u32, sửa header, tự kiểm |
 | `sheetfix.py` | | Từ sheet dịch (`.xlsx`) ra file đề xuất sửa tag theo đúng tab + dòng |
+| `sprite.py` | `list`, `export`, `import`, `check` | Ảnh giao diện (`spec_win/ssdata/*.memfs`): xuất từng ô chữ ra PNG theo tên phần hình, dán PNG đã vẽ lại, đóng gói, tự kiểm. Cần Pillow |
 | `tags.py` | | Thư viện: đọc tag, trả `#P`, các số đo màn hình — không phải lệnh |
 
 ## Đã kiểm trên dữ liệu thật
@@ -50,7 +51,15 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
     giống từng byte 93,6% chuỗi của bản đó. Phần còn lại lệch vì builder cũ làm
     mất `#P`/`#KW` và gộp các đoạn có tag thành một dòng.
 
-**Đã thử trong game:** EV00_0001_01 với `#P` đã trả, và memfs có mục 32-bit.
+- `sprite.py check` trên cả 51 gói ảnh dưới `spec_win` (48 gói `ssdata` cùng `image/boot`, `image/transition`, `image/ui`):
+  - gói nào dựng lại không sửa cũng giống từng byte;
+  - đọc được 1 689 ô, ô nào cũng nằm gọn trong ảnh của nó;
+  - 612 / 737 ảnh là RGBA8, nén lại rồi giải nén ra đúng dữ liệu cũ. 125 ảnh còn lại là nền nén khối và mặt nạ chuyển cảnh, công cụ bỏ qua.
+
+  Lần chạy này lộ một lỗi của `rson.py`: nó căn mảng u16 theo 4 byte, còn game căn theo 2. Ở `script.memfs` hai cách tình cờ cho cùng kết quả. Đã sửa; memfs JP, bản cài và hai bản dựng trước vẫn đọc rồi ghi lại giống từng byte.
+- `sprite.py export` + `import` trên `ttlm_nam` (menu tiêu đề): sửa một ô thì đúng khung ô đó đổi điểm ảnh. Các file khác của gói giữ nguyên từng byte, chỉ vị trí trong memfs dời theo.
+
+**Đã thử trong game:** EV00_0001_01 với `#P` đã trả, và memfs có mục 32-bit. Menu tiêu đề `ttlm_nam` do `sprite.py import` dựng (07/11/2026, Astrid): 17 ô vẽ lại bằng chữ Việt (5 mục lúc chưa chọn và đang chọn, 5 câu chú thích dọc, 戻る, おまけ) hiện đúng.
 **Chưa thử trong game:** bản do `applysheet.py` dựng.
 **Chưa thử lại trong game:** việc bỏ tag cho các câu ngoài màn hình, và 3 cảnh mở
 đầu được trỏ thẳng bằng mục 32-bit.

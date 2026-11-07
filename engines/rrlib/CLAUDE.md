@@ -14,6 +14,7 @@ and on the Vietnamese patch of 02/10/2026 that this engine was built to repair.
 romfs/common/script.memfs      index (RSON)            11 406 B
 romfs/common/script.membody    130 scripts, compressed 2.08 MB JP
 romfs/spec_win/font/*.font.memfs   fonts - not covered here
+romfs/spec_win/ssdata/*.memfs  UI art: menu labels and buttons are pixels, see "UI art"
 exefs/main                     the VI patch ships a modified one, see "The exe hook"
 ```
 
@@ -51,8 +52,11 @@ to `[offset, size]` in membody, size including the 6-byte RZ header.
 
 Layout is depth first - a map's values, then its keys, then the map node - with
 NUL padding before an array or map tag so the payload after its 3-byte header
-is 4-aligned. `tools/rson.py` writes exactly that; parse-then-write reproduces
-the JP and the VI file byte for byte, which is the evidence the layout is right.
+is aligned: 4 for a map and a u32 array, **2 for a u16 array**. `tools/rson.py`
+writes exactly that; parse-then-write reproduces the JP and the VI file and all
+51 image archives under `spec_win` byte for byte, which is the evidence the
+layout is right. (It padded u16 arrays to 4 until the image archives showed
+otherwise; in script.memfs both rules happen to give the same bytes.)
 
 ### The seven u16 entries
 
@@ -69,6 +73,47 @@ every map after it, the root offset and the file size all change. Rewriting the
 whole RSON is safe (done, plays in game). Patching an entry in place is not,
 and is the likely cause of the "u32 gives a black screen" the earlier patch
 author reported: a memfs that does not parse loads no script at all.
+
+## UI art (sprite.py)
+
+Menu labels, buttons and help lines are **pixels**: the title menu's
+新しく始める / ロード / 戻る and its vertical help lines are nowhere in
+script.membody or any .rson. Each screen is a memfs/membody pair under
+`romfs/spec_win/ssdata/` (`ttlm_nam` is the title menu, 13 files), the same
+RSON index with `alignBytes` 1 and the files raw and back to back in the body -
+no RZ wrapper around the file itself.
+
+```
+.rtex   'RTEX' u32 0 | u16 w, h, padded w, padded h | u32 0x20 (header size),
+        payload size, flags, row stride | payload: 'RZ' u32 BE size + zlib, or raw
+        flags low byte: 0x02 RGBA8 (straight alpha), 0x14 RGB8, 0x28 8-bit,
+        0x33 16-bit; 0x80000 = block-compressed (4 bpp with 0x1000, 8 bpp with
+        0x4000), never RZ-wrapped rows then. 0x200000 / 0x400000 seen, meaning
+        unknown. Padding rows/columns past w x h are zero and kept.
+.ssdata 'SSAD1.03' | u32 header size H | u32 16 | u32 pack offsets, 0-terminated
+        part states from H, 40 bytes: u32 ?, u16 part, u16 x, y, w, h (source
+            rectangle in pixels), i16 position, rest zero here
+        pack: ff ff ff ff 'ABSS' u32 3, 0, parts, frames, textures | u16 parts,
+            frames, fps (60)
+          textures: 0-terminated u32 pointers to names ('mat_ttlm.png' = the
+              entry '/mat_ttlm.rtex')
+          parts: 16 bytes - u32 name pointer, u16 index, parent, texture, is_null, u32
+          frames: 12 bytes - u32 pointer to u16 state indices, u32 0, u32 count
+```
+
+A cell is a distinct (texture, rectangle) any frame draws; its parts name it.
+On the title menu `mat_ttlm_com0N_off` / `_on` are the five labels unselected
+/ selected (1 新しく始める, 2 ロード, 3 古の調べ, 4 鑑賞, 5 設定),
+`mat_ttlm_com0N_setu` their vertical help lines, `mat_nam_bodoru_txt` is 戻る,
+`omk_txt` おまけ. Pasting into a cell changes only that rectangle; the game
+cuts exactly it, so text drawn past the edge is lost.
+
+Every UI atlas is RGBA8; the title menu's five character backgrounds
+(`mat_ttlm_bg_chr0N`, BC 4 bpp), the event CG loops and the transition masks
+are not, and sprite.py skips them. Checked in game (Astrid, 2026-11-07): a
+ttlm_nam rebuilt by sprite.py with 17 cells redrawn in Vietnamese (the five
+labels off and on, the five help lines, 戻る, おまけ; texture recompressed
+with zlib 6, membody shorter than JP) loads and shows them as drawn.
 
 ## The exe hook in the 02/10 patch
 

@@ -5,6 +5,7 @@ import struct
 import sys
 import tempfile
 import unittest
+import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'engines', 'rrlib', 'tools'))
@@ -15,7 +16,14 @@ import kuv      # noqa: E402
 import memfs    # noqa: E402
 import patch    # noqa: E402
 import rson     # noqa: E402
+import sprite   # noqa: E402
 import tags     # noqa: E402
+
+try:
+    import PIL  # noqa: F401
+    HAVE_PIL = True
+except ImportError:
+    HAVE_PIL = False
 
 
 def push(i):
@@ -291,6 +299,169 @@ class ApplySheetTest(unittest.TestCase):
             self.assertEqual([r['how'] for r in rep['rows']], ['single'])
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+
+def make_rtex(w, h, pw, ph, pixel, flags=0x02):
+    """An RGBA8 RTEX of w x h padded to pw x ph; pixel(x, y) gives 4 bytes."""
+    stride = pw * 4
+    raw = b''.join(pixel(x, y) for y in range(ph) for x in range(pw))
+    payload = b'RZ' + len(raw).to_bytes(4, 'big') + zlib.compress(raw)
+    return b'RTEX' + struct.pack('<I4H4I', 0, w, h, pw, ph, 0x20, len(payload), flags, stride) + payload
+
+
+def make_ssdata(textures, parts, states, frames):
+    """parts: [(name, texture index)]; states: [(part, x, y, w, h)]; frames: [[state index]]."""
+    hsize = 0x18
+    out = bytearray(hsize)
+    for part, x, y, w, h in states:
+        out += struct.pack('<IH4H', 0, part, x, y, w, h) + b'\0' * 26
+
+    def put(b):
+        while len(out) % 4:
+            out.append(0)
+        p = len(out); out.extend(b); return p
+    tex_names = [put(t.encode() + b'\0') for t in textures]
+    tex_p = put(struct.pack('<%dI' % (len(tex_names) + 1), *(tex_names + [0])))
+    names = [put(n.encode() + b'\0') for n, _ in parts]
+    parts_p = put(b''.join(struct.pack('<I4HI', names[i], i, 0, t, 0, 0) for i, (_, t) in enumerate(parts)))
+    lists = [put(struct.pack('<%dH' % len(f), *f)) for f in frames]
+    frames_p = put(b''.join(struct.pack('<3I', p, 0, len(f)) for p, f in zip(lists, frames)))
+    po = put(b'\xff\xff\xff\xffABSS' + struct.pack('<5I3H', 3, 0, parts_p, frames_p, tex_p, len(parts), len(frames), 60))
+    out[:8] = b'SSAD1.03'
+    struct.pack_into('<4I', out, 8, hsize, 16, po, 0)
+    return bytes(out)
+
+
+def ui_ssdata():
+    parts = [('root', 0), ('label_off', 0), ('label_on', 0), ('star', 0), ('twin', 0)]
+    states = [(0, 0, 0, 0, 0), (1, 1, 1, 4, 2), (2, 1, 3, 4, 2), (3, 6, 0, 2, 2), (3, 6, 2, 2, 2), (4, 1, 1, 4, 2)]
+    return make_ssdata(['ui.png'], parts, states, [[0, 1, 2, 3], [0, 1, 4, 5]])
+
+
+def write_sprite_pair(folder, files, u16=()):
+    """ui.memfs/ui.membody from [(path, bytes)], back to back; paths in u16 get u16 entries."""
+    os.makedirs(folder, exist_ok=True)
+    body, table = b'', []
+    for p, d in files:
+        table.append((rson.Str(p), rson.Arr(0x30 if p in u16 else 0x20, [len(body), len(d)])))
+        body += d
+    root = rson.Map([(rson.Str('alignBytes'), rson.Raw(b'\x41')),
+                     (rson.Str('path'), rson.Map(table, tuple(range(len(table))), 0))], (1, 2), 0)
+    with open(os.path.join(folder, 'ui.memfs'), 'wb') as f:
+        f.write(rson.write(root))
+    with open(os.path.join(folder, 'ui.membody'), 'wb') as f:
+        f.write(body)
+    return os.path.join(folder, 'ui.memfs')
+
+
+def gradient(x, y):
+    return bytes([x * 30, y * 30, 100, 255 if x < 8 and y < 6 else 7])
+
+
+class SpriteCellsTest(unittest.TestCase):
+    def test_cells_from_frames(self):
+        c = sprite.cells(ui_ssdata())
+        self.assertEqual(c[('ui.png', 1, 1, 4, 2)], {'label_off', 'twin'})     # one rectangle, two parts
+        self.assertEqual(c[('ui.png', 1, 3, 4, 2)], {'label_on'})
+        self.assertEqual(c[('ui.png', 6, 0, 2, 2)], {'star'})
+        self.assertEqual(c[('ui.png', 6, 2, 2, 2)], {'star'})
+        self.assertEqual(len(c), 4)                                            # the 0x0 state is not a cell
+
+
+@unittest.skipUnless(HAVE_PIL, 'Pillow is not installed')
+class SpriteTest(unittest.TestCase):
+    """An 8x6 RGBA8 atlas padded to 8x8, a block-compressed texture that is left
+    alone, and a filler that puts the next u16 entry right at 65535."""
+
+    def setUp(self):
+        import shutil
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.atlas = make_rtex(8, 6, 8, 8, gradient)
+        bc = b'RTEX' + struct.pack('<I4H4I', 0, 4, 4, 4, 4, 0x20, 8, 0x81014, 2) + b'\x11' * 8
+        filler = b'\x5a' * (0xFFFF - len(self.atlas))
+        self.files = [('/filler.bin', filler), ('/ui.rtex', self.atlas), ('/ui.ssdata', ui_ssdata()), ('/bg.rtex', bc)]
+        self.memfs = write_sprite_pair(os.path.join(self.d, 'jp'), self.files, u16={'/ui.ssdata'})
+
+    def quiet(self, fn, *args):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            rc = fn(*args)
+        return rc, buf.getvalue()
+
+    def export(self):
+        arc = sprite.Archive(self.memfs)
+        folder = os.path.join(self.d, 'anh')
+        self.assertEqual(self.quiet(sprite.cmd_export, arc, folder)[0], 0)
+        return arc, folder
+
+    def test_check_rebuilds_byte_for_byte(self):
+        arc = sprite.Archive(self.memfs)
+        self.assertEqual(arc.build({}), (arc.memfs, arc.body))
+        self.assertEqual(self.quiet(sprite.cmd_check, arc)[0], 0)
+        self.assertFalse(arc.textures['/bg.rtex'].editable)
+
+    def test_export_names_cells(self):
+        from PIL import Image
+        arc, folder = self.export()
+        files = sorted(c.file for c in arc.cells)
+        self.assertEqual(files, ['ui/label_off.png', 'ui/label_on.png', 'ui/star_6_0.png', 'ui/star_6_2.png'])
+        for rel, size in (('ui/label_on.png', (4, 2)), ('ui.png', (8, 6))):
+            with Image.open(os.path.join(folder, rel)) as im:
+                self.assertEqual(im.size, size)
+        self.assertFalse(os.path.exists(os.path.join(folder, 'bg.png')))       # BC: skipped
+        new, _, problems = sprite.plan_import(arc, folder)
+        self.assertEqual((new, problems), ({}, []))                            # untouched export: no change
+
+    def test_import_pastes_cell_and_keeps_the_rest(self):
+        from PIL import Image
+        arc, folder = self.export()
+        noise = bytes((i * 97 + 13) % 256 for i in range(4 * 2 * 4))
+        Image.frombytes('RGBA', (4, 2), noise).save(os.path.join(folder, 'ui', 'label_on.png'))
+        out = os.path.join(self.d, 'mod')
+        rc, log = self.quiet(sprite.cmd_import, arc, folder, out, False)
+        self.assertEqual(rc, 0, log)
+        self.assertFalse(os.path.exists(out))                                  # dry run writes nothing
+        rc, log = self.quiet(sprite.cmd_import, arc, folder, out, True)
+        self.assertEqual(rc, 0, log)
+        res = sprite.Archive(os.path.join(out, 'ui.memfs'))
+        img = res.textures['/ui.rtex'].image()
+        self.assertEqual(img.crop((1, 3, 5, 5)).tobytes(), noise)
+        before = arc.textures['/ui.rtex'].image()
+        for y in range(6):
+            for x in range(8):
+                if not (1 <= x < 5 and 3 <= y < 5):
+                    self.assertEqual(img.getpixel((x, y)), before.getpixel((x, y)))
+        t = res.textures['/ui.rtex']
+        self.assertEqual(t.raw()[t.stride * 6:], arc.textures['/ui.rtex'].raw()[t.stride * 6:])   # padding rows
+        for p in ('/filler.bin', '/ui.ssdata', '/bg.rtex'):
+            self.assertEqual(res.files[p], arc.files[p])
+        self.assertEqual(res.entries['/ui.ssdata'].etype, 0x20)                # pushed past 65535: widened
+        self.quiet(sprite.cmd_import, arc, folder, out, True)
+        self.assertTrue(os.path.exists(os.path.join(out, 'ui.membody.bak')))
+
+    def test_cell_wins_over_whole_texture(self):
+        from PIL import Image
+        arc, folder = self.export()
+        Image.new('RGBA', (8, 6), (1, 2, 3, 255)).save(os.path.join(folder, 'ui.png'))
+        Image.new('RGBA', (2, 2), (9, 9, 9, 9)).save(os.path.join(folder, 'ui', 'star_6_0.png'))
+        new, report, problems = sprite.plan_import(arc, folder)
+        self.assertEqual(problems, [])
+        img = new['/ui.rtex']
+        self.assertEqual(img.getpixel((0, 0)), (1, 2, 3, 255))
+        self.assertEqual(img.getpixel((7, 1)), (9, 9, 9, 9))
+
+    def test_wrong_size_and_stray_files_are_reported(self):
+        from PIL import Image
+        arc, folder = self.export()
+        Image.new('RGBA', (5, 2)).save(os.path.join(folder, 'ui', 'label_off.png'))
+        Image.new('RGBA', (2, 2)).save(os.path.join(folder, 'ui', 'label_of.png'))
+        _, report, problems = sprite.plan_import(arc, folder)
+        self.assertEqual(len(problems), 1)
+        self.assertIn('4x2', problems[0])
+        self.assertTrue(any('label_of.png' in r for r in report))
+        self.assertEqual(self.quiet(sprite.cmd_import, arc, folder, os.path.join(self.d, 'mod'), True)[0], 1)
 
 
 if __name__ == '__main__':

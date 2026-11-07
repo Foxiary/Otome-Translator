@@ -80,7 +80,11 @@ const tools = {
   'rrlib-apply': {title: 'Ghi bảng dịch vào game', description: 'Ghi bảng dịch (.xlsx) vào script.memfs và script.membody: từng câu được ngắt dòng và mã hoá theo font tiếng Việt của bản mod, tag #P bị mất được trả lại theo bản Nhật, rồi tự kiểm tra kết quả. Những câu bảng dịch không có dòng (tên nhân vật, lựa chọn) giữ chữ của bản mod.', note: 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Dòng nào không ghi thì giữ câu của bản mod; báo cáo ghi rõ lý do.'},
   'rrlib-audit': {title: 'Kiểm tra bản patch', description: 'So bản patch tiếng Việt với kịch bản tiếng Nhật: tag vị trí, tag tên và tag dừng bị mất, câu bị đẩy ra ngoài màn hình, header sai. Không thay đổi gì.'},
   'rrlib-patch': {title: 'Dựng lại bản patch', description: 'Dựng lại script.memfs và script.membody: trả lại tag vị trí #P bị mất, giữ cho các câu mà bản Nhật đặt ngoài màn hình vẫn hiện ra, trỏ thẳng từng kịch bản tới dữ liệu của nó rồi tự kiểm tra kết quả.', note: 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Hãy thử bản dựng trong game trước khi chia sẻ.'},
-  'rrlib-sheetfix': {title: 'Danh sách sửa tag cho bảng dịch', description: 'Đọc bảng dịch (.xlsx) và ghi ra một file đề xuất theo đúng tab và dòng: tag #P cần thêm, câu phải để không có tag, và các câu #T / #KW cần sửa tay.'}
+  'rrlib-sheetfix': {title: 'Danh sách sửa tag cho bảng dịch', description: 'Đọc bảng dịch (.xlsx) và ghi ra một file đề xuất theo đúng tab và dòng: tag #P cần thêm, câu phải để không có tag, và các câu #T / #KW cần sửa tay.'},
+  'rrlib-sprite-list': {title: 'Xem ảnh của một màn hình', description: 'Liệt kê các ảnh của một màn hình và từng ô được cắt ra từ đó, kèm vị trí và kích thước (chữ 新しく始める ở menu là ô mat_ttlm_com01_off, câu chú thích của nó là mat_ttlm_com01_setu). Không thay đổi gì.'},
+  'rrlib-sprite-export': {title: 'Lấy ảnh của một màn hình ra', description: 'Lưu mọi ảnh của một màn hình ra file, mỗi ô lưu thành một ảnh riêng đặt tên theo phần hình dùng nó, kèm cells.csv ghi vị trí từng ô. Vẽ lại ô cần dịch bằng phần mềm sửa ảnh bất kỳ, giữ nguyên kích thước.'},
+  'rrlib-sprite-import': {title: 'Đưa ảnh đã vẽ lại vào game', description: 'Đọc thư mục do "Lấy ảnh của một màn hình ra" tạo: ảnh nào khác bản game thì được dán lại đúng chỗ, rồi dựng lại file của màn hình đó và tự kiểm tra; file không sửa phải giữ nguyên từng byte.', note: 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Mỗi ảnh phải giữ đúng kích thước; phần vẽ ra ngoài khung sẽ không hiện.'},
+  'rrlib-sprite-check': {title: 'Kiểm tra file của một màn hình', description: 'Dựng lại một màn hình mà không sửa gì, kết quả phải giống từng byte, và thử nén lại mọi ảnh mà công cụ ghi được.'}
 };
 
 const engines = {
@@ -114,7 +118,8 @@ const engines = {
       Dump: {name: 'Lấy dữ liệu', summary: 'Lấy toàn bộ game, hoặc từng file, ra khỏi file .nsp hoặc .xci, dùng prod.keys của bạn.'},
       Inspect: {name: 'Xem', summary: 'Xem bên trong mục lục, gói kịch bản và từng kịch bản.'},
       Patch: {name: 'Bản patch', summary: 'Ghi bảng dịch vào game, kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
-      Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'}
+      Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'},
+      Images: {name: 'Ảnh giao diện', summary: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh: lấy ra thành file ảnh, vẽ lại rồi đưa vào game.'}
     }
   }
 };
