@@ -4,10 +4,6 @@ let activeGroup = null;
 let activeId = null;
 let running = false;
 let page = 'form';
-let docsName = '';
-let docsEngine = '';
-let docsHash = '';
-let docsToken = 0;
 let patchStage = 'choose';
 let patchPhase = 0;
 let patchMissing = [];
@@ -1170,7 +1166,6 @@ function render() {
     loadMeasureSaved();
   }
   if (page === 'form') {renderTools(); renderForm();}
-  if (page === 'docs') renderDocs();
 }
 function showError(message) {
   if (page === 'patch') showPatchError(message);
@@ -1193,61 +1188,11 @@ function dialogContent(title, build, wide = false) {
 }
 function paragraph(parent, text, cls = '') {parent.append(elt('p',cls,text));}
 function action(parent, label, callback) {const b=elt('button','',label); b.type='button';b.addEventListener('click', callback);parent.append(b);}
-function docLabel(name) {
-  const listed = engine().docs.find(([, file]) => file === name);
-  if (!listed) return name;
-  return (language() === 'vi' && engine().vi?.docs[name]) || listed[0];
-}
-function openDoc(name, hash = '') {
-  docsEngine = engine().id;
-  docsName = name;
-  docsHash = hash;
-  page = 'docs';
-  render();
-}
-function showDocs() {
-  if (docsEngine !== engine().id || !docsName) docsName = engine().docs[0]?.[1] || '';
-  openDoc(docsName);
-}
-async function renderDocs() {
-  if (docsEngine !== engine().id) {
-    docsEngine = engine().id;
-    docsName = engine().docs[0]?.[1] || '';
-    docsHash = '';
-  }
-  const token = ++docsToken;
-  breadcrumbs($('docs-breadcrumb'), [engine().name]);
-  const flow = (language() === 'vi' && engine().vi?.flow) || engine().flow;
-  $('docs-scope').textContent = `${text('docs.body', {engine: engine().name})} ${text('docs.flow', {flow})}`;
-  const list = $('docs-list');
-  list.replaceChildren();
-  for (const [, name] of engine().docs) {
-    const button = elt('button', `docs-item${name === docsName ? ' active' : ''}`, docLabel(name));
-    button.type = 'button';
-    if (name === docsName) button.setAttribute('aria-current', 'true');
-    button.addEventListener('click', () => openDoc(name));
-    list.append(button);
-  }
-  const article = $('docs-article');
-  article.replaceChildren();
-  article.className = 'docs-article';
-  if (!docsName) { article.append(elt('p', '', text('docs.none'))); return; }
-  let result;
-  try { result = await window.vees.readDocument(docsName); }
-  catch (error) { if (token === docsToken) article.append(elt('p', '', error.message)); return; }
-  if (token !== docsToken) return;
-  if (result.missing) { article.append(elt('p', '', text('docs.missing'))); return; }
-  renderMarkdown(article, result.text, href => {
-    const target = resolveDocLink(docsName, href);
-    if (!target) return;
-    if (target.external) window.vees.openLink(target.external);
-    else if (target.file && target.file !== docsName) openDoc(target.file, target.hash);
-    else if (target.hash) document.getElementById(target.hash.slice(1))?.scrollIntoView();
-  });
-  if (docsHash) {
-    document.getElementById(docsHash.slice(1))?.scrollIntoView();
-    docsHash = '';
-  }
+async function showDocs() {
+  try {
+    const error = await window.vees.openDocumentation(language());
+    if (error) showError(error);
+  } catch (error) { showError(error.message); }
 }
 // The names pip installs, for the modules whose import name differs.
 const PIP_NAMES = {PIL: 'Pillow', Crypto: 'pycryptodome', fontTools: 'fonttools'};

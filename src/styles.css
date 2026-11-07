@@ -24,7 +24,7 @@ svg.icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;s
    page and for a group that holds one tool. */
 .app{display:grid;grid-template-columns:var(--sidebar-width,250px) 278px minmax(0,1fr);height:100vh;min-height:620px}
 .app:not(.page-form),.app.single-tool{grid-template-columns:var(--sidebar-width,250px) minmax(0,1fr)}
-.app:not(.page-form) .tool-panel,.app.single-tool .tool-panel,.app:not(.page-form) #form-view,.app:not(.page-patch) #patch-view,.app:not(.page-measure) #measure-view,.app:not(.page-docs) #docs-view{display:none}
+.app:not(.page-form) .tool-panel,.app.single-tool .tool-panel,.app:not(.page-form) #form-view,.app:not(.page-patch) #patch-view,.app:not(.page-measure) #measure-view{display:none}
 
 /* Sidebar */
 .sidebar{position:relative;background:var(--sidebar);border-right:1px solid var(--line);padding:20px 16px 12px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
@@ -124,29 +124,7 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 
 /* Main */
 .main{background:var(--main);min-width:0;overflow:auto;scrollbar-color:var(--border) transparent;display:flex;flex-direction:column}
-#form-view,.patch-view,.measure-view,.docs-view{display:flex;flex-direction:column;flex:1;min-height:0}
-.docs-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;padding:0 32px 28px;min-height:0;flex:1}
-.docs-list{display:flex;flex-direction:column;gap:4px;overflow:auto;align-content:start}
-.docs-item{display:block;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:8px;padding:8px 10px;color:var(--secondary);font-size:12px}
-.docs-item:hover{background:var(--hover);color:var(--ink)}
-.docs-item.active{background:var(--selected);border-color:var(--selected-border);color:var(--selected-ink);font-weight:650}
-.docs-article{overflow:auto;min-width:0;max-width:78ch}
-.doc h1{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.2;margin:0 0 16px}
-.doc h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:28px 0 10px}
-.doc h3,.doc h4{font-size:16px;font-weight:600;margin:22px 0 8px}
-.doc p,.doc li,.doc blockquote{font-size:14px;line-height:1.7}
-.doc p,.doc ul,.doc ol,.doc pre,.doc table,.doc blockquote{margin:0 0 14px}
-.doc ul,.doc ol{padding-left:22px}
-.doc li{margin:4px 0}
-.doc a{color:var(--accent-text);text-underline-offset:2px}
-.doc code{font-family:ui-monospace,'SF Mono',Consolas,'Courier New',monospace;font-size:12px;background:var(--field);padding:1px 5px;border-radius:4px}
-.doc pre{padding:14px 16px;background:var(--log);border:1px solid var(--border);border-radius:12px;overflow:auto}
-.doc pre code{background:none;padding:0;font-size:12px;line-height:1.6}
-.doc table{border-collapse:collapse;width:100%;font-size:13px}
-.doc th,.doc td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
-.doc th{background:var(--field);font-weight:650}
-.doc hr{border:0;border-top:1px solid var(--line);margin:22px 0}
-.doc blockquote{padding-left:12px;border-left:1px solid var(--border);color:var(--secondary)}
+#form-view,.patch-view,.measure-view{display:flex;flex-direction:column;flex:1;min-height:0}
 .page-header{border-bottom:1px solid var(--line);padding:30px 32px 27px;background:var(--header)}
 .header-top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px;min-height:24px}
 .breadcrumbs{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
