@@ -57,6 +57,7 @@ const strings = {
   'rail.docs': {en: 'Source documentation', vi: 'Tài liệu nguồn'},
   'rail.resize': {en: 'Resize sidebar', vi: 'Đổi rộng thanh bên'},
   'rail.python': {en: 'Python environment', vi: 'Môi trường Python'},
+  'rail.pythonNeeded': {en: 'Python environment: setup needed', vi: 'Môi trường Python: cần cài đặt'},
   'rail.updates': {en: 'Check updates', vi: 'Kiểm tra cập nhật'},
   'rail.tour': {en: 'Show the tour', vi: 'Xem hướng dẫn'},
   'tour.count': {en: 'Step {step} of {total}', vi: 'Bước {step} trên {total}'},

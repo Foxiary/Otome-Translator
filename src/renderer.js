@@ -222,8 +222,12 @@ function updatePython(check) {
   badge.className = `runtime${check.ok ? '' : ' bad'}`;
   badge.textContent = check.ok ? text('python.ready', {version: check.version}) : text('python.needed');
   badge.title = check.ok ? state.settings.python : check.message;
-  // The footer's Python button carries the same warning on pages without the badge.
-  $('python-button').classList.toggle('needs-attention', !check.ok);
+  // The footer's Python button carries the same warning on pages without the
+  // badge, in words as well as the dot: colour alone says nothing to everyone.
+  const pythonButton = $('python-button');
+  pythonButton.classList.toggle('needs-attention', !check.ok);
+  pythonButton.title = text(check.ok ? 'rail.python' : 'rail.pythonNeeded');
+  pythonButton.querySelector('bdi').textContent = pythonButton.title;
   promptPython();
 }
 // A Python that cannot run the engine's tools is said at once, in a dialog with

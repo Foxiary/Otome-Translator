@@ -173,10 +173,13 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 .field input:focus,.field textarea:focus{border-color:var(--accent-line)}
 .field input::placeholder,.field textarea::placeholder{color:var(--subtle)}
 .field textarea{resize:vertical;min-height:76px}
-.toggle-field{display:flex;align-items:flex-start;gap:10px;padding:14px;border:1px solid var(--border);border-radius:12px;min-height:75px;background:var(--elevated);cursor:pointer}
+.toggle-field{position:relative;display:flex;align-items:flex-start;gap:10px;padding:14px;border:1px solid var(--border);border-radius:12px;min-height:75px;background:var(--elevated);cursor:pointer}
 .toggle-field:hover{border-color:var(--border-hover)}
-.toggle-field input{accent-color:var(--accent);width:13px;height:13px;margin:2px 0 0;flex-shrink:0}
+.toggle-field input{position:relative;z-index:1;accent-color:var(--accent);width:16px;height:16px;margin:1px 0 0;flex-shrink:0;cursor:pointer}
 .toggle-field label{margin:0;cursor:pointer}
+/* The label's box covers the whole card, so a click anywhere on it toggles. */
+.toggle-field label::after{content:'';position:absolute;inset:0;border-radius:inherit}
+.toggle-field:has(input:checked){border-color:var(--accent-line)}
 .toggle-field .help{margin:4px 0 0}
 
 /* Buttons */
@@ -236,7 +239,7 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 .pick-card{display:flex;gap:14px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .pick-icon{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:var(--glyph);color:var(--accent-text);flex-shrink:0}
 .pick-body{min-width:0;flex:1}
-.pick-label{font-size:13px;font-weight:600}
+.pick-label{display:block;font-size:13px;font-weight:600}
 .pick-hint{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.6}
 .pick-row{display:flex;gap:8px;align-items:stretch;margin-top:10px}.pick-row .button{flex-shrink:0}
 .pick-value{display:block;flex:1;min-width:0;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--field);font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

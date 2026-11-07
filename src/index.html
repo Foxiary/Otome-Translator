@@ -209,9 +209,9 @@
             <section class="pick-card">
               <span class="pick-icon"><svg class="icon"><use href="#i-sheet"/></svg></span>
               <div class="pick-body">
-                <div class="pick-label" data-i18n="measure.line"></div>
-                <div class="pick-hint" data-i18n="measure.lineHint"></div>
-                <div class="pick-row"><input id="measure-text" class="measure-input" type="text" autocomplete="off" spellcheck="false"></div>
+                <label class="pick-label" for="measure-text" data-i18n="measure.line"></label>
+                <div class="pick-hint" id="measure-text-hint" data-i18n="measure.lineHint"></div>
+                <div class="pick-row"><input id="measure-text" class="measure-input" type="text" autocomplete="off" spellcheck="false" aria-describedby="measure-text-hint"></div>
                 <div class="measure-options">
                   <label><span data-i18n="measure.font"></span><select id="measure-font"></select></label>
                   <label><span data-i18n="measure.screen"></span><select id="measure-screen"></select></label>
