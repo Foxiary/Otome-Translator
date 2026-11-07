@@ -69,6 +69,7 @@ Nếu npm chặn bước cài Electron, chạy `npm approve-scripts electron` v�
 
 - `engines/otomate/` là submodule của [Foxiary/VE-ES](https://github.com/Foxiary/VE-ES), hiện ở commit `08807f7`.
 - `engines/unity/` nằm ngay trong repo này. Xem `engines/unity/README.md`; mỗi công cụ đã được chạy trên dữ liệu UNLOGICAL thật và so với bản Việt hóa đã phát hành (`engines/unity/tools/README.md`).
+- `engines/rrlib/` là công cụ dòng lệnh cho Matsurika no Kei -kEi- Tenmei Iniden, game có kịch bản dạng `script.memfs` / `script.membody`. Engine này chưa có trong giao diện app. Xem `engines/rrlib/README.md`, và `engines/rrlib/CLAUDE.md` cho định dạng file.
 - `projects/ul-vi-patch/` là submodule của [Foxiary/ul-vi-patch](https://github.com/Foxiary/ul-vi-patch). `projects/CxM-VI/` là submodule của [Foxiary/CxM-VI](https://github.com/Foxiary/CxM-VI). Cả hai không được đóng vào bản cài. Lấy về bằng `git submodule update --init projects/ul-vi-patch projects/CxM-VI`.
 
 Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js` và `src/catalog-unity.js`; `src/engines.js` khai báo engine, thư mục chép vào workspace, tài liệu và thư viện Python cần có.

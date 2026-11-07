@@ -1,0 +1,74 @@
+# Engine rrlib — Matsurika no Kei -kEi- Tenmei Iniden
+
+Bộ công cụ cho bản Việt hóa **Matsurika no Kei -kEi- Tenmei Iniden**
+(`0100EA001A626000`, bản JP 1.0.0). Game không dùng CPK/STCM2L như các game
+Otomate khác. Kịch bản nằm trong cặp `romfs/common/script.memfs` (mục lục, định
+dạng RSON mà file tự gọi là `rrlib/memfs`) và `script.membody` (130 file `.tat`
+nén zlib, mã bytecode "KUV ").
+
+Công cụ ra đời khi sửa bản patch Việt ngày 02/10/2026. Bản đó làm mất tag vị trí
+`#P`, khiến hai câu dẫn hiện chồng vào một khung. Ghi chú định dạng chi tiết, kèm
+các bẫy đã gặp, nằm ở `CLAUDE.md` (tiếng Anh).
+
+Chỉ cần Python 3. Riêng `sheetfix.py` cần thêm openpyxl. `nsp.py` dùng
+pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không chứa dữ liệu game.
+
+## Quy trình
+
+1. **Lấy bản JP** (cần `prod.keys`, mặc định `~/.switch/prod.keys`):
+
+   ```
+   python tools/nsp.py romfs "<game>.nsp" jp "common/script.*"
+   python tools/nsp.py exefs "<game>.nsp" jp/exefs
+   ```
+
+2. **Kiểm bản patch** mà không sửa gì:
+
+   ```
+   python tools/audit.py --jp jp --patch <thư mục mod> --csv loi.csv
+   ```
+
+   Báo các lỗi: code khác JP, số chuỗi lệch, file đọc nhầm chunk, câu mất `#P` / `#T` / `#KW`, câu bị `#P` đẩy ra ngoài màn hình, trường độ dài code sai.
+
+3. **Sửa bản patch.** Lệnh này chỉ chạy thử, in báo cáo, không ghi file:
+
+   ```
+   python tools/patch.py --jp jp --patch <thư mục mod> --out out --report sua.csv
+   python tools/patch.py --jp jp --patch <thư mục mod> --out out --apply
+   ```
+
+   Thêm `--apply` thì mới ghi `script.memfs` và `script.membody` vào `out/`, rồi chép vào `romfs/common/` của mod. `patch.py` tự đọc `exefs/main` của mod nếu có, để biết exe chuyển hướng file nào.
+
+4. **Sửa sheet dịch.** Tải sheet về dạng `.xlsx`, rồi:
+
+   ```
+   python tools/sheetfix.py --sheet sheet.xlsx --jp jp --out sua_tag.xlsx
+   ```
+
+   File ra có:
+   - các câu đề xuất (đã trả `#P`) để chép vào cột `vi_text`;
+   - danh sách câu **không** được thêm `#P`;
+   - các câu mất `#T`/`#KW` cần sửa tay.
+
+   Sửa sheet là để lần build sau không mất tag lại.
+
+5. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
+
+## Những điều cần nhớ
+
+- **Đừng chép nguyên tag JP vào bản dịch.** `patch.py` và `sheetfix.py` đã xử lý bốn trường hợp:
+  - Câu JP dùng nhiều `#P` để tự ngắt dòng: gộp lại thành một khối.
+  - Bản dịch dài hơn JP: đẩy `y` xuống để các câu không đè nhau.
+  - Cách dòng mỗi màn hình mỗi khác: 60px hoặc ~75px.
+  - 27 câu JP cố tình đặt ở y=1200, ra ngoài màn hình, vì chữ đã vẽ sẵn trong tranh (bài thơ ở cảnh mở đầu): bản Việt phải **để không có tag**, nếu không chữ dịch chỉ còn trong backlog.
+- **Không đọc memfs một mình để kết luận game nạp file nào.** Bản patch 02/10 có sửa `exefs/main` để chuyển hướng 3 file mở đầu sang bản tiếng Việt nối ở cuối membody (`exehook.py` đọc ra được). `patch.py` trỏ thẳng các mục đó và tránh trùng cặp mà exe chuyển hướng.
+- **Nới mục memfs sang 32-bit thì được, sửa tại chỗ thì không.** Phải ghi lại toàn bộ RSON (`rson.py` làm việc này). Sửa vài byte tại chỗ làm lệch offset, game không nạp được kịch bản nào và đen màn hình.
+
+## Giới hạn
+
+- Chưa có trong giao diện app; chỉ chạy bằng dòng lệnh.
+- Không đụng tới font (`romfs/spec_win/font/*.font.memfs`).
+- `#T` và `#KW` bị mất phải sửa tay theo cột JP; công cụ chỉ liệt kê.
+- Chỉ mới thử với Matsurika no Kei. Game khác dùng `rrlib/memfs` có thể cần chỉnh lại các số đo trong `tools/tags.py`.
+
+`tools/README.md` liệt kê từng công cụ và kết quả đã kiểm trên dữ liệu thật.
