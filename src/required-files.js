@@ -20,13 +20,17 @@ const BUILT_FONTS = {path: 'dist/SYSTEM.cpk', also: ['work/out/SYSTEM.cpk'], hin
 // Box widths come from here for every game; without it the width checks skip.
 const WINDOWS = {path: 'windows.json', hint: 'measure'};
 const REQUIRED = {
-  // build.py reads the CPK and every source font named in fonts.json.
-  build(workspace) {
+  // build.py reads the CPK and every source font named in fonts.json. The
+  // fonts.json the engine ships is the Virche Evermore set-up: while it is
+  // untouched (`context.exampleFonts`), its fonts are that translation's
+  // choice, not files every game needs, and are reported as such.
+  build(workspace, context = {}) {
     const config = fontsConfig(workspace);
     if (!config) return [{path: 'fonts.json', hint: 'engine'}];
     const sources = Object.values(config.fonts || {}).map(font => font.source).filter(Boolean);
+    const hint = context.exampleFonts ? 'example-font' : 'font';
     return [{path: config.cpk || 'SYSTEM.cpk', hint: 'game'},
-      ...[...new Set(sources)].map(source => ({path: source, hint: 'font'}))];
+      ...[...new Set(sources)].map(source => ({path: source, hint}))];
   },
   chuadich: () => [STORY, JP_STORY],
   // quarong.py measures with the built fonts and only falls back to the stock ones.
@@ -56,10 +60,10 @@ function jpNames(toolId, workspace) {
   return rule && workspace ? rule(workspace).filter(item => item.jp).map(item => item.jp) : [];
 }
 
-function missingFiles(toolId, workspace, jp = {}) {
+function missingFiles(toolId, workspace, jp = {}, context = {}) {
   const rule = REQUIRED[toolId];
   if (!rule || !workspace) return [];
-  return rule(workspace).filter(item => !present(item, workspace, jp))
+  return rule(workspace, context).filter(item => !present(item, workspace, jp))
     .map(({path: file, hint}) => ({path: file, hint}));
 }
 

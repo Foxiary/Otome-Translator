@@ -19,6 +19,11 @@ try {
     'a.ffu': {source: 'Font/A.ttf'}, 'b.ffu': {source: 'Font/B.ttf'}, 'c.ffu': {source: 'Font/A.ttf'}
   }}));
   assert.deepEqual(paths('build'), ['SYSTEM.cpk', 'Font/A.ttf', 'Font/B.ttf']);
+  // While fonts.json is the shipped example, its fonts are reported as the
+  // example's choice; the game's archive is still needed.
+  assert.deepEqual(missingFiles('build', workspace, {}, {exampleFonts: true}).map(item => item.hint),
+    ['game', 'example-font', 'example-font']);
+  assert.deepEqual(missingFiles('build', workspace).map(item => item.hint), ['game', 'font', 'font']);
   touch('SYSTEM.cpk'); touch('Font/A.ttf');
   assert.deepEqual(paths('build'), ['Font/B.ttf']);
   touch('Font/B.ttf');

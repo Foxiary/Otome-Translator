@@ -381,3 +381,8 @@ dialog::backdrop{background:#0008}
 .fonts-options summary .pick-label{display:inline}
 .fonts-options .pick-hint{margin:6px 0 14px}
 .fonts-options:not([open]) .pick-hint{display:none}
+
+/* Fonts named by the example fonts.json: a note, not part of the error. */
+.missing-examples{margin-top:14px;padding-top:11px;border-top:1px dashed var(--bad-line);color:var(--secondary)}
+.missing-examples strong{color:var(--ink)}
+.missing-example-body{margin-top:4px;max-width:75ch}

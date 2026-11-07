@@ -193,6 +193,18 @@ ipcMain.handle('open-update', () => {
   if (lastUpdate?.status !== 'available') return false;
   return shell.openExternal(lastUpdate.url);
 });
+// True while the project's fonts.json is the one the Otomate engine ships (or an
+// earlier shipped version): the Virche Evermore set-up, not the user's own.
+function exampleFontsConfig(folder) {
+  const file = path.join(folder, 'fonts.json');
+  if (settings.engine !== 'otomate' || !fs.existsSync(file)) return false;
+  const lf = data => sha256(Buffer.from(data.toString('latin1').split('\r\n').join('\n'), 'latin1'));
+  const engine = engineById.get('otomate');
+  const shipped = path.join(enginePath(engine), 'fonts.json');
+  const known = [].concat(engine.hashes['fonts.json'] || []);
+  if (fs.existsSync(shipped)) known.push(lf(fs.readFileSync(shipped)));
+  return known.includes(lf(fs.readFileSync(file)));
+}
 ipcMain.handle('missing-files', async (_event, toolId) => {
   const folder = workspace();
   const names = jpNames(toolId, folder);
@@ -202,7 +214,7 @@ ipcMain.handle('missing-files', async (_event, toolId) => {
     const result = await runHelper(path.join(__dirname, 'find_jp.py'), names, folder);
     try { jp = JSON.parse(result.stdout.trim().split(/\r?\n/).pop() || '{}'); } catch {}
   }
-  return missingFiles(toolId, folder, jp);
+  return missingFiles(toolId, folder, jp, {exampleFonts: exampleFontsConfig(folder)});
 });
 ipcMain.handle('choose-workspace', async () => {
   const result = await dialog.showOpenDialog(window, {title: t('workspace.dialog', settings.language, {engine: activeEngine().name}),

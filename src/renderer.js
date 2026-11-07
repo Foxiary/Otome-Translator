@@ -310,27 +310,42 @@ function openToolWith(id, values, replace = false) {
 }
 // The red notice for files a tool reads from the project folder and cannot find.
 // The likeliest cause is a wrong project folder, so it asks about that first.
-function renderMissing(container, missing) {
-  container.classList.toggle('hidden', !missing.length);
-  container.replaceChildren();
-  if (!missing.length) return;
-  const body = elt('div');
-  const actions = elt('div', 'missing-actions');
-  const change = elt('button', 'button primary', text('missing.change'));
-  change.type = 'button';
-  change.addEventListener('click', chooseWorkspace);
-  const open = elt('button', 'button', text('workspace.open'));
-  open.type = 'button';
-  open.addEventListener('click', async () => {const error = await window.vees.openWorkspace(); if (error) showError(error);});
-  actions.append(elt('code', 'missing-folder mono', state.workspace), change, open);
+function missingList(items) {
   const list = elt('ul', 'missing-list');
-  for (const item of missing) {
+  for (const item of items) {
     const row = elt('li');
     row.append(elt('code', 'mono', item.path.replace(/\//g, '\\')), elt('span', '', ` · ${text(`missing.hint.${item.hint}`)}`));
     list.append(row);
   }
-  body.append(elt('strong', '', text('missing.title', {count: missing.length})), elt('div', 'missing-where', text('missing.where')),
-    actions, elt('div', 'missing-files', text('missing.files')), list, elt('div', 'missing-next', text('missing.next')));
+  return list;
+}
+function renderMissing(container, all) {
+  // Fonts named by the example fonts.json are that set-up's choice, not a need of
+  // every game: they get a quieter note of their own, and alone they are no error.
+  const missing = all.filter(item => item.hint !== 'example-font');
+  const examples = all.filter(item => item.hint === 'example-font');
+  container.classList.toggle('hidden', !all.length);
+  container.classList.toggle('missing', missing.length > 0);
+  container.replaceChildren();
+  if (!all.length) return;
+  const body = elt('div');
+  if (missing.length) {
+    const actions = elt('div', 'missing-actions');
+    const change = elt('button', 'button primary', text('missing.change'));
+    change.type = 'button';
+    change.addEventListener('click', chooseWorkspace);
+    const open = elt('button', 'button', text('workspace.open'));
+    open.type = 'button';
+    open.addEventListener('click', async () => {const error = await window.vees.openWorkspace(); if (error) showError(error);});
+    actions.append(elt('code', 'missing-folder mono', state.workspace), change, open);
+    body.append(elt('strong', '', text('missing.title', {count: missing.length})), elt('div', 'missing-where', text('missing.where')),
+      actions, elt('div', 'missing-files', text('missing.files')), missingList(missing), elt('div', 'missing-next', text('missing.next')));
+  }
+  if (examples.length) {
+    const note = elt('div', missing.length ? 'missing-examples' : '');
+    note.append(elt('strong', '', text('missing.example.title')), elt('div', 'missing-example-body', text('missing.example.body')), missingList(examples));
+    body.append(note);
+  }
   container.append(body);
 }
 async function checkMissing() {
