@@ -61,7 +61,11 @@ assert.equal(parseMarkdown('  ```\n  x\n  ```')[0].type, 'code');
 assert.equal(parseMarkdown('Intro.\n\n3. Third\n4. Fourth')[1].start, 3);
 assert.equal(parseMarkdown('1. First')[0].start, 1);
 
-const {documentationPage} = require('../src/markdown');
+const {documentationPage, splitGuide} = require('../src/markdown');
+const guide = splitGuide('# Title\n\nThe intro.\n\n## First\n\nOne.\n\n## Second\n\nTwo.\n');
+assert.equal(guide.intro, 'The intro.');
+assert.deepEqual(guide.pages.map(page => page.label), ['First', 'Second']);
+assert.match(guide.pages[0].text, /^One/);
 const page = documentationPage({
   title: 'Notes',
   intro: 'Hello',

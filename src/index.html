@@ -21,6 +21,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.6 13.1A8.7 8.7 0 0 1 10.9 3.4a9 9 0 1 0 9.7 9.7Z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8 5.6 18.4"/></symbol>
     <symbol id="i-build" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"/><path d="m12 8 4 4-4 4-4-4 4-4Z"/></symbol>
     <symbol id="i-font" viewBox="0 0 24 24"><path d="m3 19 6-14 6 14M5 14h8M17 13c4-3 6 0 4 3l-4 3h5"/></symbol>
     <symbol id="i-archive" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/></symbol>
@@ -80,12 +81,18 @@
         <div class="sidebar-tools">
         <nav class="utility-list">
           <button class="utility" type="button" id="docs-button" data-i18n-title="rail.docs"><svg class="icon"><use href="#i-book"/></svg><bdi class="sr-only" data-i18n="rail.docs"></bdi></button>
-          <button class="utility" type="button" id="python-button" data-i18n-title="rail.python"><svg class="icon"><use href="#i-terminal"/></svg><bdi class="sr-only" data-i18n="rail.python"></bdi></button>
-          <button class="utility" type="button" id="check-updates" data-i18n-title="rail.updates"><svg class="icon"><use href="#i-refresh"/></svg><bdi class="sr-only" data-i18n="rail.updates"></bdi></button>
           <button class="utility" type="button" id="tour-button" data-i18n-title="rail.tour"><svg class="icon"><use href="#i-info"/></svg><bdi class="sr-only" data-i18n="rail.tour"></bdi></button>
+          <div class="settings-switcher" id="settings-switcher">
+            <button class="utility" type="button" id="settings-button" data-i18n-title="rail.settings" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-menu"><svg class="icon"><use href="#i-settings"/></svg><bdi class="sr-only" data-i18n="rail.settings"></bdi></button>
+            <div class="settings-menu hidden" id="settings-menu" role="menu">
+              <div class="language-menu-title" data-i18n="rail.settings"></div>
+              <button class="settings-row" type="button" id="python-button"><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="rail.python"></bdi></button>
+              <button class="settings-row" type="button" id="check-updates"><svg class="icon"><use href="#i-refresh"/></svg><bdi data-i18n="rail.updates"></bdi></button>
+              <button class="theme-toggle settings-row" type="button" role="switch" id="theme-toggle" aria-checked="true"><svg class="icon"><use href="#i-moon"/></svg><bdi data-i18n="theme.dark"></bdi><span class="theme-state sr-only" id="theme-state"></span><span class="theme-track" aria-hidden="true"><span class="theme-thumb"></span></span></button>
+            </div>
+          </div>
         </nav>
         <div class="prefs">
-        <button class="theme-toggle" type="button" role="switch" id="theme-toggle" aria-checked="true"><svg class="icon"><use href="#i-moon"/></svg><bdi class="sr-only" data-i18n="theme.dark"></bdi><span class="theme-state sr-only" id="theme-state"></span><span class="theme-track" aria-hidden="true"><span class="theme-thumb"></span></span></button>
         <div class="language-switcher" id="language-switcher">
           <button class="language-toggle" type="button" id="language-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu"><svg class="icon"><use href="#i-globe"/></svg><bdi class="sr-only" data-i18n="language.label"></bdi><span class="language-code" id="language-code"></span><svg class="icon language-chevron"><use href="#i-chevrons"/></svg></button>
           <div class="language-menu hidden" id="language-menu" role="menu">

@@ -331,6 +331,27 @@ function blocksToHtml(blocks, file, known, used = new Set()) {
     return '';
   }).join('\n');
 }
+function splitGuide(markdown) {
+  const lines = String(markdown).replace(/\r\n/g, '\n').split('\n');
+  const intro = [];
+  const pages = [];
+  let label = '';
+  let body = [];
+  const flush = () => {
+    if (!label) return;
+    pages.push({name: label, label, text: body.join('\n').trim()});
+  };
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      flush();
+      label = line.slice(3).trim();
+      body = [];
+    } else if (!label) intro.push(line);
+    else body.push(line);
+  }
+  flush();
+  return {intro: intro.filter(line => !line.startsWith('# ')).join(' ').replace(/\s+/g, ' ').trim(), pages};
+}
 function documentationPage({title, intro, pages}) {
   const known = new Set(pages.map(page => page.name));
   const nav = pages.map(page => `<a href="#${noteId(page.name)}">${escapeHtml(page.label)}</a>`).join('');
@@ -377,4 +398,4 @@ blockquote{margin:0 0 14px;padding-left:12px;border-left:1px solid var(--line);c
 </html>`;
 }
 
-if (typeof module !== 'undefined') module.exports = {parseMarkdown, resolveDocLink, renderMarkdown, linkedNotes, documentationPage};
+if (typeof module !== 'undefined') module.exports = {parseMarkdown, resolveDocLink, renderMarkdown, linkedNotes, splitGuide, documentationPage};

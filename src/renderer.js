@@ -109,6 +109,7 @@ function setSidebarWidth(width, persist) {
   $('sidebar-resize').setAttribute('aria-valuenow', String(next));
   if (persist) { try { localStorage.setItem('otm-sidebar-width', String(next)); } catch {} }
   if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();
+  if (!$('settings-menu').classList.contains('hidden')) placeSettingsMenu();
   return next;
 }
 function bindSidebarResize() {
@@ -147,10 +148,9 @@ function toggleTheme() {
   try { localStorage.setItem('otm-theme', next); } catch {}
   renderTheme();
 }
-function placeLanguageMenu() {
-  const menu = $('language-menu');
-  const rect = $('language-toggle').getBoundingClientRect();
-  const width = Math.max(rect.width, 220);
+function placeAnchoredMenu(menu, toggle, minWidth) {
+  const rect = toggle.getBoundingClientRect();
+  const width = Math.max(rect.width, minWidth);
   const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
   const height = menu.offsetHeight || 140;
   const above = rect.top - 6 - height;
@@ -160,6 +160,23 @@ function placeLanguageMenu() {
   menu.style.bottom = 'auto';
   menu.style.top = `${Math.max(8, top)}px`;
 }
+function placeLanguageMenu() {
+  placeAnchoredMenu($('language-menu'), $('language-toggle'), 220);
+}
+function placeSettingsMenu() {
+  placeAnchoredMenu($('settings-menu'), $('settings-button'), 240);
+}
+function toggleSettingsMenu(open) {
+  const menu = $('settings-menu');
+  const show = open ?? menu.classList.contains('hidden');
+  if (!show && menu.contains(document.activeElement)) $('settings-button').focus();
+  menu.classList.toggle('hidden', !show);
+  $('settings-button').setAttribute('aria-expanded', String(show));
+  if (show) {
+    toggleLanguageMenu(false);
+    placeSettingsMenu();
+  }
+}
 function toggleLanguageMenu(open) {
   const menu = $('language-menu');
   const show = open ?? menu.classList.contains('hidden');
@@ -167,6 +184,7 @@ function toggleLanguageMenu(open) {
   menu.classList.toggle('hidden', !show);
   $('language-toggle').setAttribute('aria-expanded', String(show));
   if (show) {
+    toggleSettingsMenu(false);
     placeLanguageMenu();
     menu.querySelector('[aria-checked=true]')?.focus();
   }
@@ -226,6 +244,7 @@ function updatePython(check) {
   // badge, in words as well as the dot: colour alone says nothing to everyone.
   const pythonButton = $('python-button');
   pythonButton.classList.toggle('needs-attention', !check.ok);
+  $('settings-button').classList.toggle('needs-attention', !check.ok);
   pythonButton.title = text(check.ok ? 'rail.python' : 'rail.pythonNeeded');
   pythonButton.querySelector('bdi').textContent = pythonButton.title;
   promptPython();
@@ -1286,10 +1305,22 @@ async function start() {
       : event.key === 'Home' ? 0 : items.length - 1;
     items[next]?.focus();
   });
-  document.addEventListener('click', event => {if (!$('language-switcher').contains(event.target)) toggleLanguageMenu(false);});
-  document.addEventListener('keydown', event => {if (event.key === 'Escape') toggleLanguageMenu(false);});
-  window.addEventListener('resize', () => {if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();});
-  document.querySelector('.sidebar').addEventListener('scroll', () => {if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();}, {passive: true});
+  $('settings-button').addEventListener('click', () => toggleSettingsMenu());
+  $('python-button').addEventListener('click', () => toggleSettingsMenu(false));
+  $('check-updates').addEventListener('click', () => toggleSettingsMenu(false));
+  document.addEventListener('click', event => {
+    if (!$('language-switcher').contains(event.target)) toggleLanguageMenu(false);
+    if (!$('settings-switcher').contains(event.target)) toggleSettingsMenu(false);
+  });
+  document.addEventListener('keydown', event => {if (event.key === 'Escape') {toggleLanguageMenu(false); toggleSettingsMenu(false);}});
+  window.addEventListener('resize', () => {
+    if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();
+    if (!$('settings-menu').classList.contains('hidden')) placeSettingsMenu();
+  });
+  document.querySelector('.sidebar').addEventListener('scroll', () => {
+    if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();
+    if (!$('settings-menu').classList.contains('hidden')) placeSettingsMenu();
+  }, {passive: true});
   $('theme-toggle').addEventListener('click', toggleTheme);
   bindSidebarResize();
   $('measure-pick').addEventListener('click', chooseMeasureImage);

@@ -14,7 +14,7 @@ const {recipeFor, setupError} = require('./patch-recipe');
 const {MAPPED_ARGS, argValue, ffugenArgs, fontJobProblem, strokeFor, withOverrides} = require('./font-map');
 const {detect} = require('./detect-engine');
 const {extractGame} = require('./game-extract');
-const {linkedNotes, documentationPage} = require('./markdown');
+const {splitGuide, documentationPage} = require('./markdown');
 
 let window;
 let currentRun = null;
@@ -443,17 +443,6 @@ ipcMain.handle('setup-python', () => {
 ipcMain.handle('open-workspace', () => shell.openPath(workspace()));
 // A note lives in the project folder once the engine has been copied there, and
 // in the engine folder before that. Only a relative Markdown path is readable.
-function documentFile(name) {
-  const relative = String(name || '').replace(/\\/g, '/');
-  if (!relative.endsWith('.md') || relative.split('/').some(part => !part || part === '.' || part === '..')) return null;
-  for (const root of [workspace(), enginePath(activeEngine())]) {
-    const file = path.resolve(root, relative);
-    const escaped = path.relative(path.resolve(root), file);
-    if (escaped.startsWith('..') || path.isAbsolute(escaped) || !fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
-    return file;
-  }
-  return null;
-}
 let docsServer = null;
 let docsHtml = '';
 function docsPort() {
@@ -468,27 +457,12 @@ function docsPort() {
   });
 }
 ipcMain.handle('open-documentation', async (_event, language) => {
-  const engine = activeEngine();
   const lang = language === 'vi' ? 'vi' : 'en';
-  const pages = [];
-  const seen = new Set();
-  const queue = engine.docs.map(([label, name]) => ({name, label}));
-  while (queue.length && pages.length < 40) {
-    const {name, label} = queue.shift();
-    if (seen.has(name)) continue;
-    seen.add(name);
-    const file = documentFile(name);
-    if (!file) continue;
-    const text = fs.readFileSync(file, 'utf8');
-    const title = (lang === 'vi' && engine.vi?.docs?.[name]) || label || name;
-    pages.push({name, label: title, text});
-    for (const linked of linkedNotes(name, text)) if (!seen.has(linked)) queue.push({name: linked});
-  }
-  const flow = (lang === 'vi' && engine.vi?.flow) || engine.flow;
+  const guide = splitGuide(fs.readFileSync(path.join(__dirname, 'guides', lang === 'vi' ? 'app.vi.md' : 'app.en.md'), 'utf8'));
   docsHtml = documentationPage({
-    title: `${t('rail.docs', lang)} — ${engine.name}`,
-    intro: pages.length ? `${t('docs.body', lang, {engine: engine.name})} ${t('docs.flow', lang, {flow})}` : t('docs.none', lang),
-    pages
+    title: t('rail.docs', lang),
+    intro: guide.intro,
+    pages: guide.pages
   });
   const port = await docsPort();
   await shell.openExternal(`http://127.0.0.1:${port}/`);
