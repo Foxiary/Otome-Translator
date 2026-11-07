@@ -42,7 +42,7 @@ const engines = [
       ['Repacking', 'docs/04-repacking.md']],
     flow: 'Export text to a sheet → translate → apply the sheet into the bundles → check layout → package the mod.',
     modules: ['UnityPy', 'PIL', 'openpyxl', 'numpy', 'fontTools', 'Crypto', 'lz4'],
-    hashes: {},
+    hashes: require('./engine-update-unity.json'),
     groups: require('./catalog-unity').groups,
     symbols: require('./catalog-unity').symbols,
     summaries: require('./catalog-unity').summaries,
@@ -60,7 +60,7 @@ const engines = [
     // nsp.py falls back to the openssl command without pycryptodome, which Windows lacks.
     // PIL: sprite.py reads and writes the UI images.
     modules: ['openpyxl', 'Crypto', 'PIL'],
-    hashes: {},
+    hashes: require('./engine-update-rrlib.json'),
     groups: require('./catalog-rrlib').groups,
     symbols: require('./catalog-rrlib').symbols,
     summaries: require('./catalog-rrlib').summaries,

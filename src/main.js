@@ -15,6 +15,7 @@ const {MAPPED_ARGS, argValue, ffugenArgs, fontJobProblem, strokeFor, withOverrid
 const {detect} = require('./detect-engine');
 const {extractGame} = require('./game-extract');
 const {splitGuide, documentationPage} = require('./markdown');
+const {syncEngineFiles, sha256} = require('./engine-copy');
 
 let window;
 let currentRun = null;
@@ -68,31 +69,23 @@ function saveSettings() {
 function activeEngine() { return engineById.get(settings.engine); }
 function workspace() { return settings.workspaces[settings.engine]; }
 function enginePath(engine) { return path.resolve(__dirname, '..', 'engines', engine.dir); }
-function sha256(data) { return require('node:crypto').createHash('sha256').update(data).digest('hex'); }
-function copyMissing(source, target, relative, previousHashes) {
-  if (!fs.existsSync(source)) return;
-  const stat = fs.statSync(source);
-  if (stat.isDirectory()) {
-    if (['__pycache__', '.git'].includes(path.basename(source))) return;
-    fs.mkdirSync(target, {recursive: true});
-    for (const name of fs.readdirSync(source)) copyMissing(path.join(source, name), path.join(target, name), `${relative}/${name}`, previousHashes);
-  } else if (!fs.existsSync(target)) fs.copyFileSync(source, target);
-  else if (previousHashes[relative]) {
-    // Every earlier version the file has had (scripts/update-engine-hashes.js): an
-    // untouched copy of any of them is replaced, an edited one is kept.
-    const earlier = [].concat(previousHashes[relative]);
-    // Hashes are recorded over LF text, so a CRLF checkout must match too.
-    const data = fs.readFileSync(target);
-    const lf = Buffer.from(data.toString('latin1').split('\r\n').join('\n'), 'latin1');
-    if ([sha256(data), sha256(lf)].some(hash => earlier.includes(hash))) fs.copyFileSync(source, target);
-  }
-}
+// What the app last wrote into each project folder, per engine: lets
+// syncEngineFiles bring an untouched copy up to date (src/engine-copy.js).
+function copiesPath() { return path.join(app.getPath('userData'), 'engine-copies.json'); }
 function prepareWorkspace(folder, engine) {
-  fs.mkdirSync(folder, {recursive: true});
-  for (const name of engine.copy) {
-    copyMissing(path.join(enginePath(engine), name), path.join(folder, name), name, engine.hashes);
-  }
-  copyMissing(path.resolve(__dirname, '..', 'requirements.txt'), path.join(folder, 'requirements.txt'), 'requirements.txt', engine.hashes);
+  let copies = {};
+  try { copies = JSON.parse(fs.readFileSync(copiesPath(), 'utf8')); } catch {}
+  const key = path.resolve(folder);
+  const entries = engine.copy.map(name => [path.join(enginePath(engine), name), name]);
+  entries.push([path.resolve(__dirname, '..', 'requirements.txt'), 'requirements.txt']);
+  const result = syncEngineFiles(folder, entries, engine.hashes, copies[key]?.[engine.id]);
+  copies[key] = {...copies[key], [engine.id]: result.record};
+  try {
+    fs.mkdirSync(path.dirname(copiesPath()), {recursive: true});
+    fs.writeFileSync(copiesPath(), JSON.stringify(copies, null, 2));
+  } catch {}
+  if (result.updated.length) console.log(`${engine.id}: brought up to date in ${folder}: ${result.updated.join(', ')}`);
+  if (result.kept.length) console.log(`${engine.id}: kept your edited copies in ${folder}: ${result.kept.join(', ')}`);
 }
 // Whether the chosen Python starts (`found`) and which of the engine's modules
 // it cannot import (`missing`): the window asks for the right fix from these.

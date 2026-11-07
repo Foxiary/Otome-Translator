@@ -76,13 +76,14 @@ Nếu npm chặn bước cài Electron, chạy `npm approve-scripts electron` v�
 
 Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js`, `src/catalog-unity.js` và `src/catalog-rrlib.js`; `src/engines.js` khai báo engine, thư mục chép vào workspace, tài liệu và thư viện Python cần có.
 
+Công cụ chạy từ bản chép trong workspace, không chạy từ `engines/`. Mỗi lần mở app hoặc chọn workspace, `src/engine-copy.js` chép file còn thiếu và thay file chưa bị sửa. Một file được coi là chưa bị sửa khi nó giống một bản cũ có trong `src/engine-update*.json`, hoặc giống đúng bản app đã chép vào đó lần trước (ghi trong `engine-copies.json` ở thư mục dữ liệu của app). File người dùng đã sửa thì được giữ. Sau khi sửa file nào mà unity hoặc rrlib chép vào workspace, chạy `node scripts/update-engine-hashes.js` rồi commit cùng; `npm run check` báo lỗi nếu quên.
+
 Phần nhận diện engine nằm ở `src/detect-engine.js`. Nó chỉ đọc tên file và vài byte đầu file. Với `.nsp` và `.xci`, nó chỉ giải mã header NCA và mục lục RomFS bằng `prod.keys` (tìm ở `~/.switch/` và thư mục `system` của Ryujinx, hoặc chọn tay), nên file game 4–6 GB cũng chỉ mất dưới 0,1 giây. XCI đi qua header `HEAD` và hai lớp HFS0 (gốc → `secure`) rồi dùng chung phần đọc NCA. Chưa đọc được `.nsz`, `.xcz`, và file cập nhật tách riêng (cần bản game gốc). Phần giải nén nằm ở `src/game-extract.js`: đọc theo khối 8 MB để cửa sổ không bị treo, có tiến độ, dừng được, kiểm dung lượng trống trước; bản USA của Code: Realize (3,55 GB) giải nén trong khoảng 6 giây. `scripts/test-detect-engine.js` tự dựng một NSP và một XCI mã hoá bằng khoá ngẫu nhiên để kiểm cả đường giải mã lẫn giải nén. Muốn thêm engine mới vào phần nhận diện thì thêm dấu hiệu tên file và byte đầu vào `PATH_RULES` và `magicOf()`.
 
 Để lên bản VE-ES mới:
 
-1. Ghi hash SHA-256 (sau khi đổi CRLF thành LF) của các file sắp bị thay vào `src/engine-update.json`. Workspace nào còn giữ đúng bản cũ đó sẽ được chép bản mới khi mở app.
-2. `git -C engines/otomate pull origin master`, rồi commit con trỏ submodule mới.
-3. Sửa `SOURCE_COMMIT` trong `src/main.js` thành commit đó.
+1. `git -C engines/otomate pull origin master`, rồi chạy `node scripts/update-engine-hashes.js` để ghi hash của mọi bản cũ vào `src/engine-update.json`, và commit cùng con trỏ submodule mới. Workspace nào còn giữ đúng một bản cũ sẽ được chép bản mới khi mở app.
+2. Sửa `SOURCE_COMMIT` trong `src/main.js` thành commit đó.
 
 ## Thông báo cập nhật
 
