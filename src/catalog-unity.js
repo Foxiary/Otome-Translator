@@ -5,7 +5,7 @@ const V = (name, kind = 'text', help = '', required = false, repeat = false) => 
 const B = (name, help = '') => ({name, kind: 'bool', help});
 const T = (id, group, title, description, script, prefix, args, note = '') => ({id: `unity-${id}`, group, title, description, script, prefix, args, note});
 
-const DRY = 'Only shows what would change until you tick Apply. If you save over the original file, a .bak backup is kept.';
+const DRY = 'Runs as a dry run first; if it ends without errors, the app asks before writing. If you save over the original file, a .bak backup is kept.';
 const UV = V('--unity-version', 'text', 'Fallback Unity version for files that carry none, e.g. 2021.3.0f1');
 const PACKER = V('--packer', 'text', 'auto (lz4 for bundles, none for .assets), lz4, lzma, none, original');
 

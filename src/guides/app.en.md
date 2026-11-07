@@ -108,7 +108,7 @@ The title screen shows a quote from the ending you last cleared. Those lines are
 
 ## Unity
 
-Work on a copy. Keep one dump that you never edit. Anything that writes a file only shows the plan until you tick **Apply** or **Build**. Saving over the file you opened keeps a `.bak`.
+Work on a copy. Keep one dump that you never edit. A tool that writes files runs as a dry run first: if it finds no problem, the app shows where it will write and asks before writing. The package tool still waits for **Build**. Saving over the file you opened keeps a `.bak`.
 
 1. **Dump → Extract game files** for the data, and **Take out the game's program** when you need text that lives in code. An update's RomFS is not read; use the base game.
 2. **Inspect → See what's inside a file.** Text is usually a TextAsset, a TextMeshPro box, a string baked into code, or pixels painted into a picture. There is no general tool yet for text painted into pictures.
@@ -125,7 +125,7 @@ The script is not a CPK. It is `common/script.memfs` plus `common/script.membody
 
 1. **Dump → Take files out of the game**, with the paths `common/script.memfs` and `common/script.membody`. **Take out the game's program** as well. Keep this Japanese copy. A later patch redirects three prologue scripts from the program, so the index alone does not say which bytes the game loads.
 2. **Patch → Check a patch** against that Japanese copy. It reports lost position, name, and pause tags, lines hidden off screen, and a bad length, and it changes nothing.
-3. **Patch → Rebuild the patch.** With **Apply** off it only prints a report. Tick **Apply** to write `script.memfs` and `script.membody`, then copy those two files into the mod's `romfs/common/`. Do not copy a Japanese `#P` tag onto a Vietnamese line. Several tags in one Japanese string are usually one paragraph. A longer translation is moved down so lines do not overlap. Twenty-seven Japanese lines sit off screen on purpose, because the words are already painted on the art: those stay without a position tag, or the translation disappears and only the backlog keeps it. Lost `#T` and `#KW` tags are listed for you to fix by hand.
+3. **Patch → Rebuild the patch.** The dry run prints a report; say yes when the app asks and it writes `script.memfs` and `script.membody`. Then copy those two files into the mod's `romfs/common/`. Do not copy a Japanese `#P` tag onto a Vietnamese line. Several tags in one Japanese string are usually one paragraph. A longer translation is moved down so lines do not overlap. Twenty-seven Japanese lines sit off screen on purpose, because the words are already painted on the art: those stay without a position tag, or the translation disappears and only the backlog keeps it. Lost `#T` and `#KW` tags are listed for you to fix by hand.
 4. **Sheets → Tag fixes for the sheet.** Copy the suggested lines into the translation column. The sheet also says which lines must stay untagged. Fix the sheet so the next rebuild does not drop the tags again.
 5. Pack the mod like the original zip: `exefs/` and `romfs/` at the top of the zip, not inside another folder.
 

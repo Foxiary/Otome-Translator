@@ -108,7 +108,7 @@ Màn hình chính hiện một câu trích của ending vừa phá. Các câu đ
 
 ## Unity
 
-Làm trên bản sao. Giữ một bản dump không bao giờ sửa. Công cụ nào ghi file đều chỉ hiện kế hoạch cho tới khi bạn tích **Apply** hoặc **Build**. Ghi đè lên chính file đã mở thì giữ một bản `.bak`.
+Làm trên bản sao. Giữ một bản dump không bao giờ sửa. Công cụ nào ghi file đều chạy thử trước: nếu không có lỗi, app cho biết sẽ ghi vào đâu và hỏi bạn có ghi không. Riêng công cụ đóng gói vẫn chờ bạn tích **Build**. Ghi đè lên chính file đã mở thì giữ một bản `.bak`.
 
 1. **Lấy dữ liệu → Giải nén dữ liệu game** cho phần dữ liệu, và **Lấy file chương trình của game** khi cần chữ nằm trong code. RomFS của file cập nhật không đọc được; dùng bản game gốc.
 2. **Xem → Xem bên trong file.** Chữ thường nằm ở TextAsset, khung TextMeshPro, chuỗi nướng trong code, hoặc pixel vẽ sẵn trên tranh. Chưa có công cụ chung cho chữ vẽ sẵn trên tranh.
@@ -125,7 +125,7 @@ Kịch bản không nằm trong CPK. Nó là `common/script.memfs` cùng `common
 
 1. **Lấy dữ liệu → Lấy file ra khỏi game**, với đường dẫn `common/script.memfs` và `common/script.membody`. Rồi chạy **Lấy file chương trình của game**. Giữ bản Nhật này. Bản patch sau chuyển hướng ba kịch bản mở đầu từ file chương trình, nên chỉ nhìn mục lục thì không biết game đang nạp byte nào.
 2. **Bản patch → Kiểm tra bản patch**, so với bản Nhật đó. Nó báo tag vị trí, tên và dừng bị mất, câu bị giấu ngoài màn hình, và độ dài sai. Không sửa gì.
-3. **Bản patch → Dựng lại bản patch.** Tắt **Apply** thì chỉ in báo cáo. Tích **Apply** để ghi `script.memfs` và `script.membody`, rồi chép hai file đó vào `romfs/common/` của mod. Đừng chép tag `#P` của tiếng Nhật lên câu tiếng Việt. Nhiều tag trong một câu Nhật thường là một đoạn. Bản dịch dài hơn thì được đẩy xuống để các câu không đè nhau. Hai mươi bảy câu Nhật cố ý nằm ngoài màn hình, vì chữ đã vẽ trên tranh: những câu đó để không có tag vị trí, nếu không bản dịch biến mất và chỉ backlog còn giữ. Tag `#T` và `#KW` bị mất được liệt kê để sửa tay.
+3. **Bản patch → Dựng lại bản patch.** Lần chạy thử in báo cáo; đồng ý khi app hỏi thì nó ghi `script.memfs` và `script.membody`. Rồi chép hai file đó vào `romfs/common/` của mod. Đừng chép tag `#P` của tiếng Nhật lên câu tiếng Việt. Nhiều tag trong một câu Nhật thường là một đoạn. Bản dịch dài hơn thì được đẩy xuống để các câu không đè nhau. Hai mươi bảy câu Nhật cố ý nằm ngoài màn hình, vì chữ đã vẽ trên tranh: những câu đó để không có tag vị trí, nếu không bản dịch biến mất và chỉ backlog còn giữ. Tag `#T` và `#KW` bị mất được liệt kê để sửa tay.
 4. **Bảng dịch → Danh sách sửa tag cho bảng dịch.** Chép các câu đề xuất vào cột bản dịch. Bảng cũng nói câu nào phải để không có tag. Sửa bảng để lần dựng sau không mất tag nữa.
 5. Đóng gói mod như file zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc, không nằm trong một thư mục nữa.
 

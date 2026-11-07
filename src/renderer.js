@@ -340,6 +340,41 @@ function captureValues() {
   }
   formValues[current.id] = values;
 }
+// A tool that writes only when given --apply has no Apply checkbox: Run always
+// does a dry run, and when that ends cleanly and says there is something to
+// write (the tools print "add --apply to write <where>"), the app asks whether
+// to write, then runs it again with --apply. A tick nobody remembers is gone.
+const APPLY = '--apply';
+const appliesLater = item => item.args.some(arg => arg.kind === 'bool' && arg.name === APPLY);
+let applyOffer = null;   // {id, values, output} while such a dry run is going
+function offerApply(offer) {
+  const item = tools().find(t => t.id === offer.id);
+  if (!item) return;
+  const where = offer.output.match(/--apply\s+(?:de ghi vao|to write)\s+(.+?)\s*$/m)?.[1];
+  // True until the user says write, and that run starts a log of its own.
+  setLog(`${currentLog}${text('apply.declined')}\n`);
+  whenNoDialog(() => {
+    dialogContent(text('apply.title'), body => {
+      paragraph(body, text('apply.body', {tool: toolText(item, 'title')}));
+      if (where) {paragraph(body, text('apply.where')); paragraph(body, where, 'mono');}
+      const actions = elt('div', 'dialog-actions');
+      const add = (label, onClick, className) => {
+        const node = elt('button', className, label);
+        node.type = 'button';
+        node.addEventListener('click', onClick);
+        actions.append(node);
+      };
+      add(text('apply.write'), async () => {
+        $('info-dialog').close();
+        try {await window.vees.run(offer.id, {...offer.values, [APPLY]: true});}
+        catch (error) {showError(error.message);}
+      }, 'button primary');
+      add(text('apply.notNow'), () => $('info-dialog').close(), 'button quiet');
+      body.append(actions);
+    });
+    $('info-dialog').querySelector('.dialog-actions .primary')?.focus();
+  });
+}
 function renderForm() {
   const current = tool();
   if (!current) return;
@@ -360,6 +395,7 @@ function renderForm() {
   const fields = mapping ? $('fonts-options') : $('form-fields');
   for (const [index, arg] of current.args.entries()) {
     if (mapping && MAPPED_ARGS.includes(arg.name)) continue;
+    if (arg.name === APPLY && appliesLater(current)) continue;
     const field = elt('div',`field ${arg.kind === 'bool' ? 'toggle-field' : ''} ${arg.repeat || arg.help?.length > 85 ? 'wide' : ''}`);
     const label = elt('label','',titleOf(arg.name));
     label.htmlFor = `arg-${index}`;
@@ -1355,9 +1391,12 @@ async function start() {
     if(running)return;
     captureValues();
     const current = tool();
+    const values = {...formValues[current.id]};
+    applyOffer = null;
+    if (appliesLater(current)) {delete values[APPLY]; applyOffer = {id: current.id, values, output: ''};}
     try {
-      await window.vees.run(current.id,formValues[current.id]);
-    } catch(error){showError(error.message);}
+      await window.vees.run(current.id,values);
+    } catch(error){applyOffer = null; showError(error.message);}
   });
   $('cancel-button').addEventListener('click',async()=>{await window.vees.cancel();});
   window.vees.on('run-start',event=>{
@@ -1368,6 +1407,7 @@ async function start() {
   });
   window.vees.on('run-output',event=>{
     setLog(currentLog+event.text);
+    if (applyOffer) applyOffer.output += event.text;
     if (page === 'patch') {
       $('patch-log').textContent += event.text;
       $('patch-log-card').classList.remove('hidden');
@@ -1384,6 +1424,9 @@ async function start() {
       if (event.id === 'fonts') fontPage.result = event;
       render();
     }
+    const offer = applyOffer;
+    applyOffer = null;
+    if (offer && ok && !event.id && offer.output.includes(APPLY)) offerApply(offer);
     window.vees.state().then(fresh=>{state.settings=fresh.settings;state.workspace=fresh.workspace;updatePython(fresh.python);}).catch(()=>{});
   });
   $('tour-button').addEventListener('click', tour.start);

@@ -56,13 +56,13 @@ const tools = [
       V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/): its font, program and names are kept', true), V('--out', 'dir', 'Output folder', true), EXE,
       V('--report', 'save', 'CSV of the rows not written and the lines to look at'), V('--map', 'save', 'Save the font encoding learnt from the mod (.json)'),
       V('--use-map', 'file', 'Read the font encoding from a saved .json instead'), B('--apply', 'Write the files')],
-    'Only shows what would change until you tick Apply. A row left out keeps the mod\'s line; the report says why.'),
+    'Runs as a dry run first and asks before writing. A row left out keeps the mod\'s line; the report says why.'),
   T('audit', 'Patch', 'Check a patch', 'Compares a Vietnamese patch with the Japanese scripts: lost position, name and pause tags, lines hidden off-screen, broken headers. Nothing is changed.', 'tools/audit.py', [],
     [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--patch', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/)', true), EXE, V('--csv', 'save', 'Every finding with its Japanese and Vietnamese text')]),
   T('patch', 'Patch', 'Rebuild the patch', 'Rebuilds script.memfs and script.membody: puts the lost #P position tags back, keeps lines Japanese draws off-screen visible, points every script straight at its data and checks the result.', 'tools/patch.py', [],
     [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--patch', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/)', true), V('--out', 'dir', 'Output folder', true), EXE,
       B('--no-restore', 'Only rebuild, do not touch #P'), B('--keep-offscreen', 'Keep #P tags that put a line off-screen'), V('--report', 'save', 'CSV of every line touched'), B('--apply', 'Write the files')],
-    'Only shows what would change until you tick Apply. Try the result in the game before you share it.'),
+    'Runs as a dry run first and asks before writing. Try the result in the game before you share it.'),
 
   T('sheetfix', 'Sheets', 'Tag fixes for the sheet', 'Reads the translation sheet (.xlsx) and writes a workbook of fixes, by tab and row: #P tags to add, lines to leave untagged, and #T / #KW lines to fix by hand.', 'tools/sheetfix.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx)', true)]),
@@ -72,7 +72,7 @@ const tools = [
   T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder made by "See and take out a screen\'s images": every image that differs from the game is pasted back at its place, the screen\'s files are rebuilt and checked, untouched files byte for byte.', 'tools/sprite.py', ['import'],
     [SCREEN, A('image folder', 'dir', 'The folder you redrew, as it was taken out (file names unchanged)'),
       V('--out', 'dir', 'Where the rebuilt pair goes: romfs/spec_win/ssdata inside your mod', true), B('--apply', 'Write the files')],
-    'Only shows what would change until you tick Apply. Each image must keep its size; nothing outside it is drawn.'),
+    'Runs as a dry run first and asks before writing. Each image must keep its size; nothing outside it is drawn.'),
   T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
     [SCREEN])
 ];
