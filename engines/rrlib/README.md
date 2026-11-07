@@ -104,7 +104,28 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Công cụ chỉ dán những ô khác bản game. Nó báo ô sai kích thước, file đặt sai tên, và ô nào đè lên ô khác. Bản dựng được tự kiểm: file không sửa phải giữ nguyên từng byte, ảnh đã sửa phải đúng từng điểm ảnh. Chữ vẽ ra ngoài khung ô sẽ không hiện, vì game chỉ cắt đúng khung đó.
 
-7. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
+7. **Dịch chữ nằm trong file chương trình.** Câu hỏi trong hộp thoại (`前回と同じ名前を使用します｡` + `よろしいですか？` khi đặt tên), thông báo lưu nhanh/tải nhanh, câu hỏi ở màn hình cài đặt, chú thích nút (`{B} 戻る`), mục từ điển và tên chương không nằm trong kịch bản mà nằm sẵn trong `exefs/main`. Sheet dịch không có dòng nào cho chúng, và bản patch 02/10 chưa dịch câu nào. Vì font Việt dùng các ô kana cho chữ có dấu, những câu đó hiện thành chữ sai (`と` → `Ề`, `を` → `ặ`, `よ` → `Ở`).
+
+   Trong app việc này nằm ở nhóm **File chương trình**, hai bước:
+
+   **Bước 1: "Lấy chữ trong file chương trình ra".** Chọn `exefs/main` của mod và nơi lưu danh sách (`.csv`). Danh sách có khoảng 780 dòng, cột `address`, `refs`, `jp_text`, `vi_text`, `note`. Đưa file vào Google Sheets (File → Nhập), dịch cột `vi_text`, rồi tải về lại dạng `.csv` (File → Tải xuống → CSV, tải đúng tab đó). Bằng dòng lệnh:
+
+   ```
+   python tools/exetext.py export <thư mục mod>/exefs/main chu_exe.csv
+   ```
+
+   Cột `note` ghi những gì phải giữ: `%d`, `%ls` (thiếu hay thừa là game có thể lỗi, nên công cụ từ chối câu đó), ký hiệu nút `{B}`, `￥ｎ` (xuống dòng). Một số dòng là thông báo lỗi dành cho lập trình viên (biến, tag, UV…), không cần dịch. Ô `vi_text` để trống thì câu đó giữ tiếng Nhật.
+
+   **Bước 2: "Ghi chữ vào file chương trình".** Cần thêm **bảng mã font** (`.json`): lưu bằng "Ghi bảng dịch vào game", điền ô Map (`applysheet.py --map font.json`). Ô Ghi vào là `exefs` trong mod. Lần chạy đầu là chạy thử; không lỗi thì app hỏi có ghi không, và file `main` cũ được chép sang `main.bak`. Bằng dòng lệnh:
+
+   ```
+   python tools/exetext.py import <thư mục mod>/exefs/main chu_exe.csv --map font.json --out <thư mục mod>/exefs --report bao_cao_exe.csv
+   python tools/exetext.py import <thư mục mod>/exefs/main chu_exe.csv --map font.json --out <thư mục mod>/exefs --apply
+   ```
+
+   Câu dịch dài hơn tiếng Nhật cũng được: công cụ không ghi đè chỗ cũ mà đặt câu dịch vào một vùng mới ở cuối file chương trình, rồi trỏ mọi chỗ đang dùng câu tiếng Nhật sang đó. Muốn sửa bản dịch thì cứ chạy lại trên chính file `main` đã ghi: lần nào công cụ cũng gỡ bản dịch cũ, dựng lại từ bản gốc. Ba đoạn chuyển hướng của bản patch 02/10 được giữ nguyên. Kết quả được tự kiểm, nhưng câu nào chương trình tạo ra theo cách khác thì vẫn là tiếng Nhật, và khung chữ không tự rộng ra, nên hãy thử từng màn hình trong game. File `main` mới khoảng 7 MB (bản cũ 3 MB) vì được ghi không nén; game vẫn nạp bình thường.
+
+8. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
 
 ## Những điều cần nhớ
 
@@ -120,6 +141,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
 - Không tạo hay sửa font (`romfs/spec_win/font/*.font.memfs`): `applysheet.py` cần font của một bản mod có sẵn. Chữ hoa nào bản mod chưa từng dùng (lần này là `Ể`, `Ổ`, mỗi chữ một lần) thì ghi bằng chữ thường và báo lại.
 - `#T` và `#KW` bị mất phải sửa tay theo cột JP; công cụ chỉ liệt kê.
+- `exetext.py` chỉ dịch được câu mà nó tìm thấy chỗ trỏ tới (con trỏ trong bảng relocation, hoặc lệnh ADRP+ADD/ADR). Exe JP có 7 chuỗi không tìm thấy, đều là dữ liệu nhị phân trông giống chữ.
 - `sprite.py` chỉ ghi được ảnh RGBA8 thường. Mọi ảnh chữ giao diện của game đều thuộc loại này. Nền nén khối (BC), như 5 ảnh nền `mat_ttlm_bg_chr0N` của menu tiêu đề, và các mặt nạ chuyển cảnh 8/16/24-bit thì được liệt kê rồi bỏ qua. Công cụ không tự vẽ chữ: người dịch tự vẽ lại từng ô.
 - Chỉ mới thử với Matsurika no Kei. Game khác dùng `rrlib/memfs` có thể cần chỉnh lại các số đo trong `tools/tags.py`.
 

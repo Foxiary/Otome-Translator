@@ -15,7 +15,8 @@ romfs/common/script.memfs      index (RSON)            11 406 B
 romfs/common/script.membody    130 scripts, compressed 2.08 MB JP
 romfs/spec_win/font/*.font.memfs   fonts - not covered here
 romfs/spec_win/ssdata/*.memfs  UI art: menu labels and buttons are pixels, see "UI art"
-exefs/main                     the VI patch ships a modified one, see "The exe hook"
+exefs/main                     system text as UTF-32 (see "Text in the program");
+                               the VI patch ships a modified one, see "The exe hook"
 ```
 
 `tools/nsp.py` takes single files out of the NSP; the RomFS is 12 842 files and
@@ -138,6 +139,49 @@ finds these pairs by instruction pattern. Consequences:
   or the hook moves it. `tools/patch.py` points entries straight at their
   chunks (u32 where needed) and refuses a collision, so the hook stays installed
   but never fires.
+
+## Text in the program (exetext.py)
+
+Dialog prompts, quick save/load messages, the settings screen's questions,
+button help (`{L}{R} タブ切替　{B} 戻る`), glossary entries (`#R(おう,りゅう)応龍`),
+chapter and song titles (`幾千の花が咲いて￥ｎ枯れた果てに`) and the script
+compiler's error messages live in `main`'s .rodata as **UTF-32LE**,
+NUL-terminated. Searches for UTF-8 or UTF-16 find nothing, and nothing at all
+is visible until the NSO's LZ4 segments are unpacked. The name-entry prompt is
+two strings from one message table, `前回と同じ名前を使用します｡` (0x35f218)
+and `\nよろしいですか？` (0x38b8ac). The 02/10 patch left all of them Japanese,
+so they draw as Vietnamese letters wherever a kana code carries one.
+
+How the program reaches them, on the JP 1.0.0 main: 784 Japanese strings are
+pointed at - 718 `R_AARCH64_RELATIVE` relocations (their in-place value is 0;
+the address is the addend), 155 `ADRP`+`ADD` pairs and one `ADR`. 7 runs of
+UTF-32-looking Japanese have no pointer; all are binary data. The linker
+merges string tails, so a pointer may land inside a longer string.
+
+Space: VI is about twice as long, so nothing is rewritten in place. The
+module image ends at 0x6a6000 (.data 0x549000 + 0x5f6f8, .bss 0xfd908);
+MOD0's bss_end is 0x6a5d70. `exetext.py import` turns .bss into zero-filled
+.data (rtld clears that range anyway), appends the translations after
+0x6a6000, and repoints: a relocation gets a new addend, an `ADD` (or `ADR`)
+becomes `ADRP Xd, page` - exact only for a page-aligned target, so a string
+the code reaches starts a page; strings only pointers reach fill the gaps.
+The original `ADRP` stays, harmless if another `ADD` shares it. A table at
+the start of the new area keeps every changed value and a trailer
+`RRLBTEXT` + its address closes .data, so the tool undoes its own earlier run
+before writing a new one. Segments are written uncompressed with their
+SHA-256 recomputed; Ryujinx and Atmosphere take either.
+
+Font: same mapping as the scripts (`applysheet.py --map`), plus `ĩ`/`ũ`, which
+the mod's scripts write at their own code (5 961 times) so the learnt map does
+not list them. `、` is the font's `ừ`. A `%d`/`%ls` that differs from JP is
+refused: printf would read the wrong arguments.
+
+Seen in game on Astrid (2026-11-08): a main with only the name prompt
+translated (`~/Documents/Game/matsurika-exetext-test-2026-11-08`) boots and
+shows both halves in Vietnamese. That proves the uncompressed NSO, the
+.bss-to-.data area and repointed relocations; both strings are reached through
+relocations, so a translation the code reaches with ADRP (`refs` "code") has
+not been seen in game yet.
 
 ## .tat scripts ("KUV ")
 

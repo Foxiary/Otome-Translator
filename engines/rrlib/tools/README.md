@@ -15,6 +15,7 @@ Mỗi script tự mô tả trong docstring đầu file (`python tools/<tên>.py 
 | `patch.py` | | Dựng lại `script.memfs` + `script.membody`: trả `#P`, trỏ thẳng chunk, nới u32, sửa header, tự kiểm |
 | `sheetfix.py` | | Từ sheet dịch (`.xlsx`) ra file đề xuất sửa tag theo đúng tab + dòng |
 | `sprite.py` | `translate`, `export`, `import`, `check` | Ảnh giao diện (`spec_win/ssdata/*.memfs`). `translate`: thư mục trống thì xuất từng ô chữ ra PNG theo tên phần hình, thư mục đã xuất thì dán các ô đã vẽ lại, đóng gói, tự kiểm. `export` / `import` là từng nửa riêng. Cần Pillow |
+| `exetext.py` | `export`, `import`, `check` | Chữ nằm trong `exefs/main` (UTF-32): hộp thoại, lưu nhanh, chú thích nút, từ điển, tên chương. `export` ra danh sách `.csv`, `import` ghi cột `vi_text` vào một vùng mới ở cuối exe và trỏ lại mọi chỗ dùng câu Nhật, tự kiểm, chạy lại được trên chính file nó ghi |
 | `tags.py` | | Thư viện: đọc tag, trả `#P`, các số đo màn hình — không phải lệnh |
 
 ## Đã kiểm trên dữ liệu thật
@@ -72,3 +73,15 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
 - Lệnh ghi file thì chạy thử trước; thêm `--apply` mới ghi. File đã có được chép sang `<tên>.bak` nằm cạnh nó trong cùng thư mục (đã có `.bak` thì `.bak2`, `.bak3`…); lần chạy thử và nhật ký ghi đúng tên bản sao.
 - Mọi đường dẫn nhận qua tham số; không có gì gắn cứng với máy nào.
 - Comment trong code bằng tiếng Anh, tài liệu bằng tiếng Việt, `CLAUDE.md` bằng tiếng Anh.
+
+- `exetext.py` trên `main` JP và `main` của bản mod (2026-11-08), khoảng 1 giây:
+  - tìm thấy 784 chuỗi tiếng Nhật có chỗ trỏ tới: 718 con trỏ, 155 cặp
+    ADRP+ADD, 1 ADR; 7 chuỗi không có chỗ trỏ, đều là dữ liệu nhị phân;
+  - `check`: dời cả 784 chuỗi sang vùng mới, mọi chỗ trỏ đọc ra đúng chuỗi cũ,
+    hoàn tác ra đúng exe; 3 đoạn chuyển hướng của bản patch giữ nguyên;
+  - ghi thử 2 câu của hộp thoại đặt tên vào `main` của bản mod: tự kiểm OK,
+    header và SHA-256 từng phần kiểm lại riêng đều đúng, `export --map` trên
+    file mới đọc lại đúng 2 câu dịch;
+  - **trong game (Astrid):** game chạy bình thường, hộp thoại đặt tên hiện đúng
+    hai câu tiếng Việt. Hai câu này đều đi qua con trỏ; câu mà code trỏ tới bằng
+    ADRP (cột `refs` ghi "code") chưa thử trong game.

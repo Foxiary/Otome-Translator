@@ -11,14 +11,15 @@ const EXE = V('--exe', 'file', 'Patched exefs/main, to follow the read redirects
 
 const SCREEN = A('screen', 'file', 'A screen\'s .memfs under romfs/spec_win/ssdata, e.g. ttlm_nam.memfs (title menu); its data file must sit next to it');
 
-const groups = ['Dump', 'Inspect', 'Patch', 'Sheets', 'Images'];
-const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦', Images: '▣'};
+const groups = ['Dump', 'Inspect', 'Patch', 'Sheets', 'Images', 'Executable'];
+const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦', Images: '▣', Executable: '⌘'};
 const summaries = {
   Dump: 'Take the whole game, or single files, out of your .nsp or .xci, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
   Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it.',
   Sheets: 'Turn the translation sheet into a list of tag fixes.',
-  Images: 'Menu labels, buttons and help lines are painted into textures: take them out as images, redraw them and put them back.'
+  Images: 'Menu labels, buttons and help lines are painted into textures: take them out as images, redraw them and put them back.',
+  Executable: 'Text built into the program file (exefs/main): dialog questions, quick save messages, button help, glossary and chapter titles.',
 };
 
 const tools = [
@@ -78,7 +79,23 @@ const tools = [
       V('--out', 'dir', 'Where the rebuilt screen is written: romfs/spec_win/ssdata inside your mod. An older file there is first copied to .bak beside it', true), B('--apply', 'Write the files')]),
   follows: {tool: 'rrlib-sprite-export', fields: {screen: 'screen', 'image folder': 'output folder'}}},
   T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
-    [SCREEN])
+    [SCREEN]),
+
+  // Two steps like the images: the list step 1 saves is the list step 2 reads.
+  T('exetext-export', 'Executable', 'List the program\'s text', 'Dialog questions (前回と同じ名前を使用します｡), quick save messages, button help, glossary entries and chapter titles are built into the program file (exefs/main), not the scripts: the translation sheet has no rows for them, and the Vietnamese font shows them as wrong letters. Saves every Japanese line of the program to a list (.csv) with an empty vi_text column to translate; the note column says what to keep (%d, {B}, line breaks). Then use "Write the program\'s text into the game": the app fills in this program and list there.', 'tools/exetext.py', ['export'],
+    [A('main', 'file', 'exefs/main of your mod (or the Japanese one)'),
+      A('list', 'save', 'Where to save the list (.csv; .xlsx needs openpyxl). Leave it empty to only see it', true),
+      V('--map', 'file', 'Font encoding (.json): on a program this tool already wrote, fills vi_text with what is in it')]),
+  {...T('exetext-import', 'Executable', 'Write the program\'s text into the game', 'Writes the vi_text column of the list into exefs/main, encoded for the mod\'s Vietnamese font, and checks the result. Each translation goes to a new area at the end of the program and everything that pointed at the Japanese line points at it instead, so a translation may be longer than the Japanese. To change translations, run it again on the main it wrote: it starts from the original each time.', 'tools/exetext.py', ['import'],
+    [A('main', 'file', 'exefs/main of your mod, translated before or not (filled in from step 1)'),
+      A('list', 'file', 'The list from step 1 with vi_text filled in (.csv, or .xlsx with openpyxl)'),
+      V('--map', 'file', 'Font encoding (.json), saved by "Write the sheet into the game" (its Map field)', true),
+      V('--out', 'dir', 'Where the new main goes: exefs inside your mod. An older main there is first copied to main.bak', true),
+      V('--report', 'save', 'CSV of every row and what was done with it'), B('--apply', 'Write the file')],
+    'Runs as a dry run first and asks before writing. A line the program builds some other way keeps its Japanese: try each screen in the game.'),
+  follows: {tool: 'rrlib-exetext-export', fields: {main: 'main', list: 'list'}}},
+  T('exetext-check', 'Executable', 'Check the program\'s text', 'Lists the Japanese lines found in exefs/main and what points at them, then moves them all to the new area unchanged and checks that every pointer still reads the same line and that undoing it gives the program back byte for byte. Nothing is written.', 'tools/exetext.py', ['check'],
+    [A('main', 'file', 'exefs/main')])
 ];
 
 module.exports = {tools, groups, symbols, summaries};

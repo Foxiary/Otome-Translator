@@ -93,7 +93,23 @@ const tools = {
       '--out': {label: 'Ghi vào', help: 'Thư mục romfs/spec_win/ssdata trong mod: file của màn hình được ghi vào đây. File cũ cùng tên được chép sang file .bak nằm cạnh nó trước khi ghi.'}
     }},
   'rrlib-sprite-check': {title: 'Kiểm tra file của một màn hình', description: 'Dựng lại một màn hình mà không sửa gì, kết quả phải giống từng byte, và thử nén lại mọi ảnh mà công cụ ghi được.',
-    args: {screen: {label: 'Màn hình', help: 'File .memfs của màn hình, trong romfs/spec_win/ssdata. File .membody cùng tên phải nằm cạnh nó.'}}}
+    args: {screen: {label: 'Màn hình', help: 'File .memfs của màn hình, trong romfs/spec_win/ssdata. File .membody cùng tên phải nằm cạnh nó.'}}},
+  'rrlib-exetext-export': {title: 'Lấy chữ trong file chương trình ra', description: 'Câu hỏi trong hộp thoại (前回と同じ名前を使用します｡), thông báo lưu nhanh, chú thích nút bấm, mục từ điển và tên chương nằm sẵn trong file chương trình (exefs/main) chứ không ở kịch bản: bảng dịch không có dòng nào cho chúng, và font tiếng Việt vẽ chúng thành chữ sai. Công cụ lưu mọi câu tiếng Nhật của file chương trình thành một danh sách (.csv) có cột vi_text trống để dịch; cột note ghi những gì phải giữ (%d, {B}, xuống dòng). Dịch xong thì dùng "Ghi chữ vào file chương trình": app đã điền sẵn file chương trình và danh sách cho bước đó.',
+    args: {
+      main: {label: 'File chương trình', help: 'exefs/main của bản mod (hoặc của bản Nhật).'},
+      list: {label: 'Danh sách', help: 'Nơi lưu danh sách (.csv; muốn .xlsx thì cần openpyxl). Bỏ trống thì chỉ xem danh sách.'},
+      '--map': {label: 'Bảng mã font', help: 'File .json mã hoá font. Với file chương trình công cụ này đã ghi, cột vi_text được điền sẵn bản dịch đang có trong đó.'}
+    }},
+  'rrlib-exetext-import': {title: 'Ghi chữ vào file chương trình', description: 'Ghi cột vi_text của danh sách vào exefs/main, mã hoá theo font tiếng Việt của bản mod, rồi tự kiểm tra kết quả. Mỗi câu dịch được đặt vào một vùng mới ở cuối file chương trình và mọi chỗ trỏ tới câu tiếng Nhật được trỏ sang nó, nên câu dịch dài hơn tiếng Nhật cũng được. Muốn sửa bản dịch thì chạy lại trên chính file main nó đã ghi: lần nào công cụ cũng dựng lại từ bản gốc.', note: 'Chạy thử trước rồi mới hỏi có ghi không. Câu nào chương trình tạo ra theo cách khác thì vẫn là tiếng Nhật: hãy thử từng màn hình trong game.',
+    args: {
+      main: {label: 'File chương trình', help: 'exefs/main của bản mod, đã dịch hay chưa đều được (app điền sẵn từ bước 1).'},
+      list: {label: 'Danh sách', help: 'Danh sách từ bước 1 đã điền cột vi_text (.csv, hoặc .xlsx nếu có openpyxl).'},
+      '--map': {label: 'Bảng mã font', help: 'File .json mã hoá font, lưu bằng "Ghi bảng dịch vào game" (ô Map).'},
+      '--out': {label: 'Ghi vào', help: 'Nơi ghi file main mới: thư mục exefs trong mod. File main cũ ở đó được chép sang main.bak trước.'},
+      '--report': {label: 'Báo cáo', help: 'File CSV ghi từng dòng của danh sách và việc đã làm với nó.'}
+    }},
+  'rrlib-exetext-check': {title: 'Kiểm tra chữ trong file chương trình', description: 'Liệt kê các câu tiếng Nhật tìm thấy trong exefs/main và những chỗ trỏ tới chúng, rồi thử dời tất cả sang vùng mới mà không đổi chữ: mọi chỗ trỏ phải đọc ra đúng câu cũ, và hoàn tác phải ra lại file chương trình giống từng byte. Không ghi gì.',
+    args: {main: {label: 'File chương trình', help: 'exefs/main.'}}}
 };
 
 const engines = {
@@ -128,7 +144,8 @@ const engines = {
       Inspect: {name: 'Xem', summary: 'Xem bên trong mục lục, gói kịch bản và từng kịch bản.'},
       Patch: {name: 'Bản patch', summary: 'Ghi bảng dịch vào game, kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
       Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'},
-      Images: {name: 'Ảnh giao diện', summary: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh: lấy ra thành file ảnh, vẽ lại rồi đưa vào game.'}
+      Images: {name: 'Ảnh giao diện', summary: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh: lấy ra thành file ảnh, vẽ lại rồi đưa vào game.'},
+      Executable: {name: 'File chương trình', summary: 'Dịch chữ nằm trong file chương trình của game, như các câu trích ở màn hình chính.'},
     }
   }
 };

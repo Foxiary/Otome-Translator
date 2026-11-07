@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Tests for engines/rrlib/tools on synthetic files - no game data needed."""
+import contextlib
+import csv
+import io
+import json
 import os
 import struct
 import sys
@@ -12,6 +16,7 @@ sys.path.insert(0, os.path.join(ROOT, 'engines', 'rrlib', 'tools'))
 
 import applysheet  # noqa: E402
 import exehook  # noqa: E402
+import exetext  # noqa: E402
 import kuv      # noqa: E402
 import memfs    # noqa: E402
 import patch    # noqa: E402
@@ -538,6 +543,171 @@ class SpriteTest(unittest.TestCase):
         rc, log = self.quiet(sprite.cmd_translate, arc, None, None, False)          # no folder: list
         self.assertEqual(rc, 0)
         self.assertIn('ui/label_on.png', log)
+
+
+# A tiny exefs/main: text at 0, rodata at 0x1000, data at 0x2000, then .bss.
+NOP, BL = 0xd503201f, 0x94000001
+S1, S2, S3, S4, S5 = 0x1010, 0x1100, 0x1200, 0x1300, 0x1400      # rodata strings
+RELA, DYN = 0x1800, 0x2000
+
+
+def u32text(s):
+    return s.encode('utf-32le') + b'\0\0\0\0'
+
+
+def add_imm(rd, rn, imm):
+    return 0x91000000 | (imm << 10) | (rn << 5) | rd
+
+
+def adr(pc, target, rd):
+    imm = (target - pc) & ((1 << 21) - 1)
+    return 0x10000000 | ((imm & 3) << 29) | ((imm >> 2) << 5) | rd
+
+
+def lz4_literals(d):
+    """An LZ4 block of literals only: what exehook.lz4_block reads back as d."""
+    n = len(d)
+    out = bytearray([min(n, 15) << 4])
+    if n >= 15:
+        rest = n - 15
+        while rest >= 255:
+            out.append(255); rest -= 255
+        out.append(rest)
+    return bytes(out + d)
+
+
+def make_main(compress=False):
+    text = bytearray(0x1000)
+    words = {0: 0x14000010, 4: 8,                                # b 0x40, MOD0 at 8
+             0x40: exetext.adrp(0x40, S1, 1), 0x44: add_imm(1, 1, S1 & 0xfff),     # S1 by code
+             0x48: adr(0x48, S4, 2),                                                # S4 by ADR
+             0x4c: exetext.adrp(0x4c, S3, 3), 0x50: add_imm(3, 3, S3 & 0xfff),     # S3 is ASCII
+             0x54: exetext.adrp(0x54, S5, 1), 0x58: BL, 0x5c: add_imm(0, 1, S5 & 0xfff)}  # x1 lost in the call
+    for i in range(0, 0x1000, 4):
+        struct.pack_into('<I', text, i, words.get(i, NOP))
+    text[8:12] = b'MOD0'
+    struct.pack_into('<6i', text, 12, DYN - 8, 0x2100 - 8, 0x3100 - 8, 0, 0, 0)
+    ro = bytearray(0x1000)
+    for a, s in ((S1, '前回と同じ名前を使用します｡'), (S2, '\nよろしいですか？'), (S3, 'SYSTEM'),
+                 (S4, 'クイックセーブしました｡'), (S5, '設定')):
+        b = u32text(s)
+        ro[a - 0x1000:a - 0x1000 + len(b)] = b
+    relas = ((0x2080, S2), (0x2088, S1), (0x2090, S2 + 4))       # the last shares S2's tail
+    for k, (off, add) in enumerate(relas):
+        struct.pack_into('<QQq', ro, RELA - 0x1000 + 24 * k, off, 1027, add)
+    data = bytearray(0x100)
+    struct.pack_into('<8Q', data, 0, 7, RELA, 8, 24 * len(relas), 9, 24, 0, 0)
+    h = bytearray(0x100)
+    h[:4] = b'NSO0'
+    struct.pack_into('<I', h, 0x0C, 0x3f if compress else 0x38)
+    struct.pack_into('<I', h, 0x1C, 0x100)
+    struct.pack_into('<I', h, 0x2C, 1)
+    struct.pack_into('<I', h, 0x3C, 0x1000)
+    pos, body = 0x101, b''
+    for k, (moff, seg) in enumerate(((0, text), (0x1000, ro), (0x2000, data))):
+        packed = lz4_literals(bytes(seg)) if compress else bytes(seg)
+        struct.pack_into('<3I', h, 0x10 + 0x10 * k, pos, moff, len(seg))
+        struct.pack_into('<I', h, 0x60 + 4 * k, len(packed))
+        pos += len(packed); body += packed
+    return bytes(h) + b'\0' + body
+
+
+FONT = {'ạ': 'ヒ', 'ồ': 'ん', 'ứ': 'ソ', 'ư': 'ゔ', 'ớ': 'ロ', 'đ': 'コ', 'ậ': 'ノ', 'ầ': 'ハ'}
+
+
+class ExeTextTest(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.main = os.path.join(self.d, 'main')
+        with open(self.main, 'wb') as f:
+            f.write(make_main(compress=True))
+        self.map = os.path.join(self.d, 'font.json')
+        with open(self.map, 'w', encoding='utf-8') as f:
+            json.dump(FONT, f, ensure_ascii=False)
+
+    def quiet(self, fn, *args):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = fn(*args)
+        return rc, buf.getvalue()
+
+    def test_adrp_encoding(self):
+        self.assertEqual(exetext.adrp(0x10, 0x1000, 1), 0xb0000001)      # adrp x1, #0x1000
+        self.assertEqual(exetext.adrp_target(exetext.adrp(0x7ff0, 0x6a6123, 9), 0x7ff0), 0x6a6000)
+
+    def test_finds_what_the_program_points_at(self):
+        exe = exetext.Exe(make_main(compress=True))
+        self.assertEqual(sorted(exe.strings), [S1, S2, S2 + 4, S4])       # not ASCII, not S5 after the call
+        self.assertEqual(sorted(k for k, _ in exe.refs[S1]), ['add', 'rela'])
+        self.assertEqual(exe.refs[S4], [('adr', 0x48)])
+        self.assertEqual(exe.strings[S2 + 4], 'よろしいですか？')
+
+    def test_moves_translations_and_repoints(self):
+        exe = exetext.Exe(make_main())
+        writes = {S1: 'Dùng lại tên lần trước, dài hơn câu tiếng Nhật nhiều.', S2: '\nBạn đồng ý chứ?', S4: 'Đã lưu.'}
+        raw, where = exetext.build(exe, writes)
+        self.assertEqual(exetext.verify(raw, exe, writes, where), [])
+        img = exetext.Nso(raw).image()
+        self.assertEqual(where[S1] % 0x1000, 0)                           # reached by ADRP
+        self.assertEqual(where[S4] % 0x1000, 0)
+        self.assertGreaterEqual(where[S1], 0x4000)                        # past the old .bss
+        self.assertEqual(exetext.adrp_target(struct.unpack_from('<I', img, 0x44)[0], 0x44), where[S1])
+        self.assertEqual(struct.unpack_from('<I', img, 0x40)[0], exetext.adrp(0x40, S1, 1))   # its ADRP kept
+        self.assertEqual(struct.unpack_from('<q', img, RELA + 16)[0], where[S2])
+        self.assertEqual(struct.unpack_from('<q', img, RELA + 64)[0], S2 + 4)        # the shared tail untouched
+        self.assertEqual(exetext.read_text(img, S2 + 4), 'よろしいですか？')
+        self.assertEqual(exetext.read_text(img, S1), '前回と同じ名前を使用します｡')     # JP bytes stay
+        self.assertEqual(exetext.read_text(img, where[S1]), writes[S1])
+
+    def test_import_on_its_own_output_starts_from_the_original(self):
+        exe = exetext.Exe(make_main(compress=True))
+        first, _ = exetext.build(exe, {S1: 'Một', S4: 'Hai'})
+        again = exetext.Exe(first)
+        self.assertEqual(again.img, exe.img)
+        self.assertEqual(again.current_text(S4), 'Hai')
+        self.assertEqual(sorted(again.strings), sorted(exe.strings))
+        self.assertEqual(exetext.build(again, {S2: '\nBa'})[0], exetext.build(exe, {S2: '\nBa'})[0])
+
+    def test_rows_are_checked_like_sheet_cells(self):
+        exe = exetext.Exe(make_main())
+        rows = [dict(row=2, address=S1, jp='前回と同じ名前を使用します｡', vi='Dùng lại tên cũ.'),
+                dict(row=3, address=S2, jp='よろしいですか？', vi='Bạn đồng ý chứ?'),      # sheet trimmed the \n
+                dict(row=4, address=S4, jp='クイックセーブしました｡', vi='Đã lưu nhanh した'),
+                dict(row=5, address=S2 + 4, jp='よろしいですか？', vi=''),
+                dict(row=6, address=0x1234, jp='x', vi='y'),
+                dict(row=7, address=S1, jp='前回と同じ名前を使用します｡', vi='Lần hai')]
+        writes, rep = exetext.plan(rows, exe, FONT)
+        self.assertEqual([x['why'].split(',')[0] for x in rep], ['', '', 'japanese', 'empty', 'no-string', 'duplicate'])
+        self.assertEqual(writes[S2], '\nBヒn コんng ý chソ?')                 # \n kept, letters on the font's codes
+        self.assertEqual(writes[S1], 'Dùng lヒi tên cũ.')
+
+    def test_printf_codes_must_match(self):
+        exe = exetext.Exe(make_main())
+        exe.strings[S4] = '残り %d 個'
+        bad = exetext.plan([dict(row=2, address=S4, jp='残り %d 個', vi='Còn lại')], exe, FONT)[1]
+        good = exetext.plan([dict(row=2, address=S4, jp='残り %d 個', vi='Còn %d cái')], exe, FONT)[1]
+        self.assertEqual((bad[0]['why'], good[0]['action']), ('format', 'write'))
+
+    def test_export_then_import(self):
+        sheet, out = os.path.join(self.d, 'chu_exe.csv'), os.path.join(self.d, 'mod', 'exefs')
+        self.assertEqual(self.quiet(exetext.cmd_export, self.main, sheet, None)[0], 0)
+        with open(sheet, encoding='utf-8-sig', newline='') as f:
+            rows = list(csv.reader(f))
+        self.assertEqual(rows[0], list(exetext.COLUMNS))
+        self.assertEqual([r[0] for r in rows[1:]], ['0x%x' % a for a in (S1, S2, S2 + 4, S4)])
+        rows[1][3] = 'Dùng lại tên cũ.'
+        with open(sheet, 'w', encoding='utf-8-sig', newline='') as f:
+            csv.writer(f).writerows(rows)
+        rc, log = self.quiet(exetext.cmd_import, self.main, sheet, self.map, out, None, False)
+        self.assertEqual(rc, 0)
+        self.assertIn('--apply de ghi vao %s' % out, log)
+        self.assertFalse(os.path.exists(out))
+        self.assertEqual(self.quiet(exetext.cmd_import, self.main, sheet, self.map, out, None, True)[0], 0)
+        new = exetext.open_exe(os.path.join(out, 'main'))
+        self.assertEqual(new.current_text(S1), 'Dùng lヒi tên cũ.')
+        rc, log = self.quiet(exetext.cmd_export, os.path.join(out, 'main'), sheet, self.map)
+        self.assertIn('1 dong da dien', log)
+        self.assertEqual(self.quiet(exetext.cmd_check, os.path.join(out, 'main'))[0], 0)
 
 
 if __name__ == '__main__':
