@@ -14,7 +14,7 @@ const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦'};
 const summaries = {
   Dump: 'Take single files out of your .nsp, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
-  Patch: 'Check a Vietnamese patch against the Japanese scripts and rebuild it.',
+  Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it.',
   Sheets: 'Turn the translation sheet into a list of tag fixes.'
 };
 
@@ -44,6 +44,12 @@ const tools = [
   T('exehook', 'Inspect', 'Find redirects in the program', 'Lists the script reads a patched program file (exefs/main) sends elsewhere. An earlier patch used them for three prologue scripts.', 'tools/exehook.py', [],
     [A('main', 'file', 'exefs/main')]),
 
+  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped and encoded for the mod\'s Vietnamese font, lost #P tags come back from the Japanese, and the result is checked. Lines the sheet has no row for (names, choices) keep the mod\'s text.', 'tools/applysheet.py', [],
+    [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true),
+      V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/): its font, program and names are kept', true), V('--out', 'dir', 'Output folder', true), EXE,
+      V('--report', 'save', 'CSV of the rows not written and the lines to look at'), V('--map', 'save', 'Save the font encoding learnt from the mod (.json)'),
+      V('--use-map', 'file', 'Read the font encoding from a saved .json instead'), B('--apply', 'Write the files')],
+    'Only shows what would change until you tick Apply. A row left out keeps the mod\'s line; the report says why.'),
   T('audit', 'Patch', 'Check a patch', 'Compares a Vietnamese patch with the Japanese scripts: lost position, name and pause tags, lines hidden off-screen, broken headers. Nothing is changed.', 'tools/audit.py', [],
     [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--patch', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/)', true), EXE, V('--csv', 'save', 'Every finding with its Japanese and Vietnamese text')]),
   T('patch', 'Patch', 'Rebuild the patch', 'Rebuilds script.memfs and script.membody: puts the lost #P position tags back, keeps lines Japanese draws off-screen visible, points every script straight at its data and checks the result.', 'tools/patch.py', [],

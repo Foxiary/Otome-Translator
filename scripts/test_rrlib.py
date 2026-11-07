@@ -9,6 +9,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'engines', 'rrlib', 'tools'))
 
+import applysheet  # noqa: E402
 import exehook  # noqa: E402
 import kuv      # noqa: E402
 import memfs    # noqa: E402
@@ -227,6 +228,67 @@ class PatchTest(unittest.TestCase):
             vi.redirects = {tuple(ents['/_bytecode/A.tatc'].vals): 1}
             with self.assertRaises(SystemExit):
                 patch.build(jp, vi)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def sheet_row(n, ci, jp, vi, script='A.tat'):
+    return dict(tab=script[:-4], row=n, rid=n, cmd='GuideMess', script=script, ci=ci, jp=jp, vi=vi)
+
+
+class ApplySheetTest(unittest.TestCase):
+    def test_prepare_does_what_the_vi_builder_did(self):
+        self.assertEqual(applysheet.prepare('「Ừ, “đi” "nhé"」\n\nTiếp　theo'), "Ừ, đi 'nhé'\nTiếp theo")
+        self.assertEqual(applysheet.prepare('Việt'), 'Việt')            # NFC
+        long = applysheet.prepare(' '.join(['chữ'] * 30))
+        self.assertGreater(long.count('\n'), 0)
+        self.assertTrue(all(tags.vis(line) <= tags.WRAP for line in long.split('\n')))
+
+    def test_learns_the_font_from_the_mod_and_encodes(self):
+        jp = {'A.tat': ['一', '二', '三']}
+        mod = {'A.tat': ['mばt', 'Viるt', 'khác hẳn']}
+        rows = [sheet_row(2, 0, '一', 'một'), sheet_row(3, 1, '二', 'Việt'), sheet_row(4, 2, '三', 'không khớp')]
+        fmap, seen = applysheet.learn_font(rows, jp, mod)
+        self.assertEqual(fmap, {'ộ': 'ば', 'ệ': 'る'})
+        self.assertEqual(applysheet.encode('Việt một', fmap, seen), ('Viるt mばt', []))
+        # a capital the mod never used falls back to its small letter, and is reported
+        self.assertEqual(applysheet.encode('Ệ', fmap, seen), ('る', [('Ệ', 'lower')]))
+
+    def test_plan_never_writes_a_worse_line(self):
+        js = {'A.tat': ['', 'GuideMess', '「はい」', '「っ！」', '一つ', '二', '三', '四']}
+        fmap, seen = {'ệ': 'る'}, set('âạ')
+        rows = [sheet_row(2, 2, '「はい」', '「Vâng」'),
+                sheet_row(3, 3, '「っ！」', '「っ！」'),            # a gasp reads the same: written
+                sheet_row(4, 4, '一つ', 'Việt の'),                # kana left in: would show wrong letters
+                sheet_row(5, 5, '二', '二'),                       # still the JP line
+                sheet_row(6, 6, '違う', 'x'),                      # sheet of another version
+                sheet_row(7, 2, '「はい」', '「Dạ」'),              # second row, other translation
+                sheet_row(8, 7, '四', 'Việt\n')]                   # JP has no trailing break
+        writes, rep = applysheet.plan(rows, js, fmap, seen)
+        self.assertEqual(writes['A.tat'], {2: 'Vâng', 3: 'っ！', 7: 'Viるt'})
+        self.assertEqual(dict((x['r']['row'], x.get('why', x['action'])) for x in rep),
+                         {2: 'write', 3: 'write', 4: 'japanese', 5: 'untranslated', 6: 'jp-mismatch',
+                          7: 'duplicate', 8: 'write'})
+
+    def test_build_writes_rows_and_keeps_the_mods_other_lines(self):
+        import shutil
+        jp_a, _ = script('A.tat', ['#P(500,130)一', '名前'])
+        mod_a, _ = script('A.tat', ['#P(500,130)mばt', 'Tên'])
+        d = tempfile.mkdtemp()
+        try:
+            write_pair(os.path.join(d, 'jp'), [jp_a], [('/_bytecode/A.tatc', 0x30, [0, len(memfs.rz(jp_a))])])
+            write_pair(os.path.join(d, 'mod'), [mod_a], [('/_bytecode/A.tatc', 0x30, [0, len(memfs.rz(mod_a))])])
+            jp = memfs.Archive(*patch.find_pair(os.path.join(d, 'jp')))
+            mod = memfs.Archive(*patch.find_pair(os.path.join(d, 'mod')))
+            js = applysheet.script_strings(jp)
+            # the cell lost its #P; there is no row for the name
+            writes, _ = applysheet.plan([sheet_row(2, 4, '#P(500,130)一', 'một nữa')], js, {'ộ': 'ば', 'ữ': '㈷'}, set())
+            body, mem, rep = applysheet.build(jp, mod, writes)
+            self.assertEqual(patch.verify(body, mem, jp, {}), [])
+            out = applysheet.script_strings(memfs.Archive(data=(mem, body)))['A.tat']
+            self.assertEqual(out[4], '#P(500,130)mばt n㈷a')
+            self.assertEqual(out[5], 'Tên')
+            self.assertEqual([r['how'] for r in rep['rows']], ['single'])
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

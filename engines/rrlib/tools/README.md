@@ -11,6 +11,7 @@ Mỗi script tự mô tả trong docstring đầu file (`python tools/<tên>.py 
 | `kuv.py` | `strings`, `calls`, `check` | Kịch bản `.tat`: liệt kê chuỗi, xem lệnh gọi (`GuideMess`, `KW`, `WinClear`…), dựng lại |
 | `exehook.py` | | Đọc các cặp (offset, size) mà `exefs/main` đã vá chuyển hướng |
 | `audit.py` | | Kiểm bản patch so với JP: code, số chuỗi, tag bị mất, tag đẩy chữ ra ngoài màn hình |
+| `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng, mã hoá theo font của mod, trả `#P`, tự kiểm |
 | `patch.py` | | Dựng lại `script.memfs` + `script.membody`: trả `#P`, trỏ thẳng chunk, nới u32, sửa header, tự kiểm |
 | `sheetfix.py` | | Từ sheet dịch (`.xlsx`) ra file đề xuất sửa tag theo đúng tab + dòng |
 | `tags.py` | | Thư viện: đọc tag, trả `#P`, các số đo màn hình — không phải lệnh |
@@ -37,7 +38,20 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
 - `sheetfix.py` trên sheet tải ngày 05/11/2026 ra file giống từng ô với file
   đề xuất đã gửi người dịch: 1279 câu `#P`, 27 câu không thêm tag, 138 `#T`, 31 `#KW`.
 
+- `applysheet.py` trên sheet tải ngày 07/11/2026 và bản mod đang cài, trong 11 giây:
+  - học được 68 chữ của font từ chính bản mod;
+  - ghi 30 470 chuỗi vào 124 kịch bản. Bỏ qua 145 ô còn sót kana, 1 ô chưa dịch
+    và 103 dòng trùng câu nhưng dịch khác; các câu đó giữ chữ của bản mod;
+  - tự kiểm OK;
+  - so với bản đang chơi: 65 857 chuỗi không đổi, 5 169 chuỗi đổi chữ theo sheet
+    mới, 485 chuỗi chỉ đổi cách xuống dòng (các biến thể `#T` giờ mỗi cái một dòng
+    như JP), 29 chuỗi thêm `#KW`. Không chuỗi đã dịch nào quay về tiếng Nhật;
+  - ở những dòng mà chữ trong sheet vẫn giống bản 02/10, cách chuyển chữ cho ra
+    giống từng byte 93,6% chuỗi của bản đó. Phần còn lại lệch vì builder cũ làm
+    mất `#P`/`#KW` và gộp các đoạn có tag thành một dòng.
+
 **Đã thử trong game:** EV00_0001_01 với `#P` đã trả, và memfs có mục 32-bit.
+**Chưa thử trong game:** bản do `applysheet.py` dựng.
 **Chưa thử lại trong game:** việc bỏ tag cho các câu ngoài màn hình, và 3 cảnh mở
 đầu được trỏ thẳng bằng mục 32-bit.
 

@@ -53,8 +53,11 @@ def find_exe(folder):
     return p if os.path.isfile(p) else None
 
 
-def build(jp, vi, restore=True, untag_offscreen=True):
-    """jp, vi: memfs.Archive. -> (membody, memfs, report dict)."""
+def build(jp, vi, restore=True, untag_offscreen=True, edit=None):
+    """jp, vi: memfs.Archive. -> (membody, memfs, report dict).
+
+    edit(script name, strings) -> strings, if given, changes a script's strings
+    before #P is put back (applysheet.py writes the sheet in through it)."""
     jp_by_name = dict((memfs.script_name(p), jp.raw(p)) for p in jp.entries)
     use = dict((p, vi.loaded(p)) for p in vi.entries)
     rep = dict(rows=[], stripped=[], length_fixed=[], repointed=[], widened=[])
@@ -68,6 +71,8 @@ def build(jp, vi, restore=True, untag_offscreen=True):
         if not nm:
             continue
         _, strs, _ = kuv.parse(raw)
+        if edit:
+            strs = edit(nm, strs)
         if restore and nm in jp_by_name:
             strs, rows = tags.restore(jp_by_name[nm], strs)
             rep['rows'] += [dict(r, script=nm) for r in rows]
@@ -187,9 +192,15 @@ def main():
     if not a.apply:
         print('chay thu - them --apply de ghi vao %s' % a.out)
         return 0
-    os.makedirs(a.out, exist_ok=True)
-    for name, data in (('script.membody', body), ('script.memfs', mem)):
-        dst = os.path.join(a.out, name)
+    write_files(a.out, (('script.membody', body), ('script.memfs', mem)))
+    return 0
+
+
+def write_files(folder, files):
+    """Write (name, bytes) pairs into folder; a file already there is kept as .bak."""
+    os.makedirs(folder, exist_ok=True)
+    for name, data in files:
+        dst = os.path.join(folder, name)
         if os.path.exists(dst):
             bak = dst + '.bak'; n = 2
             while os.path.exists(bak):
@@ -198,7 +209,6 @@ def main():
         with open(dst, 'wb') as f:
             f.write(data)
         print('-> %s' % dst)
-    return 0
 
 
 if __name__ == '__main__':

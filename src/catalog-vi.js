@@ -76,6 +76,7 @@ const tools = {
   'rrlib-kuv-calls': {title: 'Xem lệnh của một kịch bản', description: 'Liệt kê các lệnh của một kịch bản (.tat) kèm câu chúng hiện ra, như NameMess, GuideMess, KW và WinClear.'},
   'rrlib-kuv-check': {title: 'Kiểm tra một kịch bản', description: 'Kiểm tra một kịch bản (.tat) mở được và dựng lại giống từng byte.'},
   'rrlib-exehook': {title: 'Tìm chuyển hướng trong file chương trình', description: 'Liệt kê những lần đọc kịch bản mà file chương trình đã vá (exefs/main) chuyển sang chỗ khác. Bản patch cũ dùng cách này cho ba kịch bản mở đầu.'},
+  'rrlib-apply': {title: 'Ghi bảng dịch vào game', description: 'Ghi bảng dịch (.xlsx) vào script.memfs và script.membody: từng câu được ngắt dòng và mã hoá theo font tiếng Việt của bản mod, tag #P bị mất được trả lại theo bản Nhật, rồi tự kiểm tra kết quả. Những câu bảng dịch không có dòng (tên nhân vật, lựa chọn) giữ chữ của bản mod.', note: 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Dòng nào không ghi thì giữ câu của bản mod; báo cáo ghi rõ lý do.'},
   'rrlib-audit': {title: 'Kiểm tra bản patch', description: 'So bản patch tiếng Việt với kịch bản tiếng Nhật: tag vị trí, tag tên và tag dừng bị mất, câu bị đẩy ra ngoài màn hình, header sai. Không thay đổi gì.'},
   'rrlib-patch': {title: 'Dựng lại bản patch', description: 'Dựng lại script.memfs và script.membody: trả lại tag vị trí #P bị mất, giữ cho các câu mà bản Nhật đặt ngoài màn hình vẫn hiện ra, trỏ thẳng từng kịch bản tới dữ liệu của nó rồi tự kiểm tra kết quả.', note: 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Hãy thử bản dựng trong game trước khi chia sẻ.'},
   'rrlib-sheetfix': {title: 'Danh sách sửa tag cho bảng dịch', description: 'Đọc bảng dịch (.xlsx) và ghi ra một file đề xuất theo đúng tab và dòng: tag #P cần thêm, câu phải để không có tag, và các câu #T / #KW cần sửa tay.'}
@@ -107,11 +108,11 @@ const engines = {
     }
   },
   rrlib: {
-    flow: 'Lấy kịch bản ra khỏi game → kiểm tra bản patch → dựng lại → thử trong game.',
+    flow: 'Lấy kịch bản ra khỏi game → ghi bảng dịch vào game → kiểm tra bản patch → thử trong game.',
     groups: {
       Dump: {name: 'Lấy dữ liệu', summary: 'Lấy từng file ra khỏi file .nsp, dùng prod.keys của bạn.'},
       Inspect: {name: 'Xem', summary: 'Xem bên trong mục lục, gói kịch bản và từng kịch bản.'},
-      Patch: {name: 'Bản patch', summary: 'Kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
+      Patch: {name: 'Bản patch', summary: 'Ghi bảng dịch vào game, kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
       Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'}
     }
   }

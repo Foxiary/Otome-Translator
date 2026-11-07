@@ -12,7 +12,7 @@ các bẫy đã gặp, nằm ở `CLAUDE.md` (tiếng Anh).
 
 Trong Otome Translator, thả file `.nsp` hoặc thư mục mod của game vào cửa sổ là app tự chuyển sang engine này và điền sẵn đường dẫn; mọi công cụ bên dưới đều có biểu mẫu trong app. Có thể chạy thẳng bằng dòng lệnh như dưới đây.
 
-Chỉ cần Python 3. Riêng `sheetfix.py` cần thêm openpyxl. `nsp.py` dùng
+Chỉ cần Python 3. Riêng `sheetfix.py` và `applysheet.py` cần thêm openpyxl. `nsp.py` dùng
 pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không chứa dữ liệu game.
 
 ## Quy trình
@@ -24,7 +24,26 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    python tools/nsp.py exefs "<game>.nsp" jp/exefs
    ```
 
-2. **Kiểm bản patch** mà không sửa gì:
+2. **Ghi bảng dịch vào game.** Tải sheet về dạng `.xlsx`, rồi chạy thử (không ghi file):
+
+   ```
+   python tools/applysheet.py --sheet sheet.xlsx --jp jp --mod <thư mục mod> --out out --report bao_cao.csv
+   python tools/applysheet.py --sheet sheet.xlsx --jp jp --mod <thư mục mod> --out out --apply
+   ```
+
+   Cần sẵn một bản mod tiếng Việt, vì ba thứ lấy từ đó:
+   - **font:** chữ có dấu nằm trên mã kana (`ệ` → `る`), và công cụ tự học cách mã hoá từ những câu bản mod đã có;
+   - **các câu sheet không có dòng:** tên nhân vật, lựa chọn;
+   - **`exefs/main`:** để biết exe chuyển hướng file nào.
+
+   Mỗi ô được xử lý như builder cũ của nhóm dịch, nhưng **giữ** `#P`, `#T`, `#KW`:
+   - bỏ `「」『』“”` và đổi `"` thành `'` vì font không có các dấu này;
+   - ngắt dòng ở 62 ký tự;
+   - `#P` bị mất được trả lại theo JP.
+
+   Ô nào không ghi được thì giữ câu của bản mod: câu còn sót kana (font dùng các ô kana cho chữ Việt nên sẽ hiện sai chữ), câu chưa dịch, hai dòng dịch khác nhau cho cùng một câu. File báo cáo ghi rõ tab, dòng và lý do. Thêm `--apply` thì ghi vào `out/`, rồi chép vào `romfs/common/` của mod.
+
+3. **Kiểm bản patch** mà không sửa gì:
 
    ```
    python tools/audit.py --jp jp --patch <thư mục mod> --csv loi.csv
@@ -32,7 +51,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Báo các lỗi: code khác JP, số chuỗi lệch, file đọc nhầm chunk, câu mất `#P` / `#T` / `#KW`, câu bị `#P` đẩy ra ngoài màn hình, trường độ dài code sai.
 
-3. **Sửa bản patch.** Lệnh này chỉ chạy thử, in báo cáo, không ghi file:
+4. **Sửa bản patch.** Lệnh này chỉ chạy thử, in báo cáo, không ghi file:
 
    ```
    python tools/patch.py --jp jp --patch <thư mục mod> --out out --report sua.csv
@@ -41,7 +60,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Thêm `--apply` thì mới ghi `script.memfs` và `script.membody` vào `out/`, rồi chép vào `romfs/common/` của mod. `patch.py` tự đọc `exefs/main` của mod nếu có, để biết exe chuyển hướng file nào.
 
-4. **Sửa sheet dịch.** Tải sheet về dạng `.xlsx`, rồi:
+5. **Sửa sheet dịch.** Tải sheet về dạng `.xlsx`, rồi:
 
    ```
    python tools/sheetfix.py --sheet sheet.xlsx --jp jp --out sua_tag.xlsx
@@ -54,7 +73,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Sửa sheet là để lần build sau không mất tag lại.
 
-5. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
+6. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
 
 ## Những điều cần nhớ
 
@@ -68,8 +87,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
 ## Giới hạn
 
-- Chưa có trong giao diện app; chỉ chạy bằng dòng lệnh.
-- Không đụng tới font (`romfs/spec_win/font/*.font.memfs`).
+- Không tạo hay sửa font (`romfs/spec_win/font/*.font.memfs`): `applysheet.py` cần font của một bản mod có sẵn. Chữ hoa nào bản mod chưa từng dùng (lần này là `Ể`, `Ổ`, mỗi chữ một lần) thì ghi bằng chữ thường và báo lại.
 - `#T` và `#KW` bị mất phải sửa tay theo cột JP; công cụ chỉ liệt kê.
 - Chỉ mới thử với Matsurika no Kei. Game khác dùng `rrlib/memfs` có thể cần chỉnh lại các số đo trong `tools/tags.py`.
 

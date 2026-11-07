@@ -183,8 +183,45 @@ pulled out of a patch.
 
 The Vietnamese font maps accented letters onto kana code points
 (`ệ` → `る`, `đ` → `コ`, …), so patch strings read like garbled Japanese. Search
-them by their ASCII fragments. The tools never need the mapping: tags, spaces
-and ASCII punctuation are untouched, one VI letter is one code unit.
+them by their ASCII fragments. Tags, spaces and ASCII punctuation are
+untouched and one VI letter is one code unit, so every tool but
+`applysheet.py` works without the mapping.
+
+## Writing the sheet in (applysheet.py)
+
+The original VI builder is not available; its rules were read off the 02/10
+patch by putting each sheet cell next to the string the patch carries for it.
+Where the cell's text is still the patch's, these rules reproduce 93.6% of
+the strings byte for byte (23 776 of 25 410):
+
+- NFC, then `「」『』“”` and U+200B dropped, `"` written as `'`, U+3000 as a
+  space. No translated 02/10 string carries any of them; the font most likely
+  has no glyph for them.
+- The sheet's doubled line breaks folded to one (it shows the game's `\r\n`
+  as two), each paragraph wrapped at 62 visible characters
+  (`tags.builder_wrap`), lines joined with `\n` - the patch never has `\r\n`.
+- Letters encoded for the font. Latin-1 letters (`à á â ô ý …`) keep their
+  code; the other Vietnamese letters, capitals included, sit on kana or
+  enclosed CJK codes (`ư` → `ゔ`, `Ừ` → `ガ`, `ỳ` → `㈹`), and `Đ` on U+00D0.
+  The table is learnt from the mod each run: a row counts when cell and mod
+  string are as long once tags and whitespace go and every ASCII letter and
+  digit lines up; a code is taken at 80% of its sightings. 68 letters come
+  out of the installed build. A capital the mod never used falls back to its
+  small letter and is reported.
+
+The remaining 7% is where the builder was wrong and the sheet is not: it lost
+#P (642 strings) and #KW (24), and it flattened cells with several #P or #T
+parts into one wrapped paragraph - the #T2 text then breaks mid-sentence,
+because the #T1 text it never shows is counted into the line. applysheet
+keeps the cell's tags and lines, which follow JP.
+
+Rows it leaves to the mod's string: `jp_text` not matching the game, a cell
+that is still the JP line, a cell with kana other than `っ`/`ッ` (the font
+gives those codes to Vietnamese letters; the gasp `っ` is kept on purpose and
+drawn, the patch has it in 228 strings), and a second row for a string with
+another translation (first row wins). The sheet has no rows for speaker
+names and choices - 1 196 translated strings in the 02/10 patch - so a build
+needs the mod as its base, never JP alone.
 
 ## Verified
 
@@ -195,6 +232,9 @@ and ASCII punctuation are untouched, one VI letter is one code unit.
   on screen at (500,130) and (500,280)).
 - `exehook.py`: 3 pairs in the patched `main`, 0 in the JP `main`.
 - `sheetfix.py` reproduces the correction workbook cell for cell.
+- `applysheet.py` on the 07/11 sheet and the installed build: 30 470 strings
+  written, check OK, no translated string turned back to JP, 0 #T / #KW lost
+  against JP (the translators had fixed them). Not yet tried in game.
 - In game: EV00_0001_01 with restored #P, and the u32-widened memfs, load and
   play. The off-screen untagging and the three widened scenes were not yet
   re-checked in game when this was written.

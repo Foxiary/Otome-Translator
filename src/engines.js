@@ -56,7 +56,7 @@ const engines = [
     dir: 'rrlib',
     copy: ['tools', 'README.md', 'CLAUDE.md'],
     docs: [['Engine guide', 'README.md'], ['Tool reference', 'tools/README.md'], ['Format notes', 'CLAUDE.md']],
-    flow: 'Take the scripts out of the game → check the patch → rebuild it → try it in the game.',
+    flow: 'Take the scripts out of the game → write the sheet into the game → check the patch → try it in the game.',
     // nsp.py falls back to the openssl command without pycryptodome, which Windows lacks.
     modules: ['openpyxl', 'Crypto'],
     hashes: {},
