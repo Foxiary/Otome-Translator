@@ -54,7 +54,10 @@
       state.settings = saved.settings;
     }
     if (onStartPage()) { page = 'form'; selectDefault(); render(); }
-    if (tourWaiting) { tourWaiting = false; setTimeout(firstTour, 250); }
+    // Off the start page now: a Python that cannot run these tools is asked
+    // about first, and the tour waits for that dialog to close.
+    promptPython();
+    if (tourWaiting) { tourWaiting = false; setTimeout(() => whenNoDialog(firstTour), 250); }
   }
 
   // For every tool of the engine, the fields a found file can fill. The tool to

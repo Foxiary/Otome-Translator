@@ -386,3 +386,13 @@ dialog::backdrop{background:#0008}
 .missing-examples{margin-top:14px;padding-top:11px;border-top:1px dashed var(--bad-line);color:var(--secondary)}
 .missing-examples strong{color:var(--ink)}
 .missing-example-body{margin-top:4px;max-width:75ch}
+
+/* The Python badge opens the Python dialog; the dialog's fix comes first. */
+button.runtime{font-family:inherit;line-height:inherit;cursor:pointer}
+button.runtime:hover{border-color:var(--border-hover)}
+button.runtime.bad:hover{border-color:var(--bad-ink)}
+.dialog-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:18px}
+.dialog-body .dialog-actions button{margin:0}
+.dialog-body .python-error{font-size:11px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+.dialog-actions button.quiet{border-color:transparent;background:transparent;color:var(--secondary);padding-inline:6px}
+.dialog-actions button.quiet:hover{color:var(--ink);background:transparent;text-decoration:underline;text-underline-offset:3px}

@@ -155,6 +155,22 @@ function updatePython(check) {
   badge.className = `runtime${check.ok ? '' : ' bad'}`;
   badge.textContent = check.ok ? text('python.ready', {version: check.version}) : text('python.needed');
   badge.title = check.ok ? state.settings.python : check.message;
+  promptPython();
+}
+// A Python that cannot run the engine's tools is said at once, in a dialog with
+// the fix, not left to the badge: once per engine a session, never over the
+// start page or a run. The badge and the sidebar button open it again.
+const pythonPrompted = new Set();
+function promptPython() {
+  const ready = () => pythonCheck && !pythonCheck.ok && !running && state?.settings.engineChosen && page !== 'start'
+    && !pythonPrompted.has(state.settings.engine);
+  if (ready()) whenNoDialog(() => { if (ready()) showPython(); });
+}
+// Runs `then` once no dialog is open (an update notice, say), so two never stack.
+function whenNoDialog(then) {
+  const open = document.querySelector('dialog[open]');
+  if (!open) return then();
+  open.addEventListener('close', () => whenNoDialog(then), {once: true});
 }
 function renderGroups() {
   const nav = $('groups'); nav.replaceChildren();
@@ -1087,7 +1103,7 @@ function dialogContent(title, build, wide = false) {
   $('info-dialog').classList.toggle('wide', wide);
   $('dialog-title').textContent = title;
   const body = $('dialog-body');body.replaceChildren();build(body);
-  $('info-dialog').showModal();
+  if (!$('info-dialog').open) $('info-dialog').showModal();
 }
 function paragraph(parent, text, cls = '') {parent.append(elt('p',cls,text));}
 function action(parent, label, callback) {const b=elt('button','',label); b.type='button';b.addEventListener('click', callback);parent.append(b);}
@@ -1100,21 +1116,64 @@ function showDocs() {
     }
   });
 }
+// The names pip installs, for the modules whose import name differs.
+const PIP_NAMES = {PIL: 'Pillow', Crypto: 'pycryptodome', fontTools: 'fonttools'};
+// Three cases, each with its own fix first: no Python that starts (install it),
+// Python without the engine's packages (the app sets them up), or all ready.
 function showPython() {
-  dialogContent(text('rail.python'), body => {
-    paragraph(body,text('python.body', {engine: engine().name, modules: engine().modules.join(', ')}));
-    paragraph(body,text('python.current', {path: state.settings.python}),'mono');
-    action(body,text('python.setup'), async () => {
-      try {await window.vees.setupPython();$('info-dialog').close();}
-      catch(error){showError(error.message);}
-    });
-    action(body,text('python.choose'), async () => {
-      try {
-        const result=await window.vees.choosePython();
-        if(result){state.settings.python=result.python;updatePython(result.check);$('info-dialog').close();}
-      } catch(error){showError(error.message);}
-    });
+  const check = pythonCheck || {ok: false, found: false, missing: [], message: ''};
+  if (!check.ok) pythonPrompted.add(state.settings.engine);
+  const title = check.ok ? text('rail.python') : text(check.found ? 'python.packagesTitle' : 'python.missingTitle');
+  dialogContent(title, body => {
+    const actions = elt('div', 'dialog-actions');
+    const add = (label, onClick, className = 'button') => {
+      const node = elt('button', className, label);
+      node.type = 'button';
+      node.addEventListener('click', onClick);
+      actions.append(node);
+    };
+    if (!check.found && !check.ok) {
+      paragraph(body, text('python.notFound', {engine: engine().name, path: state.settings.python}));
+      if (check.message) paragraph(body, check.message.split(/\r?\n/).filter(Boolean).slice(-2).join('\n'), 'mono python-error');
+      paragraph(body, text('python.install'));
+      add(text('python.download'), () => window.vees.openPythonDownload(), 'button primary');
+      add(text('python.recheck'), recheckPython);
+      add(text('python.choose'), choosePython);
+    } else if (!check.ok) {
+      paragraph(body, text('python.missingPackages', {engine: engine().name, version: check.version,
+        packages: check.missing.map(name => PIP_NAMES[name] || name).join(', ')}));
+      paragraph(body, text('python.setupHow'));
+      add(text('python.setup'), setupPython, 'button primary');
+      add(text('python.choose'), choosePython);
+    } else {
+      paragraph(body, text('python.readyBody', {engine: engine().name, version: check.version}));
+      paragraph(body, text('python.current', {path: state.settings.python}), 'mono');
+      add(text('python.reinstall'), setupPython);
+      add(text('python.choose'), choosePython);
+    }
+    if (!check.ok) add(text('update.later'), () => $('info-dialog').close(), 'button quiet');
+    body.append(actions);
   });
+  $('info-dialog').querySelector('.dialog-actions .primary')?.focus();
+}
+async function setupPython() {
+  try {await window.vees.setupPython();$('info-dialog').close();}
+  catch(error){showError(error.message);}
+}
+async function choosePython() {
+  try {
+    const result = await window.vees.choosePython();
+    if (!result) return;
+    state.settings.python = result.python;
+    updatePython(result.check);
+    if (result.check.ok) $('info-dialog').close(); else showPython();
+  } catch(error){showError(error.message);}
+}
+async function recheckPython() {
+  try {
+    updatePython(await window.vees.checkPython());
+    if (pythonCheck.ok) $('info-dialog').close(); else showPython();
+  } catch(error){showError(error.message);}
 }
 
 async function start() {
@@ -1151,6 +1210,7 @@ async function start() {
   $('open-folder').addEventListener('click', async () => {const error=await window.vees.openWorkspace();if(error)showError(error);});
   $('docs-button').addEventListener('click',showDocs);
   $('python-button').addEventListener('click',showPython);
+  $('python-status').addEventListener('click',showPython);
   $('dialog-close').addEventListener('click',()=>$('info-dialog').close());
   $('clear-log').addEventListener('click',()=>setLog(''));
   $('tool-form').addEventListener('submit',event=>event.preventDefault());
@@ -1195,7 +1255,8 @@ async function start() {
     window.vees.state().then(fresh=>{state.settings=fresh.settings;state.workspace=fresh.workspace;updatePython(fresh.python);}).catch(()=>{});
   });
   $('tour-button').addEventListener('click', tour.start);
-  tour.firstRun();
+  // A Python prompt opened above goes first; the tour waits until it is closed.
+  whenNoDialog(() => tour.firstRun());
 }
 function chooseLanguage(next) {
   if (languageChange().workbookPath) return;

@@ -43,7 +43,8 @@ Chỉ những bản build trên GitHub Actions từ mã nguồn công khai của
 Ứng dụng không gửi thông tin nào lên mạng, trừ ba trường hợp sau:
 
 - Khi mở app và mỗi ngày một lần, app hỏi API công khai của GitHub (`api.github.com/repos/Foxiary/VE-ES/commits`) xem commit mới nhất của VE-ES là gì. Yêu cầu này không kèm dữ liệu nào của người dùng.
-- Khi người dùng bấm **Set up Python packages**, `pip` tải thư viện từ PyPI.
+- Khi người dùng bấm **Install the packages** trong hộp thoại Python, `pip` tải thư viện từ PyPI.
+- Khi người dùng bấm **Download Python**, trình duyệt mở `python.org/downloads`.
 - Khi người dùng bấm **View changes**, trình duyệt mở trang commit trên GitHub.
 
 Workspace, bảng dịch và dữ liệu game chỉ nằm trên máy người dùng.
@@ -53,7 +54,7 @@ Workspace, bảng dịch và dữ liệu game chỉ nằm trên máy người d�
 1. Cài Node.js và Python 3.
 2. Clone kèm engine Otomate: `git clone --recurse-submodules=engines/otomate https://github.com/Foxiary/Otome-Translator.git`. Nếu đã clone rồi thì chạy `git submodule update --init engines/otomate`. Hai submodule trong `projects/` không cần để chạy app.
 3. Trong thư mục repo, chạy `npm install` rồi `npm start`.
-4. Trong ứng dụng, chọn **Python environment → Set up Python packages** để tạo môi trường riêng và cài thư viện cho cả hai engine (Pillow, fontTools, openpyxl, NumPy, UnityPy, pycryptodome, lz4). Bạn cũng có thể chọn một Python đã cài các thư viện này.
+4. Nếu Python chưa chạy được công cụ của engine đang dùng, app tự mở hộp thoại Python. Khi máy chưa có Python, hộp thoại chỉ chỗ tải về rồi kiểm tra lại. Khi thiếu thư viện, bấm **Install the packages** để tạo môi trường riêng và cài thư viện cho mọi engine (Pillow, fontTools, openpyxl, NumPy, UnityPy, pycryptodome, lz4). Bạn cũng có thể chọn một Python đã cài các thư viện này. Hộp thoại mở lại được bằng nhãn trạng thái Python ở góc trên hoặc nút **Python environment**.
 5. Chọn thư mục chứa dữ liệu dự án trong **Workspace**. Xem **Source documentation** để biết bố cục và quy trình dịch.
 
 Nếu npm chặn bước cài Electron, chạy `npm approve-scripts electron` và `node node_modules/electron/install.js` một lần.

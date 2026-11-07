@@ -92,13 +92,23 @@ function prepareWorkspace(folder, engine) {
   }
   copyMissing(path.resolve(__dirname, '..', 'requirements.txt'), path.join(folder, 'requirements.txt'), 'requirements.txt', engine.hashes);
 }
+// Whether the chosen Python starts (`found`) and which of the engine's modules
+// it cannot import (`missing`): the window asks for the right fix from these.
 function pythonCheck() {
-  const modules = activeEngine().modules.join(', ');
-  const result = spawnSync(settings.python, ['-c',
-    `import sys, ${modules}; print(sys.version.split()[0])`],
-    {encoding: 'utf8', timeout: 10000, windowsHide: true});
-  return {ok: result.status === 0, version: result.status === 0 ? result.stdout.trim() : '',
-    message: result.status === 0 ? '' : (result.stderr || result.error?.message || 'Python could not start').trim()};
+  const probe = ['import sys, json, importlib', 'missing = []',
+    `for name in ${JSON.stringify(activeEngine().modules)}:`,
+    '    try: importlib.import_module(name)',
+    '    except Exception: missing.append(name)',
+    'print(json.dumps({"version": sys.version.split()[0], "missing": missing}))'].join('\n');
+  const result = spawnSync(settings.python, ['-c', probe], {encoding: 'utf8', timeout: 10000, windowsHide: true});
+  let report = null;
+  try { report = JSON.parse((result.stdout || '').trim().split(/\r?\n/).pop()); } catch {}
+  if (result.status !== 0 || !report || !Array.isArray(report.missing)) {
+    return {ok: false, found: false, version: '', missing: [],
+      message: (result.stderr || result.error?.message || 'Python could not start').trim()};
+  }
+  return {ok: !report.missing.length, found: true, version: String(report.version), missing: report.missing,
+    message: report.missing.length ? `No module named ${report.missing.join(', ')}` : ''};
 }
 function emit(event, payload) { if (window && !window.isDestroyed()) window.webContents.send(event, payload); }
 function performUpdateCheck() {
@@ -389,6 +399,8 @@ ipcMain.handle('choose-python', async () => {
   saveSettings();
   return {python: settings.python, check: pythonCheck()};
 });
+ipcMain.handle('check-python', () => pythonCheck());
+ipcMain.handle('open-python-download', () => shell.openExternal('https://www.python.org/downloads/'));
 ipcMain.handle('setup-python', () => {
   if (currentRun) throw new Error('Another command is already running.');
   const runId = `${Date.now()}-setup`;

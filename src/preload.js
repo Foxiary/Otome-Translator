@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('vees', {
   choosePath: (kind, current, filters) => ipcRenderer.invoke('choose-path', kind, current, filters),
   choosePython: () => ipcRenderer.invoke('choose-python'),
   setupPython: () => ipcRenderer.invoke('setup-python'),
+  checkPython: () => ipcRenderer.invoke('check-python'),
+  openPythonDownload: () => ipcRenderer.invoke('open-python-download'),
   openWorkspace: () => ipcRenderer.invoke('open-workspace'),
   missingFiles: toolId => ipcRenderer.invoke('missing-files', toolId),
   openDocument: name => ipcRenderer.invoke('open-document', name),
