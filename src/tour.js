@@ -43,11 +43,11 @@ const tour = (() => {
       <div class="tour-blocker"></div>
       <div class="tour-spot"></div>
       <section class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
-        <div class="tour-count"></div>
         <h2 id="tour-title"></h2>
         <p id="tour-body"></p>
         <div class="tour-actions">
           <button type="button" class="link-button tour-skip"></button>
+          <span class="tour-count"></span>
           <button type="button" class="button tour-back"></button>
           <button type="button" class="button primary tour-next"></button>
         </div>

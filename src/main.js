@@ -275,9 +275,29 @@ ipcMain.handle('setup-python', () => {
   return {runId};
 });
 ipcMain.handle('open-workspace', () => shell.openPath(workspace()));
-ipcMain.handle('open-document', (_event, name) => {
-  if (!activeEngine().docs.some(([, doc]) => doc === name)) throw new Error('Unknown document');
-  return shell.openPath(path.join(workspace(), name));
+// A note lives in the project folder once the engine has been copied there, and
+// in the engine folder before that. Only a relative Markdown path is readable.
+function documentFile(name) {
+  const relative = String(name || '').replace(/\\/g, '/');
+  if (!relative.endsWith('.md') || relative.split('/').some(part => !part || part === '.' || part === '..')) return null;
+  for (const root of [workspace(), enginePath(activeEngine())]) {
+    const file = path.resolve(root, relative);
+    const escaped = path.relative(path.resolve(root), file);
+    if (escaped.startsWith('..') || path.isAbsolute(escaped) || !fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
+    return file;
+  }
+  return null;
+}
+ipcMain.handle('read-document', (_event, name) => {
+  const file = documentFile(name);
+  if (!file) return {missing: true};
+  return {text: fs.readFileSync(file, 'utf8')};
+});
+ipcMain.handle('open-link', (_event, url) => {
+  let parsed;
+  try { parsed = new URL(String(url)); } catch { return false; }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+  return shell.openExternal(parsed.href);
 });
 ipcMain.handle('run-tool', (_event, id, values) => {
   if (currentRun) throw new Error('Another command is already running.');
