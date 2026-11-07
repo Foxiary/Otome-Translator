@@ -501,6 +501,7 @@ ipcMain.handle('run-tool', (_event, id, values) => {
   const {tool} = entry;
   if (!values || typeof values !== 'object') throw new Error('Missing input values.');
   const args = makeArgs(tool, values);
+  if (tool.builtin) return runBuiltin(id, tool, values, args);
   const root = path.resolve(workspace());
   const script = path.resolve(root, tool.script);
   if (!script.startsWith(root + path.sep)) throw new Error('Invalid script path.');
@@ -525,6 +526,68 @@ ipcMain.handle('run-tool', (_event, id, values) => {
   });
   return {runId};
 });
+// Tools that run inside the app instead of as a Python script. They use the
+// same run log, Stop button and history as the scripts.
+const BUILTINS = {
+  // The whole game out of an .nsp or .xci, as the project set-up does:
+  // <output>/romfs and <output>/exefs, with progress, a free-space check and a
+  // stop that removes what it had started.
+  async 'extract-game'(values, log, isCancelled) {
+    const lang = settings.language;
+    const file = String(values.game || '').trim();
+    const out = path.resolve(String(values['output folder'] || '').trim());
+    const romfsDir = path.join(out, 'romfs'), exefsDir = path.join(out, 'exefs');
+    for (const dir of [romfsDir, exefsDir]) {
+      if (fs.existsSync(dir) && fs.readdirSync(dir).length) throw new Error(`${t('project.error.not-empty', lang)} (${dir})`);
+    }
+    const made = [romfsDir, exefsDir, out].filter(dir => !fs.existsSync(dir));
+    const gb = bytes => new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).format(bytes / 1e9);
+    log(t('extract.start', lang, {name: path.basename(file), folder: out}));
+    let last = 0;
+    try {
+      const summary = await extractGame(file, {romfsDir, exefsDir, keys: String(values['--keys'] || '').trim() || settings.keysPath, isCancelled,
+        onProgress: p => {
+          const now = Date.now();
+          if (now - last < 2000 && p.done < p.total) return;
+          last = now;
+          log(`${p.total ? Math.floor((p.done / p.total) * 100) : 0}% · ${t('project.counts', lang, {files: p.files, count: p.count, done: gb(p.done), total: gb(p.total)})}`);
+        }});
+      log(t('extract.done', lang, {count: summary.files, total: gb(summary.bytes), romfs: romfsDir, exefs: summary.exefsDir || '-'}));
+    } catch (error) {
+      // What this run created goes; the output folder only if it made it and nothing else is in it.
+      for (const dir of made) {
+        if (dir !== out) fs.rmSync(dir, {recursive: true, force: true});
+        else if (fs.existsSync(dir) && !fs.readdirSync(dir).length) fs.rmdirSync(dir);
+      }
+      const known = {keys: 'project.error.keys', space: 'project.error.space', update: 'project.error.update', cancelled: 'project.error.cancelled'};
+      if (known[error.code]) throw Object.assign(new Error(t(known[error.code], lang, {detail: error.message})), {code: error.code});
+      throw error;
+    }
+  }
+};
+function runBuiltin(id, tool, values, args) {
+  const run = BUILTINS[tool.builtin];
+  if (!run) throw new Error('Unknown tool.');
+  settings.values[id] = values;
+  saveSettings();
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const started = new Date().toISOString();
+  currentRun = {runId, child: null, id, cancelled: false};
+  emit('run-start', {runId, id, title: tool.title, started, command: [tool.builtin, ...args]});
+  const log = text => emit('run-output', {runId, stream: 'stdout', text: `${text}\n`});
+  const finish = (code, error) => {
+    if (error) emit('run-output', {runId, stream: 'stderr', text: `${error.message}\n`});
+    const signal = currentRun?.cancelled ? 'cancelled' : null;
+    currentRun = null;
+    settings.history.unshift({id, engine: settings.engine, title: tool.title, started, code, signal});
+    settings.history = settings.history.slice(0, 30);
+    saveSettings();
+    emit('run-end', {runId, code, signal});
+  };
+  run(values, log, () => !!currentRun?.cancelled)
+    .then(() => finish(0), error => finish(error.code === 'cancelled' ? 130 : 1, error));
+  return {runId};
+}
 ipcMain.handle('cancel-run', () => {
   if (!currentRun) return false;
   currentRun.cancelled = true;

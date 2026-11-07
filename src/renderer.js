@@ -382,7 +382,9 @@ function renderForm() {
   checkMissing();
   if (engine().id === 'otomate' && WIDTH_TOOLS.includes(current.id)) showWidths($('form-widths'));
   else $('form-widths').classList.add('hidden');
-  $('run-hint').textContent = `${current.script}${current.prefix.length ? ' ' + current.prefix.join(' ') : ''} · ${state.workspace}`;
+  // A built-in tool has no script and does not run in the project folder.
+  $('run-hint').textContent = current.builtin ? text('tool.builtin')
+    : `${current.script}${current.prefix.length ? ' ' + current.prefix.join(' ') : ''} · ${state.workspace}`;
   $('run-button').disabled = running;
   $('cancel-button').disabled = !running;
 }

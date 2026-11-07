@@ -12,14 +12,18 @@ const EXE = V('--exe', 'file', 'Patched exefs/main, to follow the read redirects
 const groups = ['Dump', 'Inspect', 'Patch', 'Sheets'];
 const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦'};
 const summaries = {
-  Dump: 'Take single files out of your .nsp, using your prod.keys.',
+  Dump: 'Take the whole game, or single files, out of your .nsp or .xci, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
   Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it.',
   Sheets: 'Turn the translation sheet into a list of tag fixes.'
 };
 
 const tools = [
-  T('romfs', 'Dump', 'Take files out of the game', 'Copies chosen data files (for example common/script.memfs and common/script.membody) out of the game file (.nsp), without unpacking all 5 GB of it. Tick List to see every file name first.', 'tools/nsp.py', ['romfs'],
+  // Runs in the app (src/game-extract.js), the extractor the project set-up uses.
+  {...T('extract', 'Dump', 'Take out the whole game', 'Copies every data file (RomFS) and the program files (ExeFS) out of the game file (.nsp or .xci) into romfs/ and exefs/ inside the folder you choose, the same as setting up a project from scratch. About 5.7 GB for this game, mostly voice.', null, [],
+    [A('game', 'file', 'Game file (.nsp or .xci)'), A('output folder', 'dir', 'An empty folder, or one without romfs/ and exefs/ yet'), V('--keys', 'file', 'prod.keys; defaults to the one chosen before, or ~/.switch/prod.keys')],
+    'Update files are not supported; use the base game. Stop removes what was taken out so far.'), builtin: 'extract-game'},
+  T('romfs', 'Dump', 'Take chosen files out of the game', 'Copies chosen data files (for example common/script.memfs and common/script.membody) out of the game file (.nsp), without unpacking all 5 GB of it. Tick List to see every file name first.', 'tools/nsp.py', ['romfs'],
     [A('NSP', 'file'), A('output folder', 'dir'), A('path', 'text', 'One file path inside the game, e.g. common/script.memfs; * matches any part', true), B('--list', 'Only list the file names'), KEYS],
     'Update files are not supported; use the base game.'),
   T('exefs', 'Dump', 'Take out the game\'s program', 'Copies the game\'s program files (main, sdk, ...) out of the game file (.nsp).', 'tools/nsp.py', ['exefs'],

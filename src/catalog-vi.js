@@ -65,7 +65,8 @@ const tools = {
   'unity-ips32': {title: 'Tạo bản vá code', description: 'Tạo file vá code (.ips) từ danh sách thay đổi, kiểm tra từng thay đổi với game trước. Dành cho người dùng nâng cao.', note: 'Địa chỉ là RVA, không phải cột Offset trong dump.cs. ' + DRY},
   'unity-release': {title: 'Đóng gói bản phát hành', description: 'Nén bản mod hoàn chỉnh thành file zip để người chơi cài vào Ryujinx hoặc Switch đã mod (Atmosphere).', note: 'Chỉ hiện kế hoạch cho tới khi bạn tích Build.'},
 
-  'rrlib-romfs': {title: 'Lấy file ra khỏi game', description: 'Chép những file dữ liệu bạn chọn (ví dụ common/script.memfs và common/script.membody) ra từ file game (.nsp), không phải bung cả 5 GB. Tích List để xem tên mọi file trước.', note: 'Không hỗ trợ file cập nhật; hãy dùng bản game gốc.'},
+  'rrlib-extract': {title: 'Lấy toàn bộ dữ liệu game', description: 'Chép mọi file dữ liệu (RomFS) và file chương trình (ExeFS) ra khỏi file game (.nsp hoặc .xci), vào romfs/ và exefs/ trong thư mục bạn chọn, giống bước thiết lập dự án từ đầu. Game này khoảng 5,7 GB, phần lớn là giọng nói.', note: 'Không hỗ trợ file cập nhật; hãy dùng bản game gốc. Bấm Dừng thì những gì đã lấy ra được xoá đi.'},
+  'rrlib-romfs': {title: 'Lấy vài file ra khỏi game', description: 'Chép những file dữ liệu bạn chọn (ví dụ common/script.memfs và common/script.membody) ra từ file game (.nsp), không phải bung cả 5 GB. Tích List để xem tên mọi file trước.', note: 'Không hỗ trợ file cập nhật; hãy dùng bản game gốc.'},
   'rrlib-exefs': {title: 'Lấy file chương trình của game', description: 'Chép các file chương trình (main, sdk, ...) ra từ file game (.nsp).'},
   'rrlib-memfs-list': {title: 'Xem danh sách kịch bản', description: 'Liệt kê mọi kịch bản trong script.memfs, vị trí của nó trong script.membody, bản nào game thật sự nạp, và những phần dữ liệu không ai trỏ tới. Không thay đổi gì.'},
   'rrlib-memfs-unpack': {title: 'Bung các kịch bản', description: 'Lưu từng kịch bản trong gói thành file .tat để mở bằng các tool kịch bản.'},
@@ -110,7 +111,7 @@ const engines = {
   rrlib: {
     flow: 'Lấy kịch bản ra khỏi game → ghi bảng dịch vào game → kiểm tra bản patch → thử trong game.',
     groups: {
-      Dump: {name: 'Lấy dữ liệu', summary: 'Lấy từng file ra khỏi file .nsp, dùng prod.keys của bạn.'},
+      Dump: {name: 'Lấy dữ liệu', summary: 'Lấy toàn bộ game, hoặc từng file, ra khỏi file .nsp hoặc .xci, dùng prod.keys của bạn.'},
       Inspect: {name: 'Xem', summary: 'Xem bên trong mục lục, gói kịch bản và từng kịch bản.'},
       Patch: {name: 'Bản patch', summary: 'Ghi bảng dịch vào game, kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
       Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'}

@@ -17,7 +17,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
 ## Quy trình
 
-1. **Lấy bản JP** (cần `prod.keys`, mặc định `~/.switch/prod.keys`):
+1. **Lấy bản JP** (cần `prod.keys`, mặc định `~/.switch/prod.keys`). Trong app, "Lấy toàn bộ dữ liệu game" lấy cả RomFS lẫn ExeFS từ `.nsp` hoặc `.xci` (12 842 file, 5,8 GB, khoảng 16 giây); chỉ cần kịch bản thì bằng dòng lệnh:
 
    ```
    python tools/nsp.py romfs "<game>.nsp" jp "common/script.*"
