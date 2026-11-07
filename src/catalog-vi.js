@@ -63,7 +63,22 @@ const tools = {
   'unity-il2cpp-find': {title: 'Tìm chữ trong code game', description: 'Tìm chữ nằm sẵn trong code của game (global-metadata.dat).'},
   'unity-il2cpp-patch': {title: 'Sửa chữ trong code game', description: 'Thay một đoạn chữ trong code của game. Chữ mới không được dài hơn chữ cũ, và chữ có dấu chiếm nhiều chỗ hơn chữ không dấu.', note: 'Thay đổi chỉ dùng được cho đúng phiên bản game này. ' + DRY},
   'unity-ips32': {title: 'Tạo bản vá code', description: 'Tạo file vá code (.ips) từ danh sách thay đổi, kiểm tra từng thay đổi với game trước. Dành cho người dùng nâng cao.', note: 'Địa chỉ là RVA, không phải cột Offset trong dump.cs. ' + DRY},
-  'unity-release': {title: 'Đóng gói bản phát hành', description: 'Nén bản mod hoàn chỉnh thành file zip để người chơi cài vào Ryujinx hoặc Switch đã mod (Atmosphere).', note: 'Chỉ hiện kế hoạch cho tới khi bạn tích Build.'}
+  'unity-release': {title: 'Đóng gói bản phát hành', description: 'Nén bản mod hoàn chỉnh thành file zip để người chơi cài vào Ryujinx hoặc Switch đã mod (Atmosphere).', note: 'Chỉ hiện kế hoạch cho tới khi bạn tích Build.'},
+
+  'rrlib-romfs': {title: 'Lấy file ra khỏi game', description: 'Chép những file dữ liệu bạn chọn (ví dụ common/script.memfs và common/script.membody) ra từ file game (.nsp), không phải bung cả 5 GB. Tích List để xem tên mọi file trước.', note: 'Không hỗ trợ file cập nhật; hãy dùng bản game gốc.'},
+  'rrlib-exefs': {title: 'Lấy file chương trình của game', description: 'Chép các file chương trình (main, sdk, ...) ra từ file game (.nsp).'},
+  'rrlib-memfs-list': {title: 'Xem danh sách kịch bản', description: 'Liệt kê mọi kịch bản trong script.memfs, vị trí của nó trong script.membody, bản nào game thật sự nạp, và những phần dữ liệu không ai trỏ tới. Không thay đổi gì.'},
+  'rrlib-memfs-unpack': {title: 'Bung các kịch bản', description: 'Lưu từng kịch bản trong gói thành file .tat để mở bằng các tool kịch bản.'},
+  'rrlib-memfs-check': {title: 'Kiểm tra gói kịch bản', description: 'Kiểm tra mọi kịch bản trong gói đều mở được và dựng lại giống từng byte. Dùng khi nghi file bị hỏng.'},
+  'rrlib-rson-dump': {title: 'Xem mục lục kịch bản', description: 'In mục lục kịch bản (script.memfs) ra dạng chữ: tên từng file, vị trí và dung lượng.'},
+  'rrlib-rson-check': {title: 'Kiểm tra mục lục kịch bản', description: 'Đọc mục lục kịch bản rồi ghi lại; bản ghi lại phải giống file gốc từng byte.'},
+  'rrlib-kuv-strings': {title: 'Xem các câu của một kịch bản', description: 'Liệt kê mọi câu của một kịch bản (.tat), đánh số giống cột const_index trong bảng dịch.'},
+  'rrlib-kuv-calls': {title: 'Xem lệnh của một kịch bản', description: 'Liệt kê các lệnh của một kịch bản (.tat) kèm câu chúng hiện ra, như NameMess, GuideMess, KW và WinClear.'},
+  'rrlib-kuv-check': {title: 'Kiểm tra một kịch bản', description: 'Kiểm tra một kịch bản (.tat) mở được và dựng lại giống từng byte.'},
+  'rrlib-exehook': {title: 'Tìm chuyển hướng trong file chương trình', description: 'Liệt kê những lần đọc kịch bản mà file chương trình đã vá (exefs/main) chuyển sang chỗ khác. Bản patch cũ dùng cách này cho ba kịch bản mở đầu.'},
+  'rrlib-audit': {title: 'Kiểm tra bản patch', description: 'So bản patch tiếng Việt với kịch bản tiếng Nhật: tag vị trí, tag tên và tag dừng bị mất, câu bị đẩy ra ngoài màn hình, header sai. Không thay đổi gì.'},
+  'rrlib-patch': {title: 'Dựng lại bản patch', description: 'Dựng lại script.memfs và script.membody: trả lại tag vị trí #P bị mất, giữ cho các câu mà bản Nhật đặt ngoài màn hình vẫn hiện ra, trỏ thẳng từng kịch bản tới dữ liệu của nó rồi tự kiểm tra kết quả.', note: 'Chỉ hiện những gì sẽ thay đổi cho tới khi bạn tích Apply. Hãy thử bản dựng trong game trước khi chia sẻ.'},
+  'rrlib-sheetfix': {title: 'Danh sách sửa tag cho bảng dịch', description: 'Đọc bảng dịch (.xlsx) và ghi ra một file đề xuất theo đúng tab và dòng: tag #P cần thêm, câu phải để không có tag, và các câu #T / #KW cần sửa tay.'}
 };
 
 const engines = {
@@ -89,6 +104,15 @@ const engines = {
       Fonts: {name: 'Font', summary: 'Thêm chữ tiếng Việt vào font của game, hoặc thay font.'},
       Executable: {name: 'Code game', summary: 'Sửa chữ nằm trong code của game. Dành cho người dùng nâng cao.'},
       Release: {name: 'Phát hành', summary: 'Đóng gói mod cho người chơi.'}
+    }
+  },
+  rrlib: {
+    flow: 'Lấy kịch bản ra khỏi game → kiểm tra bản patch → dựng lại → thử trong game.',
+    groups: {
+      Dump: {name: 'Lấy dữ liệu', summary: 'Lấy từng file ra khỏi file .nsp, dùng prod.keys của bạn.'},
+      Inspect: {name: 'Xem', summary: 'Xem bên trong mục lục, gói kịch bản và từng kịch bản.'},
+      Patch: {name: 'Bản patch', summary: 'Kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
+      Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'}
     }
   }
 };

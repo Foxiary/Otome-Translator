@@ -11,6 +11,8 @@ const {missingFiles, jpNames} = require('./required-files');
 const {readWindows, saveWindow} = require('./windows-config');
 const {recipeFor, setupError} = require('./patch-recipe');
 const {MAPPED_ARGS, argValue, ffugenArgs, fontJobProblem, strokeFor, withOverrides} = require('./font-map');
+const {detect} = require('./detect-engine');
+const {extractGame} = require('./game-extract');
 
 let window;
 let currentRun = null;
@@ -48,6 +50,9 @@ function loadSettings() {
     settings.workspaces[engine.id] ||= path.join(app.getPath('userData'),
       engine.id === 'otomate' ? 'workspace' : `workspace-${engine.id}`);
   }
+  // Someone who already used the app has picked an engine; a fresh install has
+  // not, and opens on the start page that asks for the game first.
+  if (typeof settings.engineChosen !== 'boolean') settings.engineChosen = engineById.has(settings.engine);
   if (!engineById.has(settings.engine)) settings.engine = 'otomate';
   settings.python ||= process.platform === 'win32' ? 'py' : 'python3';
   settings.history ||= [];
@@ -177,9 +182,144 @@ ipcMain.handle('set-engine', (_event, id) => {
   const engine = engineById.get(id);
   if (!engine) throw new Error('Unknown engine.');
   settings.engine = id;
+  settings.engineChosen = true;
   prepareWorkspace(workspace(), engine);
   saveSettings();
   return {settings, workspace: workspace(), python: pythonCheck()};
+});
+// The files a dropped game hands to the tools' fields, named by what they are;
+// the page matches them to fields by each field's own wording.
+function relatedFiles(result) {
+  const {input, kind} = result;
+  const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
+  const sibling = (file, from, to) => { const other = file.replace(from, to); return isFile(other) ? other : null; };
+  const out = {};
+  if (kind === 'nsp') out.nsp = input;
+  if (kind === 'xci') out.xci = input;
+  if (kind === 'file') {
+    const name = path.basename(input).toLowerCase();
+    if (name.endsWith('.memfs')) Object.assign(out, {memfs: input, membody: sibling(input, /\.memfs$/i, '.membody')});
+    if (name.endsWith('.membody')) Object.assign(out, {membody: input, memfs: sibling(input, /\.membody$/i, '.memfs')});
+    if (name === 'main') out.exe = input;
+    if (name.endsWith('.tat')) out.tat = input;
+    if (name.endsWith('.cpk')) out.cpk = input;
+    if (/\.(assets|bundle)$/.test(name)) out.assets = input;
+  }
+  if (kind === 'folder') {
+    const first = list => list.map(rel => path.join(input, rel)).find(isFile) || null;
+    out.memfs = first(['romfs/common/script.memfs', 'common/script.memfs', 'script.memfs']);
+    if (out.memfs) out.membody = sibling(out.memfs, /\.memfs$/i, '.membody');
+    out.exe = first(['exefs/main', 'main']);
+    // A mod folder holds romfs/ (and maybe exefs/) the way the emulator loads it.
+    if (fs.existsSync(path.join(input, 'romfs'))) out.mod = input;
+  }
+  return Object.fromEntries(Object.entries(out).filter(([, value]) => value));
+}
+// Picking the engine already in use (from the start page, or a detection that
+// matched it) counts as choosing it too.
+ipcMain.handle('engine-chosen', () => {
+  settings.engineChosen = true;
+  saveSettings();
+  return {settings};
+});
+ipcMain.handle('detect-engine', (_event, input) => {
+  if (typeof input !== 'string' || !input) throw new Error('Nothing to read.');
+  const result = detect(input, {keys: settings.keysPath});
+  return {...result, files: relatedFiles(result)};
+});
+// ---------------------------------------------------------------- projects
+// A project folder holds the engine's tools, the original game files and a
+// clean mod/ (romfs/, exefs/) that is the mod itself. The Otomate tools read the
+// game's archives from the project root (SYSTEM.cpk, STORY.cpk beside build.py),
+// so its RomFS goes there; the other engines take paths and get game/romfs/.
+function projectLayout(folder, engineId) {
+  return {
+    romfs: engineId === 'otomate' ? folder : path.join(folder, 'game', 'romfs'),
+    exefs: path.join(folder, 'game', 'exefs'),
+    mod: path.join(folder, 'mod')
+  };
+}
+// Fields of the engine's tools a new project can fill, named as detection names them.
+function projectFiles(folder, engineId, gameFile) {
+  const layout = projectLayout(folder, engineId);
+  const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
+  const memfs = path.join(layout.romfs, 'common', 'script.memfs');
+  const files = {mod: layout.mod};
+  if (gameFile) files[/\.xci$/i.test(gameFile) ? 'xci' : 'nsp'] = gameFile;
+  if (isFile(memfs)) Object.assign(files, {memfs, membody: memfs.replace(/\.memfs$/, '.membody'), jp: path.dirname(memfs)});
+  if (isFile(path.join(layout.exefs, 'main'))) files.exe = path.join(layout.exefs, 'main');
+  return files;
+}
+function safeName(text) {
+  return String(text || 'Game').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Game';
+}
+let projectJob = null;
+// A free folder for a new project: inside `parent` (Documents/Otome Translator
+// by default), named after the game. An empty folder chosen as parent is used as is.
+ipcMain.handle('project-suggest', (_event, name, chosen) => {
+  const isEmptyDir = dir => { try { return fs.statSync(dir).isDirectory() && !fs.readdirSync(dir).length; } catch { return false; } };
+  if (typeof chosen === 'string' && path.isAbsolute(chosen) && isEmptyDir(chosen)) return chosen;
+  const parent = typeof chosen === 'string' && path.isAbsolute(chosen) ? chosen : path.join(app.getPath('documents'), 'Otome Translator');
+  let folder = path.join(parent, safeName(name));
+  for (let n = 2; fs.existsSync(folder) && fs.readdirSync(folder).length; n++) folder = path.join(parent, `${safeName(name)} ${n}`);
+  return folder;
+});
+ipcMain.handle('project-cancel', () => { if (projectJob) projectJob.cancelled = true; return !!projectJob; });
+// options: folder (new or empty), gameFile (.nsp/.xci) or gameFolder (a RomFS
+// already taken out, e.g. by Ryujinx), modFolder (an existing mod to carry on).
+ipcMain.handle('project-create', async (_event, options = {}) => {
+  if (currentRun || projectJob) throw new Error('Wait for the current command to finish first.');
+  const {folder, gameFile, gameFolder, modFolder} = options;
+  if (typeof folder !== 'string' || !path.isAbsolute(folder)) throw new Error('Choose where to create the project.');
+  const existed = fs.existsSync(folder);
+  if (existed && fs.readdirSync(folder).length) {
+    throw new Error('not-empty: that folder already has files in it');
+  }
+  const engine = activeEngine();
+  const layout = projectLayout(folder, engine.id);
+  const job = projectJob = {cancelled: false};
+  const progress = payload => emit('project-progress', payload);
+  try {
+    fs.mkdirSync(path.join(layout.mod, 'romfs'), {recursive: true});
+    fs.mkdirSync(path.join(layout.mod, 'exefs'), {recursive: true});
+    let summary = null;
+    if (gameFile) {
+      progress({stage: 'extract', done: 0, total: 0, files: 0, count: 0, current: ''});
+      summary = await extractGame(gameFile, {romfsDir: layout.romfs, exefsDir: layout.exefs, keys: settings.keysPath,
+        onProgress: p => progress({stage: 'extract', ...p}), isCancelled: () => job.cancelled});
+    } else if (gameFolder) {
+      progress({stage: 'copy-game'});
+      await fs.promises.cp(gameFolder, layout.romfs, {recursive: true, errorOnExist: false});
+    }
+    if (job.cancelled) throw Object.assign(new Error('stopped'), {code: 'cancelled'});
+    if (modFolder) {
+      progress({stage: 'copy-mod'});
+      await fs.promises.cp(modFolder, layout.mod, {recursive: true});
+    }
+    progress({stage: 'prepare'});
+    prepareWorkspace(folder, engine);
+    settings.workspaces[engine.id] = folder;
+    saveSettings();
+    return {workspace: folder, layout, summary, files: projectFiles(folder, engine.id, gameFile), python: pythonCheck()};
+  } catch (error) {
+    // A folder this call made holds only a partial project: take it away again.
+    if (!existed) fs.rmSync(folder, {recursive: true, force: true});
+    throw Object.assign(new Error(error.code ? `${error.code}: ${error.message}` : error.message), {code: error.code});
+  } finally {
+    projectJob = null;
+  }
+});
+ipcMain.handle('choose-detect-input', async (_event, kind) => {
+  const result = await dialog.showOpenDialog(window, {properties: [kind === 'dir' ? 'openDirectory' : 'openFile']});
+  return result.canceled ? null : result.filePaths[0];
+});
+ipcMain.handle('choose-keys', async () => {
+  const result = await dialog.showOpenDialog(window, {properties: ['openFile'],
+    filters: [{name: 'prod.keys', extensions: ['keys']}, {name: 'All files', extensions: ['*']}]});
+  if (result.canceled) return null;
+  settings.keysPath = result.filePaths[0];
+  saveSettings();
+  return settings.keysPath;
 });
 ipcMain.handle('check-update', () => performUpdateCheck());
 ipcMain.handle('dismiss-update', (_event, tag) => {

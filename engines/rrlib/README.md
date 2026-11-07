@@ -10,6 +10,8 @@ Công cụ ra đời khi sửa bản patch Việt ngày 02/10/2026. Bản đó l
 `#P`, khiến hai câu dẫn hiện chồng vào một khung. Ghi chú định dạng chi tiết, kèm
 các bẫy đã gặp, nằm ở `CLAUDE.md` (tiếng Anh).
 
+Trong Otome Translator, thả file `.nsp` hoặc thư mục mod của game vào cửa sổ là app tự chuyển sang engine này và điền sẵn đường dẫn; mọi công cụ bên dưới đều có biểu mẫu trong app. Có thể chạy thẳng bằng dòng lệnh như dưới đây.
+
 Chỉ cần Python 3. Riêng `sheetfix.py` cần thêm openpyxl. `nsp.py` dùng
 pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không chứa dữ liệu game.
 

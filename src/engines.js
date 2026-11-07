@@ -48,6 +48,23 @@ const engines = [
     summaries: require('./catalog-unity').summaries,
     vi: {...vi.engines.unity, docs: vi.docs},
     tools: withVi(require('./catalog-unity').tools)
+  },
+  {
+    id: 'rrlib',
+    name: 'rrlib',
+    subtitle: 'Matsurika no Kei · RSON memfs, KUV scripts',
+    dir: 'rrlib',
+    copy: ['tools', 'README.md', 'CLAUDE.md'],
+    docs: [['Engine guide', 'README.md'], ['Tool reference', 'tools/README.md'], ['Format notes', 'CLAUDE.md']],
+    flow: 'Take the scripts out of the game → check the patch → rebuild it → try it in the game.',
+    // nsp.py falls back to the openssl command without pycryptodome, which Windows lacks.
+    modules: ['openpyxl', 'Crypto'],
+    hashes: {},
+    groups: require('./catalog-rrlib').groups,
+    symbols: require('./catalog-rrlib').symbols,
+    summaries: require('./catalog-rrlib').summaries,
+    vi: {...vi.engines.rrlib, docs: vi.docs},
+    tools: withVi(require('./catalog-rrlib').tools)
   }
 ];
 

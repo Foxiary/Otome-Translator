@@ -1,11 +1,12 @@
 # Otome Translator (OTM)
 
-Ứng dụng Electron để Việt hóa game otome trên Switch, với hai bộ công cụ (engine) chuyển qua lại ngay trên thanh bên trái:
+Ứng dụng Electron để Việt hóa game otome trên Switch. Cách vào nhanh nhất: **thả file game** (`.nsp`, `.xci`, thư mục RomFS, thư mục mod hoặc một file lẻ) vào cửa sổ, app tự nhận engine, chuyển sang bộ công cụ đó và điền sẵn đường dẫn vào các ô còn trống. Lần đầu mở app (chưa từng chọn engine), app mở vào màn hình bắt đầu chỉ hỏi file game; ai đã biết engine thì mở mục **Tự chọn engine** ở đó để vào thẳng bộ công cụ. Bước tiếp theo là thư mục dự án: **bắt đầu từ đầu** (app tự giải nén toàn bộ RomFS và ExeFS từ `.nsp`/`.xci` bằng `prod.keys`, hoặc chép thư mục mà Ryujinx đã giải nén qua Extract Data → RomFS), **tiếp tục bản mod có sẵn** (chép bản mod vào `mod/` của dự án mới), hoặc **mở dự án đã có**. Một dự án gồm bộ công cụ của engine, file game gốc (engine Otomate đặt RomFS ở gốc dự án như VE-ES quy ước; engine khác ở `game/romfs/`; ExeFS ở `game/exefs/`) và `mod/romfs/`, `mod/exefs/` chỉ chứa file mod. Sau đó danh sách ba engine nằm ở mục **Chọn thủ công** trên thanh bên trái:
 
 | engine | dành cho | công cụ |
 |---|---|---|
 | **Otomate** | game Otomate / Idea Factory: container CRI `.cpk`, kịch bản `STCM2L`, cơ sở dữ liệu `.gbin`/`.gstr`, font bitmap `.ffu` | 34, từ [VE-ES](https://github.com/Foxiary/VE-ES) |
 | **Unity** | game Unity IL2CPP: bundle và `.assets` (UnityPy), TextAsset JSON, khung chữ và font TextMeshPro (cả font tĩnh), hằng chuỗi IL2CPP, bản vá IPS32 | 22, rút từ [ul-vi-patch](https://github.com/Foxiary/ul-vi-patch) |
+| **rrlib** | Matsurika no Kei -kEi- Tenmei Iniden: mục lục RSON `script.memfs`, gói `script.membody`, kịch bản `.tat` (KUV), tag `#P`/`#T`/`#KW` | 14 |
 
 Mỗi engine có workspace, giá trị biểu mẫu và tài liệu riêng; đổi engine không làm mất gì của engine kia. Giao diện cung cấp biểu mẫu, chọn tệp, nhật ký trực tiếp và nút dừng cho từng thao tác dòng lệnh.
 
@@ -69,10 +70,12 @@ Nếu npm chặn bước cài Electron, chạy `npm approve-scripts electron` v�
 
 - `engines/otomate/` là submodule của [Foxiary/VE-ES](https://github.com/Foxiary/VE-ES), hiện ở commit `08807f7`.
 - `engines/unity/` nằm ngay trong repo này. Xem `engines/unity/README.md`; mỗi công cụ đã được chạy trên dữ liệu UNLOGICAL thật và so với bản Việt hóa đã phát hành (`engines/unity/tools/README.md`).
-- `engines/rrlib/` là công cụ dòng lệnh cho Matsurika no Kei -kEi- Tenmei Iniden, game có kịch bản dạng `script.memfs` / `script.membody`. Engine này chưa có trong giao diện app. Xem `engines/rrlib/README.md`, và `engines/rrlib/CLAUDE.md` cho định dạng file.
+- `engines/rrlib/` là bộ công cụ cho Matsurika no Kei -kEi- Tenmei Iniden, game có kịch bản dạng `script.memfs` / `script.membody`. Xem `engines/rrlib/README.md`, và `engines/rrlib/CLAUDE.md` cho định dạng file.
 - `projects/ul-vi-patch/` là submodule của [Foxiary/ul-vi-patch](https://github.com/Foxiary/ul-vi-patch). `projects/CxM-VI/` là submodule của [Foxiary/CxM-VI](https://github.com/Foxiary/CxM-VI). Cả hai không được đóng vào bản cài. Lấy về bằng `git submodule update --init projects/ul-vi-patch projects/CxM-VI`.
 
-Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js` và `src/catalog-unity.js`; `src/engines.js` khai báo engine, thư mục chép vào workspace, tài liệu và thư viện Python cần có.
+Danh mục công cụ của từng engine nằm ở `src/catalog-otomate.js`, `src/catalog-unity.js` và `src/catalog-rrlib.js`; `src/engines.js` khai báo engine, thư mục chép vào workspace, tài liệu và thư viện Python cần có.
+
+Phần nhận diện engine nằm ở `src/detect-engine.js`. Nó chỉ đọc tên file và vài byte đầu file. Với `.nsp` và `.xci`, nó chỉ giải mã header NCA và mục lục RomFS bằng `prod.keys` (tìm ở `~/.switch/` và thư mục `system` của Ryujinx, hoặc chọn tay), nên file game 4–6 GB cũng chỉ mất dưới 0,1 giây. XCI đi qua header `HEAD` và hai lớp HFS0 (gốc → `secure`) rồi dùng chung phần đọc NCA. Chưa đọc được `.nsz`, `.xcz`, và file cập nhật tách riêng (cần bản game gốc). Phần giải nén nằm ở `src/game-extract.js`: đọc theo khối 8 MB để cửa sổ không bị treo, có tiến độ, dừng được, kiểm dung lượng trống trước; bản USA của Code: Realize (3,55 GB) giải nén trong khoảng 6 giây. `scripts/test-detect-engine.js` tự dựng một NSP và một XCI mã hoá bằng khoá ngẫu nhiên để kiểm cả đường giải mã lẫn giải nén. Muốn thêm engine mới vào phần nhận diện thì thêm dấu hiệu tên file và byte đầu vào `PATH_RULES` và `magicOf()`.
 
 Để lên bản VE-ES mới:
 

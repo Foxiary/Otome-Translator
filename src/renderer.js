@@ -45,7 +45,7 @@ function icon(name, className = 'icon') {
   return svg;
 }
 const groupIcons = {Build: 'build', Fonts: 'font', Archives: 'archive', Sheets: 'sheet', Apply: 'arrow', Executable: 'terminal',
-  Diagnostics: 'diagnostics', Dump: 'download', Inspect: 'search', Text: 'sheet', Layout: 'layout', Release: 'package'};
+  Diagnostics: 'diagnostics', Dump: 'download', Inspect: 'search', Text: 'sheet', Layout: 'layout', Release: 'package', Patch: 'patch'};
 // The patch page sits in the group list next to the group whose output it shares.
 const patchAfter = {otomate: 'Build', unity: 'Text'};
 // The measure screen uses the Otomate width tools, so only that engine offers it.

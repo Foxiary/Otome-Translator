@@ -1,7 +1,16 @@
-const {contextBridge, ipcRenderer} = require('electron');
+const {contextBridge, ipcRenderer, webUtils} = require('electron');
 
 contextBridge.exposeInMainWorld('vees', {
   state: () => ipcRenderer.invoke('state'),
+  detectEngine: input => ipcRenderer.invoke('detect-engine', input),
+  chooseDetectInput: kind => ipcRenderer.invoke('choose-detect-input', kind),
+  chooseKeys: () => ipcRenderer.invoke('choose-keys'),
+  markEngineChosen: () => ipcRenderer.invoke('engine-chosen'),
+  projectSuggest: (name, parent) => ipcRenderer.invoke('project-suggest', name, parent),
+  projectCreate: options => ipcRenderer.invoke('project-create', options),
+  projectCancel: () => ipcRenderer.invoke('project-cancel'),
+  // A dropped File carries no path in the page since Electron 32; this asks for it.
+  pathForFile: file => webUtils.getPathForFile(file),
   setEngine: id => ipcRenderer.invoke('set-engine', id),
   chooseWorkspace: () => ipcRenderer.invoke('choose-workspace'),
   choosePath: (kind, current, filters) => ipcRenderer.invoke('choose-path', kind, current, filters),
@@ -31,7 +40,7 @@ contextBridge.exposeInMainWorld('vees', {
   dismissUpdate: tag => ipcRenderer.invoke('dismiss-update', tag),
   openUpdate: () => ipcRenderer.invoke('open-update'),
   on: (event, callback) => {
-    if (!['run-start', 'run-output', 'run-end', 'update-status'].includes(event)) throw new Error('Invalid event');
+    if (!['run-start', 'run-output', 'run-end', 'update-status', 'project-progress'].includes(event)) throw new Error('Invalid event');
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on(event, handler);
     return () => ipcRenderer.removeListener(event, handler);

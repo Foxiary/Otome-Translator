@@ -1,0 +1,128 @@
+/* Drop-a-game: the card that opens the engine section, the overlay shown while
+   a file is dragged over the window, and the engine list folded under
+   "Choose by hand". Tokens come from styles.css. */
+
+/* The card. Idle it is a drop target; after a drop it holds the verdict. */
+.detect-card{padding:12px 12px 11px;border:1px dashed var(--accent-line);border-radius:10px;background:var(--accent-soft);transition:border-color .2s ease-out,background-color .2s ease-out}
+.detect-card[data-state=found]{border-style:solid;border-color:var(--selected-border);background:var(--card)}
+.detect-card[data-state=problem]{border-style:solid;border-color:var(--info-line);background:var(--card)}
+.detect-card[aria-busy=true]{border-style:solid}
+.detect-head{display:flex;gap:10px;align-items:flex-start}
+.detect-head>.icon{width:18px;height:18px;margin-top:1px;color:var(--accent-text)}
+.detect-head .engine-glyph{width:26px;height:26px}
+.detect-copy{min-width:0}
+.detect-title{font-size:12px;font-weight:650;color:var(--ink);line-height:1.35;overflow-wrap:anywhere}
+.detect-hint{margin-top:3px;font-size:10.5px;color:var(--secondary);line-height:1.45}
+.detect-note,.detect-problem{margin:9px 0 0;font-size:10.5px;line-height:1.45}
+.detect-note{color:var(--secondary)}
+.detect-problem{padding:7px 9px;border-radius:6px;background:var(--info-bg);color:var(--info-ink)}
+.detect-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.detect-actions button{border:1px solid var(--border);background:var(--elevated);border-radius:6px;padding:5px 9px;font-size:10.5px;font-weight:600;color:var(--ink);transition:border-color .15s ease-out,background-color .15s ease-out}
+.detect-actions button:hover{border-color:var(--border-hover);background:var(--hover)}
+.detect-actions button:active{transform:translateY(1px)}
+.detect-actions button.primary{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.detect-actions button.primary:hover{border-color:var(--accent-hover);background:var(--accent-hover)}
+.detect-actions button.quiet{border-color:transparent;background:transparent;color:var(--secondary);padding-inline:4px}
+.detect-actions button.quiet:hover{color:var(--ink);background:transparent;text-decoration:underline;text-underline-offset:3px}
+.detect-why{margin-top:9px;font-size:10.5px;color:var(--secondary)}
+.detect-why summary{cursor:pointer;color:var(--secondary);width:max-content}
+.detect-why summary:hover{color:var(--ink)}
+.detect-why ul{margin:6px 0 0;padding-left:16px}
+.detect-why li{margin:1px 0;font-size:10px;overflow-wrap:anywhere}
+.detect-why p{margin:5px 0 0}
+
+/* The engine list, folded: the summary names the engine in use. */
+.engine-advanced{margin-top:10px}
+.engine-current{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;list-style:none;color:var(--secondary)}
+.engine-current::-webkit-details-marker{display:none}
+.engine-current:hover{background:var(--hover);color:var(--ink)}
+.engine-current-copy{display:flex;flex-direction:column;min-width:0;flex:1}
+.engine-current-name{font-size:11.5px;font-weight:600;color:var(--ink)}
+.engine-current-change{font-size:10px;color:var(--subtle)}
+.engine-current-chevron{width:14px;height:14px;color:var(--subtle)}
+.engine-advanced[open] .engine-current{margin-bottom:7px}
+.engine-advanced[open] .engine-current-chevron{color:var(--ink)}
+
+/* While files are dragged over the window. */
+.drop-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#0009;pointer-events:none}
+.drop-overlay-box{display:flex;gap:12px;align-items:center;padding:22px 30px;border:2px dashed var(--accent-line);border-radius:14px;background:var(--elevated);color:var(--ink);font-size:15px;font-weight:650;box-shadow:var(--shadow)}
+.drop-overlay-box .icon{width:26px;height:26px;color:var(--accent-text)}
+
+@media (prefers-reduced-motion:reduce){.detect-card,.detect-actions button{transition:none}.detect-actions button:active{transform:none}}
+
+/* The start page: shown until an engine has been chosen once. The parts of
+   the sidebar that belong to an engine wait until there is one. */
+.app:not(.page-start) #start-view{display:none}
+.app.page-start .sidebar>section,.app.page-start .navigation{display:none}
+.start-view{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:clamp(48px,11vh,120px) 40px 56px}
+.start-inner{width:min(660px,100%)}
+.start-inner h1{margin:0 0 10px;font-size:32px;line-height:1.15;font-weight:700;letter-spacing:-.025em;color:var(--ink)}
+.start-lead{max-width:60ch;margin:0 0 30px;font-size:14px;line-height:1.6;color:var(--secondary)}
+.detect-large{padding:26px 28px 24px;border-width:2px;border-radius:14px}
+.detect-large .detect-head{gap:14px}
+.detect-large .detect-head>.icon{width:28px;height:28px}
+.detect-large .engine-glyph{width:36px;height:36px}
+.detect-large .detect-title{font-size:17px}
+.detect-large .detect-hint{margin-top:5px;font-size:13px}
+.detect-large .detect-note,.detect-large .detect-problem{margin-top:14px;font-size:12.5px}
+.detect-large .detect-actions{margin-top:18px;gap:8px}
+.detect-large .detect-actions button{padding:8px 14px;font-size:12.5px;border-radius:7px}
+.detect-large .detect-actions button.quiet{padding-inline:6px}
+.detect-large .detect-why{font-size:12px}
+.detect-large .detect-why li{font-size:11.5px}
+
+.start-advanced{margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
+.start-advanced summary{display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;color:var(--ink)}
+.start-advanced summary::-webkit-details-marker{display:none}
+.start-advanced summary .icon{width:16px;height:16px;color:var(--subtle)}
+.start-advanced summary:hover .icon,.start-advanced[open] summary .icon{color:var(--ink)}
+.start-advanced-copy{display:flex;flex-direction:column;gap:2px;flex:1}
+.start-advanced-title{font-size:13.5px;font-weight:650}
+.start-advanced-hint{font-size:12px;color:var(--secondary)}
+.start-engines{display:grid;gap:8px;margin-top:16px}
+.start-engine{display:flex;align-items:center;gap:14px;width:100%;padding:13px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--ink);text-align:left;transition:border-color .15s ease-out,background-color .15s ease-out,transform .15s ease-out}
+.start-engine:hover{border-color:var(--accent-line);background:var(--accent-soft)}
+.start-engine:active{transform:translateY(1px)}
+.start-engine .engine-glyph{width:34px;height:34px;flex-shrink:0}
+.start-engine-copy{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.start-engine-name{font-size:13.5px;font-weight:650}
+.start-engine-for{font-size:12px;color:var(--secondary);line-height:1.45}
+.start-engine-count{font-size:11px;color:var(--subtle);white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.start-engine{transition:none}.start-engine:active{transform:none}}
+
+/* Step two of the start page: the project folder. */
+.project-back{display:inline-flex;margin:0 0 18px;padding:0;border:0;background:transparent;color:var(--secondary);font-size:12px}
+.project-back:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.project-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 22px}
+.project-mode{display:flex;gap:10px;align-items:flex-start;padding:13px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);cursor:pointer;transition:border-color .15s ease-out,background-color .15s ease-out}
+.project-mode:hover{border-color:var(--border-hover)}
+.project-mode.is-selected{border-color:var(--accent-line);background:var(--accent-soft)}
+.project-mode input{margin:3px 0 0;accent-color:var(--accent);flex-shrink:0}
+.project-mode-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.project-mode-title{font-size:13px;font-weight:650;color:var(--ink)}
+.project-mode-hint{font-size:11.5px;line-height:1.45;color:var(--secondary)}
+.project-form{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:6px 16px}
+.project-form>.button.primary{align-self:flex-start;margin:10px 0}
+.project-field{display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid var(--line)}
+.project-field:last-child{border-bottom:0}
+.project-field-copy{flex:1;min-width:0}
+.project-field-label{font-size:12px;font-weight:600;color:var(--ink)}
+.project-field-value{margin-top:2px;font-size:11.5px;color:var(--secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.project-field-value.is-empty{color:var(--subtle);font-style:italic}
+.project-field-actions{display:flex;gap:6px;flex-shrink:0}
+.project-ryujinx{padding:10px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--secondary)}
+.project-ryujinx summary{cursor:pointer;width:max-content;color:var(--secondary)}
+.project-ryujinx summary:hover{color:var(--ink)}
+.project-ryujinx ol{margin:8px 0 10px;padding-left:20px;line-height:1.6}
+.project-error{margin-top:14px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.project-progress{margin-top:16px}
+.project-progress-stage{font-size:13px;font-weight:600;color:var(--ink)}
+.project-bar{height:6px;margin:10px 0 7px;border-radius:3px;background:var(--line);overflow:hidden}
+.project-bar-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .2s ease-out}
+.project-progress-counts{font-size:12px;color:var(--secondary);font-variant-numeric:tabular-nums}
+.project-progress-file{margin-top:3px;font-size:11px;color:var(--subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.project-actions{display:flex;gap:8px;margin-top:20px}
+.project-actions .button.quiet{border-color:transparent;background:transparent;color:var(--secondary)}
+.project-actions .button.quiet:hover{color:var(--ink)}
+@media (max-width:1200px){.project-modes{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.project-mode,.project-bar-fill{transition:none}}

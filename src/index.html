@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
   <title>Otome Translator</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="detect.css">
   <script src="theme.js"></script>
 </head>
 <body>
@@ -14,6 +15,8 @@
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M10 5H5v15h15v-5"/></symbol>
     <symbol id="i-otomate" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></symbol>
     <symbol id="i-unity" viewBox="0 0 24 24"><path d="m12 3 8 5v9l-8 4-8-4V8l8-5Z"/><path d="m4 8 8 5 8-5M12 13v8"/></symbol>
+    <symbol id="i-rrlib" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6Z"/><path d="M15 3v4h4M9 11h7M9 15h7M9 19h4"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3v11m-4-4 4 4 4-4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></symbol>
     <symbol id="i-chevrons" viewBox="0 0 24 24"><path d="m8 9 4-4 4 4M8 15l4 4 4-4"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></symbol>
@@ -53,8 +56,12 @@
 
       <section class="engine-section" aria-labelledby="engine-heading">
         <div class="section-label"><h2 class="eyebrow" id="engine-heading" data-i18n="rail.engine"></h2><span class="local-label" id="engine-count"></span></div>
-        <fieldset class="engine-options" id="engines" aria-labelledby="engine-heading" aria-describedby="engine-help"></fieldset>
-        <p class="engine-help" id="engine-help" data-i18n="engine.help"></p>
+        <div class="detect-card" id="detect-card" aria-live="polite"></div>
+        <details class="engine-advanced" id="engine-advanced">
+          <summary class="engine-current"><span class="engine-current-copy"><span class="engine-current-name" id="engine-current-name"></span><span class="engine-current-change" data-i18n="engine.change"></span></span><svg class="icon engine-current-chevron"><use href="#i-chevrons"/></svg></summary>
+          <fieldset class="engine-options" id="engines" aria-labelledby="engine-heading" aria-describedby="engine-help"></fieldset>
+          <p class="engine-help" id="engine-help" data-i18n="engine.help"></p>
+        </details>
       </section>
 
       <nav class="navigation" aria-labelledby="groups-heading">
@@ -89,6 +96,18 @@
     </section>
 
     <main class="main">
+      <section id="start-view" class="start-view" aria-labelledby="start-title">
+        <div class="start-inner hidden" id="start-project" aria-live="polite"></div>
+        <div class="start-inner" id="start-game">
+          <h1 id="start-title" data-i18n="start.title"></h1>
+          <p class="start-lead" data-i18n="start.lead"></p>
+          <div class="detect-card detect-large" id="start-detect" aria-live="polite"></div>
+          <details class="start-advanced" id="start-advanced">
+            <summary><span class="start-advanced-copy"><span class="start-advanced-title" data-i18n="start.advanced"></span><span class="start-advanced-hint" data-i18n="start.advancedHint"></span></span><svg class="icon"><use href="#i-chevrons"/></svg></summary>
+            <div class="start-engines" id="start-engines"></div>
+          </details>
+        </div>
+      </section>
       <section id="patch-view" class="patch-view">
         <header class="page-header">
           <div class="header-top"><div class="breadcrumbs" id="patch-breadcrumb"></div></div>
@@ -262,6 +281,10 @@
   <script src="file-types.js"></script>
   <script src="font-map.js"></script>
   <script src="tour.js"></script>
+  <!-- Before renderer.js: its hooks must be in place before start() runs. -->
+  <script src="detect-ui.js"></script>
+  <script src="project-ui.js"></script>
+  <div class="drop-overlay hidden" id="drop-overlay" aria-hidden="true"><div class="drop-overlay-box"><svg class="icon"><use href="#i-drop"/></svg><span data-i18n="detect.overlay"></span></div></div>
   <script src="renderer.js"></script>
   <script src="update-ui.js"></script>
 </body>
