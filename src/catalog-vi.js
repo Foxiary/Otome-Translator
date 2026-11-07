@@ -81,9 +81,14 @@ const tools = {
   'rrlib-audit': {title: 'Kiểm tra bản patch', description: 'So bản patch tiếng Việt với kịch bản tiếng Nhật: tag vị trí, tag tên và tag dừng bị mất, câu bị đẩy ra ngoài màn hình, header sai. Không thay đổi gì.'},
   'rrlib-patch': {title: 'Dựng lại bản patch', description: 'Dựng lại script.memfs và script.membody: trả lại tag vị trí #P bị mất, giữ cho các câu mà bản Nhật đặt ngoài màn hình vẫn hiện ra, trỏ thẳng từng kịch bản tới dữ liệu của nó rồi tự kiểm tra kết quả.', note: 'Chạy thử trước rồi mới hỏi có ghi không. Hãy thử bản dựng trong game trước khi chia sẻ.'},
   'rrlib-sheetfix': {title: 'Danh sách sửa tag cho bảng dịch', description: 'Đọc bảng dịch (.xlsx) và ghi ra một file đề xuất theo đúng tab và dòng: tag #P cần thêm, câu phải để không có tag, và các câu #T / #KW cần sửa tay.'},
-  'rrlib-sprite-export': {title: 'Xem và lấy ảnh của một màn hình', description: 'Liệt kê các ảnh của một màn hình và từng ô được cắt ra từ đó, đặt tên theo phần hình dùng nó, kèm vị trí và kích thước (chữ 新しく始める ở menu là ô mat_ttlm_com01_off, câu chú thích của nó là mat_ttlm_com01_setu). Chọn thư mục thì mọi ảnh và từng ô còn được lưu vào đó thành file ảnh, kèm cells.csv ghi cùng danh sách. Bỏ trống thư mục thì chỉ xem danh sách. Vẽ lại ô cần dịch bằng phần mềm sửa ảnh bất kỳ, giữ nguyên kích thước.'},
-  'rrlib-sprite-import': {title: 'Đưa ảnh đã vẽ lại vào game', description: 'Đọc thư mục do "Xem và lấy ảnh của một màn hình" tạo: ảnh nào khác bản game thì được dán lại đúng chỗ, rồi dựng lại file của màn hình đó và tự kiểm tra; file không sửa phải giữ nguyên từng byte.'},
-  'rrlib-sprite-check': {title: 'Kiểm tra file của một màn hình', description: 'Dựng lại một màn hình mà không sửa gì, kết quả phải giống từng byte, và thử nén lại mọi ảnh mà công cụ ghi được.'}
+  'rrlib-sprite-translate': {title: 'Dịch ảnh của một màn hình', description: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh. Chạy lần đầu với một thư mục ảnh còn trống: từng ô của màn hình được lưu vào đó thành một file ảnh, đặt tên theo phần hình dùng nó (chữ 新しく始める ở menu tiêu đề là mat_ttlm_com01_off, câu chú thích của nó là mat_ttlm_com01_setu). Vẽ lại các ô cần dịch ngay trong thư mục đó, rồi chạy lại với đúng thư mục ấy: các ô đã vẽ lại được đưa vào game.', note: 'Lần chạy đưa ảnh vào game sẽ chạy thử trước, app hỏi rồi mới ghi. Mỗi ảnh phải giữ đúng kích thước; phần vẽ ra ngoài khung sẽ không hiện.',
+    args: {
+      screen: {label: 'Màn hình', help: 'File .memfs của màn hình cần dịch, trong romfs/spec_win/ssdata. Ví dụ ttlm_nam.memfs là menu tiêu đề. File .membody cùng tên phải nằm cạnh nó.'},
+      'image folder': {label: 'Thư mục ảnh', help: 'Lần đầu chọn thư mục trống: ảnh được lưu vào đây. Vẽ lại các ô cần dịch ngay trong thư mục này, lưu đè lên đúng file đó (giữ tên, giữ kích thước, vẫn là PNG), rồi chạy lại với thư mục này để đưa ảnh vào game. Bỏ trống thì chỉ xem danh sách các ô.'},
+      '--out': {label: 'Ghi vào', help: 'Nơi ghi màn hình đã dựng lại khi đưa ảnh vào game: thư mục romfs/spec_win/ssdata trong mod.'}
+    }},
+  'rrlib-sprite-check': {title: 'Kiểm tra file của một màn hình', description: 'Dựng lại một màn hình mà không sửa gì, kết quả phải giống từng byte, và thử nén lại mọi ảnh mà công cụ ghi được.',
+    args: {screen: {label: 'Màn hình', help: 'File .memfs của màn hình, trong romfs/spec_win/ssdata. File .membody cùng tên phải nằm cạnh nó.'}}}
 };
 
 const engines = {

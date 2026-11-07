@@ -67,11 +67,12 @@ const tools = [
   T('sheetfix', 'Sheets', 'Tag fixes for the sheet', 'Reads the translation sheet (.xlsx) and writes a workbook of fixes, by tab and row: #P tags to add, lines to leave untagged, and #T / #KW lines to fix by hand.', 'tools/sheetfix.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx)', true)]),
 
-  T('sprite-export', 'Images', 'See and take out a screen\'s images', 'Lists the textures of one screen and every piece cut from them, named after the part that draws it (the menu label 新しく始める is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu), with place and size. Choose a folder and each texture and each piece is also saved there as an image, plus cells.csv with the same list; redraw the pieces you want in any image editor, keeping their size.', 'tools/sprite.py', ['export'],
-    [SCREEN, A('output folder', 'dir', 'Where the images go; leave it empty to only see the list', true)]),
-  T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder made by "See and take out a screen\'s images": every image that differs from the game is pasted back at its place, the screen\'s files are rebuilt and checked, untouched files byte for byte.', 'tools/sprite.py', ['import'],
-    [SCREEN, A('image folder', 'dir', 'The folder you redrew, as it was taken out (file names unchanged)'),
-      V('--out', 'dir', 'Where the rebuilt pair goes: romfs/spec_win/ssdata inside your mod', true), B('--apply', 'Write the files')]),
+  // One tool for both halves: sprite.py translate takes the images out into an
+  // empty folder and puts the redrawn ones back from a folder that holds them.
+  T('sprite-translate', 'Images', 'Translate a screen\'s images', 'Menu labels, buttons and help lines are painted into images. Run it with an empty image folder: every piece of the screen is saved there as its own image, named after the part that draws it (新しく始める on the title menu is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu). Redraw the pieces you translate in that folder, then run it again with the same folder: the redrawn pieces go back into the game.', 'tools/sprite.py', ['translate'],
+    [SCREEN, A('image folder', 'dir', 'Empty the first time: the images are saved here. Redraw pieces here, saving over the same files (same name, same size, PNG), then run again with this folder to put them back. Leave empty to only see the list', true),
+      V('--out', 'dir', 'Where the rebuilt screen is written when you put images back: romfs/spec_win/ssdata inside your mod'), B('--apply', 'Write the files')],
+    'The run that puts images back is a dry run first; the app asks before writing. Each image must keep its size: nothing drawn outside it shows.'),
   T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
     [SCREEN])
 ];

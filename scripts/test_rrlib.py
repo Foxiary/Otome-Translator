@@ -474,6 +474,34 @@ class SpriteTest(unittest.TestCase):
         self.assertTrue(any('label_of.png' in r for r in report))
         self.assertEqual(self.quiet(sprite.cmd_import, arc, folder, os.path.join(self.d, 'mod'), True)[0], 1)
 
+    def test_translate_picks_the_half_by_the_folder(self):
+        from PIL import Image
+        arc = sprite.Archive(self.memfs)
+        folder, out = os.path.join(self.d, 'anh'), os.path.join(self.d, 'mod')
+        rc, log = self.quiet(sprite.cmd_translate, arc, folder, None, False)        # empty: take out
+        self.assertEqual(rc, 0)
+        self.assertTrue(os.path.exists(os.path.join(folder, 'ui', 'label_on.png')))
+        self.assertIn('Buoc tiep theo', log)
+        rc, log = self.quiet(sprite.cmd_translate, arc, folder, out, False)         # nothing redrawn yet
+        self.assertEqual(rc, 0)
+        self.assertIn('chua co o nao duoc ve lai', log)
+        self.assertNotIn('--apply', log)                                           # the app asks nothing
+        Image.new('RGBA', (4, 2), (9, 9, 9, 9)).save(os.path.join(folder, 'ui', 'label_on.png'))
+        self.assertEqual(self.quiet(sprite.cmd_translate, arc, folder, None, False)[0], 1)   # needs --out
+        rc, log = self.quiet(sprite.cmd_translate, arc, folder, out, False)         # dry run
+        self.assertEqual(rc, 0)
+        self.assertIn('--apply de ghi vao %s' % out, log)
+        self.assertFalse(os.path.exists(out))
+        self.assertEqual(self.quiet(sprite.cmd_translate, arc, folder, out, True)[0], 0)
+        self.assertTrue(os.path.exists(os.path.join(out, 'ui.membody')))
+        other = os.path.join(self.d, 'other')                                      # someone else's files
+        os.makedirs(other)
+        open(os.path.join(other, 'notes.txt'), 'w').close()
+        self.assertEqual(self.quiet(sprite.cmd_translate, arc, other, out, False)[0], 1)
+        rc, log = self.quiet(sprite.cmd_translate, arc, None, None, False)          # no folder: list
+        self.assertEqual(rc, 0)
+        self.assertIn('ui/label_on.png', log)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=1)

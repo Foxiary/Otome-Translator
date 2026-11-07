@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """sprite.py - UI art painted into textures: the archives under romfs/spec_win/ssdata.
 
-    python sprite.py export ttlm_nam.memfs           # list the cells only
-    python sprite.py export ttlm_nam.memfs anh/      # list them and save them as PNG
-    python sprite.py import ttlm_nam.memfs anh/ --out <mod>/romfs/spec_win/ssdata
-    python sprite.py import ttlm_nam.memfs anh/ --out <mod>/romfs/spec_win/ssdata --apply
+    python sprite.py translate ttlm_nam.memfs anh/   # empty folder: take the images out
+    # ... redraw the cells you translate inside anh/, saving over the same files ...
+    python sprite.py translate ttlm_nam.memfs anh/ --out <mod>/romfs/spec_win/ssdata           # dry run
+    python sprite.py translate ttlm_nam.memfs anh/ --out <mod>/romfs/spec_win/ssdata --apply   # write
+    python sprite.py translate ttlm_nam.memfs        # no folder: only list the cells
     python sprite.py check  ttlm_nam.memfs
+
+`translate` is what the app runs: it picks the half by the folder. `export`
+(take out; no folder = list) and `import` (put back) are the two halves on
+their own.
 
 The membody is read from next to the memfs unless --body names it.
 
@@ -402,8 +407,11 @@ def cmd_import(arc, folder, out, apply):
         print('LOI:'); [print('  ' + x) for x in problems]
         return 1
     if not new:
-        print('khong co anh nao khac ban game - khong co gi de ghi')
+        print('chua co o nao duoc ve lai trong %s (moi anh van giong ban game) - khong co gi de ghi' % folder)
         return 0
+    if not out:
+        print('LOI: chua chon noi ghi (--out): thu muc romfs/spec_win/ssdata trong mod.')
+        return 1
     replaced = dict((p, arc.textures[p].rebuild(img)) for p, img in new.items())
     mem, body = arc.build(replaced)
     bad = verify(arc, mem, body, new)
@@ -418,6 +426,38 @@ def cmd_import(arc, folder, out, apply):
         return 0
     write_files(out, ((arc.name + '.memfs', mem), (arc.name + '.membody', body)))
     return 0
+
+
+def folder_state(arc, folder):
+    """'empty', 'taken' (holds images export took out of this screen) or 'other'."""
+    if not os.path.isdir(folder):
+        return 'empty'
+    names = [n for n in os.listdir(folder) if not n.startswith('.')]
+    if not names:
+        return 'empty'
+    # cells.csv is in every export, so only the texture names tell screens apart.
+    ours = set(safe(stem(p)) for p in arc.textures)
+    ours |= set(n + '.png' for n in ours)
+    return 'taken' if any(n in ours for n in names) else 'other'
+
+
+def cmd_translate(arc, folder, out, apply):
+    """Both halves in one command, chosen by the folder: an empty one gets the
+    images taken out, one holding them has the redrawn ones put back."""
+    if not folder:
+        return cmd_export(arc, None)
+    state = folder_state(arc, folder)
+    if state == 'other':
+        print('LOI: %s co file nhung khong phai anh lay ra tu %s.' % (folder, arc.name))
+        print('Chon mot thu muc trong de lay anh ra, hoac thu muc da lay anh %s ra truoc do.' % arc.name)
+        return 1
+    if state == 'empty':
+        rc = cmd_export(arc, folder)
+        print('')
+        print('Buoc tiep theo: ve lai cac o can dich ngay trong %s, luu de len dung file do' % folder)
+        print('(giu ten, kich thuoc, dinh dang PNG), roi chay lai voi cung thu muc de dua anh vao game.')
+        return rc
+    return cmd_import(arc, folder, out, apply)
 
 
 def cmd_check(arc):
@@ -446,18 +486,21 @@ def cmd_check(arc):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('cmd', choices=['list', 'export', 'import', 'check'])
+    ap.add_argument('cmd', choices=['translate', 'list', 'export', 'import', 'check'])
     ap.add_argument('memfs', help='e.g. romfs/spec_win/ssdata/ttlm_nam.memfs')
-    ap.add_argument('folder', nargs='?', help='export: where to save (none: only list); import: the edited folder')
+    ap.add_argument('folder', nargs='?', help='translate: empty to take out, or the folder taken out to; '
+                    'export: where to save (none: only list); import: the edited folder')
     ap.add_argument('--body', help='the .membody, if not next to the memfs')
-    ap.add_argument('--out', help='import: where the new memfs/membody go')
-    ap.add_argument('--apply', action='store_true', help='import: write the files')
+    ap.add_argument('--out', help='translate, import: where the new memfs/membody go')
+    ap.add_argument('--apply', action='store_true', help='translate, import: write the files')
     a = ap.parse_args()
     if a.cmd == 'import' and not a.folder:
         ap.error('import: can thu muc anh')
     if a.cmd == 'import' and not a.out:
         ap.error('import: can --out')
     arc = Archive(a.memfs, a.body)
+    if a.cmd == 'translate':
+        return cmd_translate(arc, a.folder, a.out, a.apply)
     if a.cmd in ('list', 'export'):
         return cmd_export(arc, a.folder if a.cmd == 'export' else None)
     if a.cmd == 'import':

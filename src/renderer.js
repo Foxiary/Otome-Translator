@@ -35,6 +35,12 @@ function titleOf(name) {
   const words = name.replace(/^--/, '').replace(/[-_]/g, ' ').replace(/\b[a-z]+\b/g, word => acronyms[word] || word);
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+// A field's label or help in the interface language: the catalog's `vi.args`
+// where a tool has them, else the English name and help.
+function argText(item, arg, field) {
+  const vi = language() === 'vi' ? item.vi?.args?.[arg.name]?.[field] : '';
+  return vi || (field === 'label' ? titleOf(arg.name) : arg.help);
+}
 const SVG = 'http://www.w3.org/2000/svg';
 function icon(name, className = 'icon') {
   const svg = document.createElementNS(SVG, 'svg');
@@ -400,7 +406,7 @@ function renderForm() {
     if (mapping && MAPPED_ARGS.includes(arg.name)) continue;
     if (arg.name === APPLY && appliesLater(current)) continue;
     const field = elt('div',`field ${arg.kind === 'bool' ? 'toggle-field' : ''} ${arg.repeat || arg.help?.length > 85 ? 'wide' : ''}`);
-    const label = elt('label','',titleOf(arg.name));
+    const label = elt('label','',argText(current, arg, 'label'));
     label.htmlFor = `arg-${index}`;
     if (arg.required) label.append(elt('span','required','*'));
     let input;
@@ -408,7 +414,7 @@ function renderForm() {
       input = elt('input'); input.type = 'checkbox'; input.checked = !!values[arg.name];
       input.id = `arg-${index}`; input.dataset.arg = arg.name;
       const words = elt('div'); words.append(label);
-      if (arg.help) words.append(elt('div','help',arg.help));
+      if (arg.help) words.append(elt('div','help',argText(current, arg, 'help')));
       field.append(input,words);
     } else {
       field.append(label);
@@ -439,7 +445,7 @@ function renderForm() {
       if (arg.kind === 'path') {browse(text('field.chooseFile'), 'file'); browse(text('field.chooseFolder'), 'dir');}
       else if (['file','dir','save'].includes(arg.kind)) browse(text('field.browse'), arg.kind);
       field.append(row);
-      if (arg.help) field.append(elt('div','help',arg.help));
+      if (arg.help) field.append(elt('div','help',argText(current, arg, 'help')));
     }
     fields.append(field);
   }
