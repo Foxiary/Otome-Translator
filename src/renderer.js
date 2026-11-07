@@ -356,7 +356,7 @@ function offerApply(offer) {
   whenNoDialog(() => {
     dialogContent(text('apply.title'), body => {
       paragraph(body, text('apply.body', {tool: toolText(item, 'title')}));
-      if (where) {paragraph(body, text('apply.where')); paragraph(body, where, 'mono');}
+      if (where) {paragraph(body, text('apply.where')); paragraph(body, where, 'mono dialog-path');}
       const actions = elt('div', 'dialog-actions');
       const add = (label, onClick, className) => {
         const node = elt('button', className, label);

@@ -281,7 +281,7 @@ dialog.wide{width:min(900px,calc(100vw - 48px))}
 .rows-list{max-height:60vh;overflow:auto;margin-top:8px}
 .overflow-where{align-items:center}
 .dialog-body .rows-copy{margin:0 0 0 auto;padding:3px 8px;font-size:11px}
-dialog{width:min(560px,calc(100vw - 32px));padding:0;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);color:var(--ink);background:var(--elevated)}
+dialog{width:min(560px,calc(100vw - 32px));padding:0;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);color:var(--ink);background:var(--elevated);overflow-x:hidden}
 dialog::backdrop{background:#0008}
 .dialog-header{padding:22px 23px 0;display:flex;align-items:center;justify-content:space-between}
 .dialog-header h2{font-size:18px;font-weight:600;letter-spacing:-.02em;margin:0}
@@ -289,6 +289,10 @@ dialog::backdrop{background:#0008}
 .icon-button:hover{background:var(--hover);color:var(--ink)}
 .dialog-body{padding:12px 23px 23px;font-size:12px;line-height:1.6;color:var(--secondary)}
 .dialog-body p{margin:0 0 13px}
+.dialog-path{width:0;min-width:100%;overflow-x:auto;overflow-y:hidden;white-space:nowrap;line-height:1.4;padding-bottom:10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.dialog-path::-webkit-scrollbar{height:6px}
+.dialog-path::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.dialog-path::-webkit-scrollbar-track{background:transparent}
 .dialog-body button{display:inline-flex;align-items:center;padding:8px 12px;min-height:32px;margin:5px 7px 0 0;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:12px;font-weight:600;color:var(--ink)}
 .dialog-body button:hover{border-color:var(--border-hover);background:var(--hover)}
 .empty{color:var(--muted);font-size:12px;padding:17px 9px}
