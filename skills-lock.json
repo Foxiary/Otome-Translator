@@ -198,6 +198,12 @@
       "sourceType": "github",
       "skillPath": "skills/bmod-toolsmith/SKILL.md",
       "computedHash": "5989ce26176a3027716acccab91f35d7163488e78ee954d3827a565b6039c868"
+    },
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/taste-skill/SKILL.md",
+      "computedHash": "23b3930015c478034b222e1a015da03a962c8ab48aee9fb4f3f69d977034feaa"
     }
   }
 }

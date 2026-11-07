@@ -44,6 +44,7 @@
   </svg>
   <div class="app page-form">
     <aside class="sidebar">
+      <div class="sidebar-resize" id="sidebar-resize" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="rail.resize" aria-label="Resize sidebar" aria-valuemin="200" aria-valuemax="480" aria-valuenow="250"></div>
       <div class="brand"><div class="brand-mark"><svg viewBox="0 0 44 44" fill="none" aria-hidden="true"><rect x="7.5" y="13" width="13" height="18" rx="6.5" stroke="currentColor" stroke-width="3.2"/><path d="M23.5 14.5h13M30 14.5v16" stroke="currentColor" stroke-width="3.2" stroke-linecap="square"/></svg></div><div><div class="wordmark">otome</div><div class="brand-caption">TRANSLATOR</div></div></div>
 
       <section aria-labelledby="workspace-heading">
@@ -70,27 +71,31 @@
       </nav>
 
       <div class="sidebar-bottom">
+        <div class="sidebar-tools">
         <nav class="utility-list">
-          <button class="utility" type="button" id="docs-button"><svg class="icon"><use href="#i-book"/></svg><bdi data-i18n="rail.docs"></bdi></button>
-          <button class="utility" type="button" id="python-button"><svg class="icon"><use href="#i-terminal"/></svg><bdi data-i18n="rail.python"></bdi></button>
-          <button class="utility" type="button" id="check-updates"><svg class="icon"><use href="#i-refresh"/></svg><bdi data-i18n="rail.updates"></bdi></button>
-          <button class="utility" type="button" id="tour-button"><svg class="icon"><use href="#i-info"/></svg><bdi data-i18n="rail.tour"></bdi></button>
+          <button class="utility" type="button" id="docs-button" data-i18n-title="rail.docs"><svg class="icon"><use href="#i-book"/></svg><bdi class="sr-only" data-i18n="rail.docs"></bdi></button>
+          <button class="utility" type="button" id="python-button" data-i18n-title="rail.python"><svg class="icon"><use href="#i-terminal"/></svg><bdi class="sr-only" data-i18n="rail.python"></bdi></button>
+          <button class="utility" type="button" id="check-updates" data-i18n-title="rail.updates"><svg class="icon"><use href="#i-refresh"/></svg><bdi class="sr-only" data-i18n="rail.updates"></bdi></button>
+          <button class="utility" type="button" id="tour-button" data-i18n-title="rail.tour"><svg class="icon"><use href="#i-info"/></svg><bdi class="sr-only" data-i18n="rail.tour"></bdi></button>
         </nav>
-        <button class="theme-toggle" type="button" role="switch" id="theme-toggle" aria-checked="true"><svg class="icon"><use href="#i-moon"/></svg><bdi data-i18n="theme.dark"></bdi><span class="theme-state" id="theme-state"></span><span class="theme-track" aria-hidden="true"><span class="theme-thumb"></span></span></button>
+        <div class="prefs">
+        <button class="theme-toggle" type="button" role="switch" id="theme-toggle" aria-checked="true"><svg class="icon"><use href="#i-moon"/></svg><bdi class="sr-only" data-i18n="theme.dark"></bdi><span class="theme-state sr-only" id="theme-state"></span><span class="theme-track" aria-hidden="true"><span class="theme-thumb"></span></span></button>
         <div class="language-switcher" id="language-switcher">
-          <button class="language-toggle" type="button" id="language-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu"><svg class="icon"><use href="#i-globe"/></svg><bdi data-i18n="language.label"></bdi><span class="language-code" id="language-code"></span><svg class="icon language-chevron"><use href="#i-chevrons"/></svg></button>
+          <button class="language-toggle" type="button" id="language-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu"><svg class="icon"><use href="#i-globe"/></svg><bdi class="sr-only" data-i18n="language.label"></bdi><span class="language-code" id="language-code"></span><svg class="icon language-chevron"><use href="#i-chevrons"/></svg></button>
           <div class="language-menu hidden" id="language-menu" role="menu">
             <div class="language-menu-title" data-i18n="language.menu"></div>
             <button class="language-option" type="button" role="menuitemradio" id="lang-en"><span class="language-option-code">EN</span><span lang="en" data-i18n="language.en"></span><svg class="icon"><use href="#i-check"/></svg></button>
             <button class="language-option" type="button" role="menuitemradio" id="lang-vi"><span class="language-option-code">VI</span><span lang="vi" data-i18n="language.vi"></span><svg class="icon"><use href="#i-check"/></svg></button>
           </div>
         </div>
+        </div>
+        </div>
       </div>
     </aside>
 
     <section class="tool-panel" aria-labelledby="group-title">
-      <div class="tool-heading"><span class="eyebrow" data-i18n="browser.choose"></span><h2 id="group-title"></h2><p id="group-subtitle"></p></div>
-      <div class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="browser.search" aria-label="Search tools" autocomplete="off"></div>
+      <div class="tool-heading"><h2 id="group-title"></h2><p id="group-subtitle"></p></div>
+      <div class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="browser.search" data-i18n-aria="browser.search" aria-label="Search all tools" autocomplete="off"></div>
       <nav class="tool-list" id="tool-list"></nav>
       <div class="panel-footer"><div class="panel-footer-inner" id="tool-count"></div></div>
     </section>
@@ -210,10 +215,22 @@
           </div>
           <section class="measure-stage hidden" id="measure-stage">
             <div class="measure-step"><span class="measure-step-mark" id="measure-step-mark"></span><span id="measure-instruction"></span><button id="measure-zoom" class="button" type="button"></button><button id="measure-redo" class="button" type="button" data-i18n="measure.redo"></button></div>
-            <div class="measure-canvas" id="measure-canvas"><div class="measure-frame" id="measure-frame"><img id="measure-img" alt=""><div id="measure-marks"></div></div></div>
+            <div class="measure-canvas" id="measure-canvas"><div class="measure-frame" id="measure-frame"><div id="measure-marks"></div></div></div>
           </section>
           <div id="measure-result" class="hidden"></div>
           <section id="measure-saved" class="measure-saved hidden"></section>
+        </div>
+      </section>
+
+      <section id="docs-view" class="docs-view">
+        <header class="page-header">
+          <div class="header-top"><div class="breadcrumbs" id="docs-breadcrumb"></div></div>
+          <h1 data-i18n="rail.docs"></h1>
+          <p class="page-description" id="docs-scope"></p>
+        </header>
+        <div class="docs-layout">
+          <nav class="docs-list" id="docs-list" data-i18n-aria="rail.docs" aria-label="Source documentation"></nav>
+          <article class="docs-article" id="docs-article"></article>
         </div>
       </section>
 
@@ -275,12 +292,13 @@
       </div>
     </main>
   </div>
-  <dialog id="info-dialog"><div class="dialog-header"><h2 id="dialog-title"></h2><button class="icon-button" id="dialog-close" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="dialog-body" id="dialog-body"></div></dialog>
+  <dialog id="info-dialog"><div class="dialog-header"><h2 id="dialog-title"></h2><button class="icon-button" id="dialog-close" data-i18n-aria="tools.close" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="dialog-body" id="dialog-body"></div></dialog>
   <script src="i18n.js"></script>
   <script src="patch-ui.js"></script>
   <script src="file-types.js"></script>
   <script src="font-map.js"></script>
   <script src="tour.js"></script>
+  <script src="markdown.js"></script>
   <!-- Before renderer.js: its hooks must be in place before start() runs. -->
   <script src="detect-ui.js"></script>
   <script src="project-ui.js"></script>

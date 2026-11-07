@@ -54,6 +54,8 @@
    the sidebar that belong to an engine wait until there is one. */
 .app:not(.page-start) #start-view{display:none}
 .app.page-start .sidebar>section,.app.page-start .navigation{display:none}
+/* The navigation that fills the sidebar is hidden here: the footer keeps to the bottom. */
+.app.page-start .sidebar-bottom{margin-top:auto}
 .start-view{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:clamp(48px,11vh,120px) 40px 56px}
 .start-inner{width:min(660px,100%)}
 .start-inner h1{margin:0 0 10px;font-size:32px;line-height:1.15;font-weight:700;letter-spacing:-.025em;color:var(--ink)}

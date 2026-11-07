@@ -4,6 +4,10 @@ let activeGroup = null;
 let activeId = null;
 let running = false;
 let page = 'form';
+let docsName = '';
+let docsEngine = '';
+let docsHash = '';
+let docsToken = 0;
 let patchStage = 'choose';
 let patchPhase = 0;
 let patchMissing = [];
@@ -84,7 +88,9 @@ function applyLanguage() {
   for (const node of document.querySelectorAll('[data-i18n]')) node.textContent = text(node.dataset.i18n);
   for (const node of document.querySelectorAll('[data-i18n-placeholder]')) node.placeholder = text(node.dataset.i18nPlaceholder);
   for (const node of document.querySelectorAll('[data-i18n-title]')) node.title = text(node.dataset.i18nTitle);
+  for (const node of document.querySelectorAll('[data-i18n-aria]')) node.setAttribute('aria-label', text(node.dataset.i18nAria));
   $('language-code').textContent = language().toUpperCase();
+  $('language-toggle').title = text('language.label');
   for (const code of ['en', 'vi']) $(`lang-${code}`).setAttribute('aria-checked', String(language() === code));
   renderTheme();
   if (pythonCheck) updatePython(pythonCheck);
@@ -96,6 +102,48 @@ function theme() { return document.documentElement.dataset.theme === 'light' ? '
 function renderTheme() {
   $('theme-toggle').setAttribute('aria-checked', String(theme() === 'dark'));
   $('theme-state').textContent = text(theme() === 'dark' ? 'theme.on' : 'theme.off');
+  $('theme-toggle').title = text('theme.dark');
+}
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 250;
+function setSidebarWidth(width, persist) {
+  const next = Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width)));
+  document.documentElement.style.setProperty('--sidebar-width', `${next}px`);
+  $('sidebar-resize').setAttribute('aria-valuenow', String(next));
+  if (persist) { try { localStorage.setItem('otm-sidebar-width', String(next)); } catch {} }
+  if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();
+  return next;
+}
+function bindSidebarResize() {
+  const handle = $('sidebar-resize');
+  setSidebarWidth(document.querySelector('.sidebar').getBoundingClientRect().width, false);
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = document.querySelector('.sidebar').getBoundingClientRect().width;
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add('resizing-sidebar');
+    const move = ev => setSidebarWidth(startWidth + ev.clientX - startX, false);
+    const end = ev => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      document.body.classList.remove('resizing-sidebar');
+      setSidebarWidth(startWidth + ev.clientX - startX, true);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
+  handle.addEventListener('dblclick', () => setSidebarWidth(SIDEBAR_DEFAULT, true));
+  handle.addEventListener('keydown', event => {
+    const current = document.querySelector('.sidebar').getBoundingClientRect().width;
+    if (event.key === 'ArrowRight') { event.preventDefault(); setSidebarWidth(current + 16, true); }
+    else if (event.key === 'ArrowLeft') { event.preventDefault(); setSidebarWidth(current - 16, true); }
+    else if (event.key === 'Home') { event.preventDefault(); setSidebarWidth(SIDEBAR_DEFAULT, true); }
+  });
 }
 function toggleTheme() {
   const next = theme() === 'dark' ? 'light' : 'dark';
@@ -103,10 +151,29 @@ function toggleTheme() {
   try { localStorage.setItem('otm-theme', next); } catch {}
   renderTheme();
 }
+function placeLanguageMenu() {
+  const menu = $('language-menu');
+  const rect = $('language-toggle').getBoundingClientRect();
+  const width = Math.max(rect.width, 220);
+  const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+  const height = menu.offsetHeight || 140;
+  const above = rect.top - 6 - height;
+  const top = above >= 8 ? above : Math.min(rect.bottom + 6, window.innerHeight - height - 8);
+  menu.style.left = `${left}px`;
+  menu.style.width = `${width}px`;
+  menu.style.bottom = 'auto';
+  menu.style.top = `${Math.max(8, top)}px`;
+}
 function toggleLanguageMenu(open) {
-  const show = open ?? $('language-menu').classList.contains('hidden');
-  $('language-menu').classList.toggle('hidden', !show);
+  const menu = $('language-menu');
+  const show = open ?? menu.classList.contains('hidden');
+  if (!show && menu.contains(document.activeElement)) $('language-toggle').focus();
+  menu.classList.toggle('hidden', !show);
   $('language-toggle').setAttribute('aria-expanded', String(show));
+  if (show) {
+    placeLanguageMenu();
+    menu.querySelector('[aria-checked=true]')?.focus();
+  }
 }
 function updateWorkspace() {
   $('workspace-name').textContent = state.workspace.split(/[\\/]/).pop() || text('workspace.project');
@@ -588,8 +655,12 @@ function renderMeasure() {
   fillSelect($('measure-font'), Object.entries(MEASURE_FONTS).map(([value, n]) => [value, text('measure.fontOption', {n})]), measure.font);
   fillSelect($('measure-screen'), MEASURE_SCREENS.map(value => [value, text(`measure.screen.${value}`)]), measure.screen);
   $('measure-stage').classList.toggle('hidden', !measure.image);
-  if (!measure.image) {$('measure-result').classList.add('hidden'); return;}
-  const img = $('measure-img');
+  if (!measure.image) {
+    $('measure-result').classList.add('hidden');
+    $('measure-img')?.remove();
+    return;
+  }
+  const img = ensureMeasureImage();
   if (img.dataset.src !== measure.image.path) {img.src = measure.image.dataUrl; img.dataset.src = measure.image.path;}
   $('measure-canvas').classList.toggle('zoomed', measure.zoomed);
   $('measure-zoom').textContent = text(measure.zoomed ? 'measure.zoomOut' : 'measure.zoomIn');
@@ -655,10 +726,24 @@ function fillSelect(select, options, value) {
   select.value = value;
 }
 // Vertical lines at each clicked x, and dashed spans for the line and the box.
+function ensureMeasureImage() {
+  let img = $('measure-img');
+  if (!img) {
+    img = document.createElement('img');
+    img.id = 'measure-img';
+    img.addEventListener('click', measureClick);
+    img.addEventListener('load', renderMeasureMarks);
+    $('measure-frame').prepend(img);
+  }
+  const name = measure.image?.path?.split(/[\\/]/).pop();
+  img.alt = name || text('measure.image');
+  return img;
+}
 function renderMeasureMarks() {
   const marks = $('measure-marks');
+  const img = $('measure-img');
   marks.replaceChildren();
-  const width = $('measure-img').naturalWidth;
+  const width = img?.naturalWidth;
   if (!width) return;
   const at = x => `${(x / width) * 100}%`;
   measure.points.forEach((x, index) => {
@@ -1085,6 +1170,7 @@ function render() {
     loadMeasureSaved();
   }
   if (page === 'form') {renderTools(); renderForm();}
+  if (page === 'docs') renderDocs();
 }
 function showError(message) {
   if (page === 'patch') showPatchError(message);
@@ -1107,14 +1193,61 @@ function dialogContent(title, build, wide = false) {
 }
 function paragraph(parent, text, cls = '') {parent.append(elt('p',cls,text));}
 function action(parent, label, callback) {const b=elt('button','',label); b.type='button';b.addEventListener('click', callback);parent.append(b);}
+function docLabel(name) {
+  const listed = engine().docs.find(([, file]) => file === name);
+  if (!listed) return name;
+  return (language() === 'vi' && engine().vi?.docs[name]) || listed[0];
+}
+function openDoc(name, hash = '') {
+  docsEngine = engine().id;
+  docsName = name;
+  docsHash = hash;
+  page = 'docs';
+  render();
+}
 function showDocs() {
-  dialogContent(text('rail.docs'), body => {
-    paragraph(body,text('docs.body', {engine: engine().name}));
-    paragraph(body,text('docs.flow', {flow: (language() === 'vi' && engine().vi?.flow) || engine().flow}));
-    for (const [label,name] of engine().docs) {
-      action(body,(language() === 'vi' && engine().vi?.docs[name]) || label,async()=>{const error=await window.vees.openDocument(name);if(error)showError(error);});
-    }
+  if (docsEngine !== engine().id || !docsName) docsName = engine().docs[0]?.[1] || '';
+  openDoc(docsName);
+}
+async function renderDocs() {
+  if (docsEngine !== engine().id) {
+    docsEngine = engine().id;
+    docsName = engine().docs[0]?.[1] || '';
+    docsHash = '';
+  }
+  const token = ++docsToken;
+  breadcrumbs($('docs-breadcrumb'), [engine().name]);
+  const flow = (language() === 'vi' && engine().vi?.flow) || engine().flow;
+  $('docs-scope').textContent = `${text('docs.body', {engine: engine().name})} ${text('docs.flow', {flow})}`;
+  const list = $('docs-list');
+  list.replaceChildren();
+  for (const [, name] of engine().docs) {
+    const button = elt('button', `docs-item${name === docsName ? ' active' : ''}`, docLabel(name));
+    button.type = 'button';
+    if (name === docsName) button.setAttribute('aria-current', 'true');
+    button.addEventListener('click', () => openDoc(name));
+    list.append(button);
+  }
+  const article = $('docs-article');
+  article.replaceChildren();
+  article.className = 'docs-article';
+  if (!docsName) { article.append(elt('p', '', text('docs.none'))); return; }
+  let result;
+  try { result = await window.vees.readDocument(docsName); }
+  catch (error) { if (token === docsToken) article.append(elt('p', '', error.message)); return; }
+  if (token !== docsToken) return;
+  if (result.missing) { article.append(elt('p', '', text('docs.missing'))); return; }
+  renderMarkdown(article, result.text, href => {
+    const target = resolveDocLink(docsName, href);
+    if (!target) return;
+    if (target.external) window.vees.openLink(target.external);
+    else if (target.file && target.file !== docsName) openDoc(target.file, target.hash);
+    else if (target.hash) document.getElementById(target.hash.slice(1))?.scrollIntoView();
   });
+  if (docsHash) {
+    document.getElementById(docsHash.slice(1))?.scrollIntoView();
+    docsHash = '';
+  }
 }
 // The names pip installs, for the modules whose import name differs.
 const PIP_NAMES = {PIL: 'Pillow', Crypto: 'pycryptodome', fontTools: 'fonttools'};
@@ -1186,12 +1319,23 @@ async function start() {
   $('lang-en').addEventListener('click', () => {toggleLanguageMenu(false); chooseLanguage('en');});
   $('lang-vi').addEventListener('click', () => {toggleLanguageMenu(false); chooseLanguage('vi');});
   $('language-toggle').addEventListener('click', () => toggleLanguageMenu());
+  $('language-menu').addEventListener('keydown', event => {
+    const items = [...$('language-menu').querySelectorAll('[role=menuitemradio]')];
+    const index = items.indexOf(document.activeElement);
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const next = event.key === 'ArrowDown' ? (index + 1) % items.length
+      : event.key === 'ArrowUp' ? (index - 1 + items.length) % items.length
+      : event.key === 'Home' ? 0 : items.length - 1;
+    items[next]?.focus();
+  });
   document.addEventListener('click', event => {if (!$('language-switcher').contains(event.target)) toggleLanguageMenu(false);});
   document.addEventListener('keydown', event => {if (event.key === 'Escape') toggleLanguageMenu(false);});
+  window.addEventListener('resize', () => {if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();});
+  document.querySelector('.sidebar').addEventListener('scroll', () => {if (!$('language-menu').classList.contains('hidden')) placeLanguageMenu();}, {passive: true});
   $('theme-toggle').addEventListener('click', toggleTheme);
+  bindSidebarResize();
   $('measure-pick').addEventListener('click', chooseMeasureImage);
-  $('measure-img').addEventListener('click', measureClick);
-  $('measure-img').addEventListener('load', renderMeasureMarks);
   $('measure-redo').addEventListener('click', () => {measure.points = []; measure.justSaved = ''; renderMeasure();});
   $('measure-zoom').addEventListener('click', () => {measure.zoomed = !measure.zoomed; renderMeasure();});
   $('measure-text').addEventListener('input', event => {measure.text = event.target.value; renderMeasureResult();});
