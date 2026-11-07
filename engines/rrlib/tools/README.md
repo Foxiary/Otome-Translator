@@ -14,7 +14,7 @@ Mỗi script tự mô tả trong docstring đầu file (`python tools/<tên>.py 
 | `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng, mã hoá theo font của mod, trả `#P`, tự kiểm |
 | `patch.py` | | Dựng lại `script.memfs` + `script.membody`: trả `#P`, trỏ thẳng chunk, nới u32, sửa header, tự kiểm |
 | `sheetfix.py` | | Từ sheet dịch (`.xlsx`) ra file đề xuất sửa tag theo đúng tab + dòng |
-| `sprite.py` | `list`, `export`, `import`, `check` | Ảnh giao diện (`spec_win/ssdata/*.memfs`): xuất từng ô chữ ra PNG theo tên phần hình, dán PNG đã vẽ lại, đóng gói, tự kiểm. Cần Pillow |
+| `sprite.py` | `export`, `import`, `check` | Ảnh giao diện (`spec_win/ssdata/*.memfs`): liệt kê từng ô chữ, có thư mục thì xuất ra PNG theo tên phần hình; dán PNG đã vẽ lại, đóng gói, tự kiểm. Cần Pillow |
 | `tags.py` | | Thư viện: đọc tag, trả `#P`, các số đo màn hình — không phải lệnh |
 
 ## Đã kiểm trên dữ liệu thật

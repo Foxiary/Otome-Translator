@@ -416,6 +416,15 @@ class SpriteTest(unittest.TestCase):
         new, _, problems = sprite.plan_import(arc, folder)
         self.assertEqual((new, problems), ({}, []))                            # untouched export: no change
 
+    def test_export_without_folder_only_lists(self):
+        arc = sprite.Archive(self.memfs)
+        before = sorted(os.listdir(self.d))
+        rc, log = self.quiet(sprite.cmd_export, arc, None)
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(os.listdir(self.d)), before)                   # nothing written
+        self.assertIn('ui/label_on.png', log)
+        self.assertIn('4 o sua duoc', log)
+
     def test_import_pastes_cell_and_keeps_the_rest(self):
         from PIL import Image
         arc, folder = self.export()

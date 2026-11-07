@@ -80,7 +80,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    python tools/sprite.py export jp/spec_win/ssdata/ttlm_nam.memfs anh_menu
    ```
 
-   Thư mục `anh_menu/` có:
+   Lệnh in danh sách các ô (tên file, vị trí, kích thước) rồi lưu chúng vào `anh_menu/`. Bỏ thư mục đi thì chỉ in danh sách, không ghi gì. Trong app, hai việc này là một công cụ: "Xem và lấy ảnh của một màn hình". Thư mục `anh_menu/` có:
    - `mat_ttlm.png`: cả tấm ảnh 4096×4096, để xem tổng thể;
    - `mat_ttlm/<tên ô>.png`: mỗi ô một file, tên lấy theo phần hình dùng nó. Ví dụ `mat_ttlm_com01_off.png` / `_on.png` là chữ 新しく始める lúc chưa chọn / đang chọn, `mat_ttlm_com01_setu.png` là câu chú thích dọc của nó, `mat_nam_bodoru_txt.png` là 戻る;
    - `cells.csv`: vị trí và kích thước từng ô.

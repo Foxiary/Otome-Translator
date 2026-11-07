@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """sprite.py - UI art painted into textures: the archives under romfs/spec_win/ssdata.
 
-    python sprite.py list   ttlm_nam.memfs
-    python sprite.py export ttlm_nam.memfs anh/
+    python sprite.py export ttlm_nam.memfs           # list the cells only
+    python sprite.py export ttlm_nam.memfs anh/      # list them and save them as PNG
     python sprite.py import ttlm_nam.memfs anh/ --out <mod>/romfs/spec_win/ssdata
     python sprite.py import ttlm_nam.memfs anh/ --out <mod>/romfs/spec_win/ssdata --apply
     python sprite.py check  ttlm_nam.memfs
@@ -16,8 +16,10 @@ SpriteStudio .ssdata and an .rson. The .ssdata says which rectangle of which
 texture every sprite part draws, so a texture splits into named cells:
 mat_ttlm_com01_off is the 新しく始める label, mat_ttlm_com01_setu its help line.
 
-export   writes every texture as <texture>.png and every cell as
-         <texture>/<part>.png, plus cells.csv (file, rectangle, parts).
+export   lists every texture and its cells - file name, place, size, parts.
+         Given a folder it also writes every texture as <texture>.png and
+         every cell as <texture>/<part>.png, plus cells.csv with the same
+         list. (`list` is export without a folder, kept for old scripts.)
 import   reads that folder back. A cell PNG that differs from the game's
          pixels is pasted at its rectangle; a <texture>.png that differs
          replaces the whole texture first, so an edited cell wins over it.
@@ -271,44 +273,40 @@ class Archive(object):
 
 # --- commands ----------------------------------------------------------------
 
-def cmd_list(arc):
-    for p, t in sorted(arc.textures.items()):
-        mark = 'sua duoc' if t.editable else 'bo qua: ' + t.why_not()
-        print('%s  %dx%d  %s' % (p, t.w, t.h, mark))
-        for c in arc.cells:
-            if c.texture == p:
-                print('    %-40s %5d %5d %5dx%-5d %s' % (c.file.split('/', 1)[1], c.x, c.y, c.w, c.h, ' '.join(c.parts)))
-    for p in sorted(arc.files):
-        if not p.endswith('.rtex'):
-            print('%s  %d byte' % (p, len(arc.files[p])))
-    for n in arc.notes:
-        print('chu y: ' + n)
-    return 0
-
-
-def cmd_export(arc, out):
-    os.makedirs(out, exist_ok=True)
+def cmd_export(arc, out=None):
+    """List every texture and its cells; with out, also save them as PNG and cells.csv."""
+    if out:
+        os.makedirs(out, exist_ok=True)
     rows = []
     for p, t in sorted(arc.textures.items()):
-        if not t.editable:
-            print('bo qua %s: %s' % (p, t.why_not()))
-            continue
-        img = t.image()
-        img.save(os.path.join(out, safe(stem(p)) + '.png'))
         mine = [c for c in arc.cells if c.texture == p]
+        if t.editable:
+            print('%s.png  %dx%d, %d o' % (safe(stem(p)), t.w, t.h, len(mine)))
+        else:
+            print('%s  %dx%d, %d o - bo qua: %s' % (p.lstrip('/'), t.w, t.h, len(mine), t.why_not()))
+        img = t.image() if out and t.editable else None
+        if img is not None:
+            img.save(os.path.join(out, safe(stem(p)) + '.png'))
         for c in mine:
-            dst = os.path.join(out, *c.file.split('/'))
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            img.crop(c.box).save(dst)
+            name = c.file if t.editable else '(khong luu duoc)'
+            print('    %-48s %5d %5d %5dx%-5d %s' % (name, c.x, c.y, c.w, c.h, ' '.join(c.parts)))
+            if not t.editable:
+                continue
             rows.append([c.file, stem(p), c.x, c.y, c.w, c.h, ' '.join(c.parts)])
-        print('%s.png  %dx%d, %d o' % (safe(stem(p)), t.w, t.h, len(mine)))
+            if img is not None:
+                dst = os.path.join(out, *c.file.split('/'))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                img.crop(c.box).save(dst)
+    for n in arc.notes:
+        print('chu y: ' + n)
+    if not out:
+        print('%d o sua duoc. Chua chon thu muc nen chi liet ke; chon thu muc de luu anh ra.' % len(rows))
+        return 0
     with open(os.path.join(out, 'cells.csv'), 'w', newline='', encoding='utf-8-sig') as f:
         w = csv.writer(f)
         w.writerow(['file', 'texture', 'x', 'y', 'w', 'h', 'parts'])
         w.writerows(rows)
-    for n in arc.notes:
-        print('chu y: ' + n)
-    print('%d o -> %s (cells.csv ghi vi tri tung o)' % (len(rows), out))
+    print('da luu %d o -> %s (cells.csv ghi vi tri tung o)' % (len(rows), out))
     return 0
 
 
@@ -450,20 +448,18 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('cmd', choices=['list', 'export', 'import', 'check'])
     ap.add_argument('memfs', help='e.g. romfs/spec_win/ssdata/ttlm_nam.memfs')
-    ap.add_argument('folder', nargs='?', help='export: where to write; import: the edited folder')
+    ap.add_argument('folder', nargs='?', help='export: where to save (none: only list); import: the edited folder')
     ap.add_argument('--body', help='the .membody, if not next to the memfs')
     ap.add_argument('--out', help='import: where the new memfs/membody go')
     ap.add_argument('--apply', action='store_true', help='import: write the files')
     a = ap.parse_args()
-    if a.cmd in ('export', 'import') and not a.folder:
-        ap.error('%s: can thu muc anh' % a.cmd)
+    if a.cmd == 'import' and not a.folder:
+        ap.error('import: can thu muc anh')
     if a.cmd == 'import' and not a.out:
         ap.error('import: can --out')
     arc = Archive(a.memfs, a.body)
-    if a.cmd == 'list':
-        return cmd_list(arc)
-    if a.cmd == 'export':
-        return cmd_export(arc, a.folder)
+    if a.cmd in ('list', 'export'):
+        return cmd_export(arc, a.folder if a.cmd == 'export' else None)
     if a.cmd == 'import':
         return cmd_import(arc, a.folder, a.out, a.apply)
     return cmd_check(arc)
