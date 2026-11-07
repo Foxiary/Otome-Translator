@@ -43,10 +43,13 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
   - học được 68 chữ của font từ chính bản mod;
   - ghi 30 470 chuỗi vào 124 kịch bản. Bỏ qua 145 ô còn sót kana, 1 ô chưa dịch
     và 103 dòng trùng câu nhưng dịch khác; các câu đó giữ chữ của bản mod;
-  - tự kiểm OK;
-  - so với bản đang chơi: 65 857 chuỗi không đổi, 5 169 chuỗi đổi chữ theo sheet
+  - tự kiểm OK (cấu trúc); tag ghi đúng như sheet;
+  - `audit.py` trên bản dựng báo đúng những gì sheet đang có: 27 câu giữ
+    `#P(…,1200)` nên bị giấu (các bài thơ, EV00_0000 dòng 48–69…) và 4 câu
+    thiếu `#P` (EV06_0009_01 dòng 26, 30, 31, 32). Sửa trong sheet rồi dựng lại;
+  - so với bản đang chơi: 65 845 chuỗi không đổi, 5 169 chuỗi đổi chữ theo sheet
     mới, 485 chuỗi chỉ đổi cách xuống dòng (các biến thể `#T` giờ mỗi cái một dòng
-    như JP), 29 chuỗi thêm `#KW`. Không chuỗi đã dịch nào quay về tiếng Nhật;
+    như JP), 41 chuỗi chỉ khác tag. Không chuỗi đã dịch nào quay về tiếng Nhật;
   - ở những dòng mà chữ trong sheet vẫn giống bản 02/10, cách chuyển chữ cho ra
     giống từng byte 93,6% chuỗi của bản đó. Phần còn lại lệch vì builder cũ làm
     mất `#P`/`#KW` và gộp các đoạn có tag thành một dòng.

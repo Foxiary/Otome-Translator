@@ -36,10 +36,10 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    - **các câu sheet không có dòng:** tên nhân vật, lựa chọn;
    - **`exefs/main`:** để biết exe chuyển hướng file nào.
 
-   Mỗi ô được xử lý như builder cũ của nhóm dịch, nhưng **giữ** `#P`, `#T`, `#KW`:
+   Mỗi ô được xử lý như builder cũ của nhóm dịch:
    - bỏ `「」『』“”` và đổi `"` thành `'` vì font không có các dấu này;
    - ngắt dòng ở 62 ký tự;
-   - `#P` bị mất được trả lại theo JP.
+   - tag (`#P`, `#T`, `#KW`…) ghi **đúng như trong ô**. Có tag hay không là do người sửa bản dịch quyết định; công cụ không tự thêm hay bỏ tag nào. Kiểm tag bằng `audit.py` (bước 3) hoặc `sheetfix.py`.
 
    Ô nào không ghi được thì giữ câu của bản mod: câu còn sót kana (font dùng các ô kana cho chữ Việt nên sẽ hiện sai chữ), câu chưa dịch, hai dòng dịch khác nhau cho cùng một câu. File báo cáo ghi rõ tab, dòng và lý do. Thêm `--apply` thì ghi vào `out/`, rồi chép vào `romfs/common/` của mod.
 

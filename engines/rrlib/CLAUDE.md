@@ -260,6 +260,13 @@ parts into one wrapped paragraph - the #T2 text then breaks mid-sentence,
 because the #T1 text it never shows is counted into the line. applysheet
 keeps the cell's tags and lines, which follow JP.
 
+**Tags are the translator's call.** applysheet writes every tag exactly as
+the cell has it: it puts no lost #P back and takes no off-screen #P off
+(`patch.build(restore=False, untag_offscreen=False)`, `patch.verify(...,
+check_tags=False)`). Whether a line should carry a tag is decided by whoever
+edits the translation; `audit.py` on the build and `sheetfix.py` on the sheet
+are the tools that report what is missing or hidden.
+
 Rows it leaves to the mod's string: `jp_text` not matching the game, a cell
 that is still the JP line, a cell with kana other than `っ`/`ッ` (the font
 gives those codes to Vietnamese letters; the gasp `っ` is kept on purpose and

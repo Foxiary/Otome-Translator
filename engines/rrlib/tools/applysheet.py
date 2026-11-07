@@ -27,9 +27,11 @@ where their text is still the sheet's:
   3. letters encoded for the patch font, which puts Vietnamese letters on
      kana code points (ệ -> る)
 
-Unlike that builder it keeps the cell's #P, #T and #KW. Then the same pass as
-patch.py: #P a cell lost is put back from JP, lines JP draws off-screen stay
-untagged, the archive is rebuilt and opened again to check it.
+Tags are written exactly as the cell has them: whether a line carries #P,
+#T or #KW is the translator's call, made in the sheet. Unlike that builder
+nothing is dropped, and unlike patch.py nothing is put back or taken off -
+audit.py (and sheetfix.py on the sheet) is the tool that checks tags. The
+archive is then rebuilt as patch.py does and opened again to check it.
 
 The font encoding is learnt from the mod: rows whose cell the mod already
 carries line up letter for letter with its string. --map saves it as JSON,
@@ -40,8 +42,7 @@ mod. The report says why: jp_text that does not match the game, a cell that
 is still the JP line, a cell with kana left in it other than っ/ッ (the font
 gives those codes to Vietnamese letters, so they would show as the wrong
 letter), a second row for a string already written with another
-translation. Written rows note letters the font has no code for and #T / #KW
-the cell lost against JP - those need a translator.
+translation. Written rows note letters the font has no code for.
 
 Needs openpyxl.
 """
@@ -170,13 +171,14 @@ def plan(rows, jp_strs, fmap, seen):
         enc, unknown = encode(text, fmap, seen)
         first[k] = r
         writes[r['script']][ci] = enc
-        lost = [t for t in tags.losses(js[ci], text) if t != '#P']   # build() puts #P back
-        report.append(dict(r=r, action='write', unknown=unknown, lost=lost))
+        report.append(dict(r=r, action='write', unknown=unknown))
     return writes, report
 
 
 def build(jp, mod, writes):
-    """-> (membody, memfs, patch.build report) with the rows written in."""
+    """-> (membody, memfs, patch.build report) with the rows written in.
+
+    Strings go in as planned: no #P put back, no off-screen tag taken off."""
     def edit(nm, strs):
         if nm not in writes:
             return strs
@@ -184,7 +186,7 @@ def build(jp, mod, writes):
         for i, t in writes[nm].items():
             strs[i] = t
         return strs
-    return patch.build(jp, mod, edit=edit)
+    return patch.build(jp, mod, restore=False, untag_offscreen=False, edit=edit)
 
 
 WHY = {'no-script': 'Không có script này trong game',
@@ -195,7 +197,7 @@ WHY = {'no-script': 'Không có script này trong game',
        'duplicate': 'Cùng một câu game với tab %s dòng %s nhưng dịch khác - chỉ dùng được dòng kia'}
 
 
-def write_report(path, report, restored):
+def write_report(path, report):
     with open(path, 'w', newline='', encoding='utf-8-sig') as f:
         w = csv.writer(f)
         w.writerow(['tab', 'dòng', 'record_id', 'script', 'const_index', 'kết quả', 'ghi chú'])
@@ -207,11 +209,6 @@ def write_report(path, report, restored):
             else:
                 for ch, how in x['unknown']:
                     notes.append('Font chưa có chữ %s (%s)' % (ch, 'dùng chữ thường' if how == 'lower' else 'để nguyên'))
-                for t in x['lost']:
-                    notes.append('Mất %s so với JP - cần sửa trong sheet' % t)
-                how = restored.get((r['script'], r['ci']))
-                if how:
-                    notes.append('Đã trả #P theo JP (%s)' % how)
             if x['action'] == 'write' and not notes:
                 continue
             w.writerow([r['tab'], r['row'], r['rid'], r['script'], r['ci'],
@@ -261,23 +258,19 @@ def main():
     unknown = collections.Counter(ch for x in report if x['action'] == 'write' for ch, _ in x['unknown'])
     if unknown:
         print('font chua co: %s' % ', '.join('U+%04X x%d' % (ord(ch), n) for ch, n in unknown.most_common()))
-    lost = collections.Counter(t for x in report if x['action'] == 'write' for t in x['lost'])
-    print('can sua trong sheet: mat #T %d, mat #KW %d' % (lost['#T'], lost['#KW']))
+    print('tag: ghi dung nhu sheet - kiem tag bang audit.py (Kiem tra ban patch)')
 
     body, mem, rep = build(jp, mod, writes)
-    restored = dict(((r['script'], r['idx']), r['how']) for r in rep['rows'] if r['how'] not in ('offscreen',))
-    print('tra #P: %d chuoi; bo tag ngoai man hinh: %d' % (
-        sum(1 for r in rep['rows'] if r['how'] in ('single', 'multi')), len(rep['stripped'])))
     print('noi rong u16 -> u32: %s' % (', '.join(rep['widened']) or 'khong'))
     print('membody %d -> %d byte, memfs %d -> %d byte' % (len(mod.body), len(body), len(mod.memfs), len(mem)))
 
-    problems = patch.verify(body, mem, jp, redirects)
+    problems = patch.verify(body, mem, jp, redirects, check_tags=False)
     if problems:
         print('KIEM TRA LOI:'); [print('  ' + x) for x in problems]
         return 1
-    print('kiem tra: OK (code giong JP, so chuoi khop, khong con #P mat ngoai cac cau ngoai man hinh)')
+    print('kiem tra: OK (code giong JP, so chuoi khop, moi kich ban mo duoc)')
     if a.report:
-        write_report(a.report, report, restored)
+        write_report(a.report, report)
         print('bao cao -> %s' % a.report)
     if not a.apply:
         print('chay thu - them --apply de ghi vao %s' % a.out)

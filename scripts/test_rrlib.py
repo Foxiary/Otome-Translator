@@ -278,10 +278,10 @@ class ApplySheetTest(unittest.TestCase):
                          {2: 'write', 3: 'write', 4: 'japanese', 5: 'untranslated', 6: 'jp-mismatch',
                           7: 'duplicate', 8: 'write'})
 
-    def test_build_writes_rows_and_keeps_the_mods_other_lines(self):
+    def test_build_writes_cells_as_they_are_and_keeps_the_mods_other_lines(self):
         import shutil
-        jp_a, _ = script('A.tat', ['#P(500,130)一', '名前'])
-        mod_a, _ = script('A.tat', ['#P(500,130)mばt', 'Tên'])
+        jp_a, _ = script('A.tat', ['#P(500,130)一', '名前', '#P(520,1200)詩'])
+        mod_a, _ = script('A.tat', ['#P(500,130)mばt', 'Tên', 'thơ'])
         d = tempfile.mkdtemp()
         try:
             write_pair(os.path.join(d, 'jp'), [jp_a], [('/_bytecode/A.tatc', 0x30, [0, len(memfs.rz(jp_a))])])
@@ -289,14 +289,16 @@ class ApplySheetTest(unittest.TestCase):
             jp = memfs.Archive(*patch.find_pair(os.path.join(d, 'jp')))
             mod = memfs.Archive(*patch.find_pair(os.path.join(d, 'mod')))
             js = applysheet.script_strings(jp)
-            # the cell lost its #P; there is no row for the name
-            writes, _ = applysheet.plan([sheet_row(2, 4, '#P(500,130)一', 'một nữa')], js, {'ộ': 'ば', 'ữ': '㈷'}, set())
+            # tags are the translator's call: a cell without #P stays without, an
+            # off-screen #P stays on; there is no row for the name
+            rows = [sheet_row(2, 4, '#P(500,130)一', 'một nữa'), sheet_row(3, 6, '#P(520,1200)詩', '#P(520,1200)thơ')]
+            writes, _ = applysheet.plan(rows, js, {'ộ': 'ば', 'ữ': '㈷'}, set('ơ'))
             body, mem, rep = applysheet.build(jp, mod, writes)
-            self.assertEqual(patch.verify(body, mem, jp, {}), [])
+            self.assertEqual(patch.verify(body, mem, jp, {}, check_tags=False), [])
+            self.assertEqual(patch.verify(body, mem, jp, {}), ['1 strings still lose #P'])   # what audit-style checks see
             out = applysheet.script_strings(memfs.Archive(data=(mem, body)))['A.tat']
-            self.assertEqual(out[4], '#P(500,130)mばt n㈷a')
-            self.assertEqual(out[5], 'Tên')
-            self.assertEqual([r['how'] for r in rep['rows']], ['single'])
+            self.assertEqual(out[4:], ['mばt n㈷a', 'Tên', '#P(520,1200)thơ'])
+            self.assertEqual((rep['rows'], rep['stripped']), ([], []))
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

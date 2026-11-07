@@ -51,7 +51,7 @@ const tools = [
   T('exehook', 'Inspect', 'Find redirects in the program', 'Lists the script reads a patched program file (exefs/main) sends elsewhere. An earlier patch used them for three prologue scripts.', 'tools/exehook.py', [],
     [A('main', 'file', 'exefs/main')]),
 
-  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped and encoded for the mod\'s Vietnamese font, lost #P tags come back from the Japanese, and the result is checked. Lines the sheet has no row for (names, choices) keep the mod\'s text.', 'tools/applysheet.py', [],
+  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped and encoded for the mod\'s Vietnamese font, with its tags exactly as the sheet has them, and the result is checked. Check the tags with Check a patch. Lines the sheet has no row for (names, choices) keep the mod\'s text.', 'tools/applysheet.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true),
       V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/): its font, program and names are kept', true), V('--out', 'dir', 'Output folder', true), EXE,
       V('--report', 'save', 'CSV of the rows not written and the lines to look at'), V('--map', 'save', 'Save the font encoding learnt from the mod (.json)'),

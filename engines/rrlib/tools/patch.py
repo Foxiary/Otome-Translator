@@ -105,8 +105,11 @@ def build(jp, vi, restore=True, untag_offscreen=True, edit=None):
     return bytes(body), rson.write(root), rep
 
 
-def verify(body, mem, jp, redirects):
-    """Open the built pair from bytes and check it. -> list of problems."""
+def verify(body, mem, jp, redirects, check_tags=True):
+    """Open the built pair from bytes and check it. -> list of problems.
+
+    check_tags=False leaves #P out of it, for a build whose tags are the
+    translator's (applysheet.py); everything structural is still checked."""
     out = memfs.Archive(redirects=redirects, data=(mem, body))
     problems = []
     if rson.write(out.root) != mem:
@@ -130,7 +133,8 @@ def verify(body, mem, jp, redirects):
         js, vs = kuv.parse(j)[1], kuv.parse(raw)[1]
         if len(js) != len(vs):
             problems.append('%s: %d strings, JP has %d' % (nm, len(vs), len(js)))
-        lost += sum(1 for a, b in zip(js, vs) if '#P' in tags.losses(a, b))
+        if check_tags:
+            lost += sum(1 for a, b in zip(js, vs) if '#P' in tags.losses(a, b))
     if lost:
         problems.append('%d strings still lose #P' % lost)
     if out.unreached():
