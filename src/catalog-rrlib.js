@@ -67,12 +67,16 @@ const tools = [
   T('sheetfix', 'Sheets', 'Tag fixes for the sheet', 'Reads the translation sheet (.xlsx) and writes a workbook of fixes, by tab and row: #P tags to add, lines to leave untagged, and #T / #KW lines to fix by hand.', 'tools/sheetfix.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx)', true)]),
 
-  // One tool for both halves: sprite.py translate takes the images out into an
-  // empty folder and puts the redrawn ones back from a folder that holds them.
-  T('sprite-translate', 'Images', 'Translate a screen\'s images', 'Menu labels, buttons and help lines are painted into images. Run it with an empty image folder: every piece of the screen is saved there as its own image, named after the part that draws it (新しく始める on the title menu is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu). Redraw the pieces you translate in that folder, then run it again with the same folder: the redrawn pieces go back into the game.', 'tools/sprite.py', ['translate'],
-    [SCREEN, A('image folder', 'dir', 'Empty the first time: the images are saved here. Redraw pieces here, saving over the same files (same name, same size, PNG), then run again with this folder to put them back. Leave empty to only see the list', true),
-      V('--out', 'dir', 'Where the rebuilt screen is written when you put images back: romfs/spec_win/ssdata inside your mod'), B('--apply', 'Write the files')],
-    'The run that puts images back is a dry run first; the app asks before writing. Each image must keep its size: nothing drawn outside it shows.'),
+  // Two steps, the second filled in from the first: `follows` names the tool
+  // whose last run gives these fields their values (renderer.js), so the
+  // folder step 1 saved to is the folder step 2 reads.
+  T('sprite-export', 'Images', 'Take a screen\'s images out', 'Menu labels, buttons and help lines are painted into images. Saves every piece of one screen as its own image in an empty folder, named after the part that draws it (新しく始める on the title menu is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu), plus cells.csv with where each one sits. Redraw the pieces you translate in that folder, then use "Put redrawn images back": the app fills in this screen and folder there.', 'tools/sprite.py', ['export'],
+    [SCREEN, A('output folder', 'dir', 'Best an empty folder: the images are saved here. If it already holds images, the app asks before replacing them, and copies the ones you redrew to .bak first. Leave it empty to only see the list', true),
+      B('--overwrite', 'Replace images already in the folder')]),
+  {...T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder "Take a screen\'s images out" saved to, after you redrew pieces in it: each piece that differs from the game is pasted back at its place, and the screen is rebuilt into Out and checked, untouched files byte for byte. Once step 1 has run, the screen and the folder are filled in for you.', 'tools/sprite.py', ['import'],
+    [SCREEN, A('image folder', 'dir', 'The folder step 1 saved to (filled in for you), with the pieces you redrew saved over the same files: same name, same size, PNG'),
+      V('--out', 'dir', 'Where the rebuilt screen is written: romfs/spec_win/ssdata inside your mod. An older file there is first copied to .bak beside it', true), B('--apply', 'Write the files')]),
+  follows: {tool: 'rrlib-sprite-export', fields: {screen: 'screen', 'image folder': 'output folder'}}},
   T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
     [SCREEN])
 ];

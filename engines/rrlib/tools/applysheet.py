@@ -273,6 +273,7 @@ def main():
         write_report(a.report, report)
         print('bao cao -> %s' % a.report)
     if not a.apply:
+        patch.say_replaced(a.out, ('script.membody', 'script.memfs'))
         print('chay thu - them --apply de ghi vao %s' % a.out)
         return 0
     patch.write_files(a.out, (('script.membody', body), ('script.memfs', mem)))

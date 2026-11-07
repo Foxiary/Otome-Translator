@@ -8,9 +8,9 @@
     python sprite.py translate ttlm_nam.memfs        # no folder: only list the cells
     python sprite.py check  ttlm_nam.memfs
 
-`translate` is what the app runs: it picks the half by the folder. `export`
-(take out; no folder = list) and `import` (put back) are the two halves on
-their own.
+The app has the two halves as two tools: export (take out; no folder = only
+list) and import (put back), and fills import's screen and folder in from
+the export it just ran. `translate` does either, picked by the folder.
 
 The membody is read from next to the memfs unless --body names it.
 
@@ -24,14 +24,20 @@ mat_ttlm_com01_off is the 新しく始める label, mat_ttlm_com01_setu its help
 export   lists every texture and its cells - file name, place, size, parts.
          Given a folder it also writes every texture as <texture>.png and
          every cell as <texture>/<part>.png, plus cells.csv with the same
-         list. (`list` is export without a folder, kept for old scripts.)
+         list. Into a folder that already holds any of them it writes
+         nothing unless --overwrite: the run names the files that differ from
+         the game (cells someone redrew), and with --overwrite each of those is
+         copied to <name>.bak beside it first. (`list` = export, no folder.)
 import   reads that folder back. A cell PNG that differs from the game's
          pixels is pasted at its rectangle; a <texture>.png that differs
          replaces the whole texture first, so an edited cell wins over it.
          A PNG must keep its size: nothing outside the rectangle is drawn.
          Without --apply it only reports. The result is opened again and
          checked: untouched files byte for byte, changed textures pixel for
-         pixel. A file already in --out is kept as .bak.
+         pixel. A file already in --out is first copied beside it, to
+         <name>.bak (or .bak2, .bak3 ... if that is taken); the dry run names
+         each file and its copy (`se thay file da co`), and the app shows
+         them when it asks.
 check    rebuilds the archive unchanged (must match byte for byte) and
          round-trips every texture it can edit.
 
@@ -43,15 +49,17 @@ Needs Pillow (pip install Pillow).
 """
 import argparse
 import csv
+import io
 import os
 import re
+import shutil
 import struct
 import sys
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rson  # noqa: E402
-from patch import write_files  # noqa: E402
+from patch import backup_name, say_replaced, write_files  # noqa: E402
 
 RTEX_HEAD = 0x20
 FMT_RGBA8 = 0x02
@@ -278,11 +286,25 @@ class Archive(object):
 
 # --- commands ----------------------------------------------------------------
 
-def cmd_export(arc, out=None):
-    """List every texture and its cells; with out, also save them as PNG and cells.csv."""
-    if out:
-        os.makedirs(out, exist_ok=True)
-    rows = []
+def same_png(path, img):
+    """True when the PNG at path holds exactly img's pixels."""
+    Image = need_pil()
+    try:
+        with Image.open(path) as old:
+            return old.size == img.size and old.convert('RGBA').tobytes() == img.tobytes()
+    except Exception:
+        return False
+
+
+def cmd_export(arc, out=None, overwrite=False):
+    """List every texture and its cells; with out, also save them as PNG and cells.csv.
+
+    Files already in out may be cells someone redrew, so without overwrite
+    nothing is written: the run lists them, names the ones that differ from
+    the game, and says to add --overwrite (the app turns that into a question).
+    With overwrite, each file that differs is first copied beside itself
+    (backup_name: <name>.bak, .bak2 ...); identical ones are just rewritten."""
+    rows, files = [], []          # files: (path in out, image or bytes)
     for p, t in sorted(arc.textures.items()):
         mine = [c for c in arc.cells if c.texture == p]
         if t.editable:
@@ -291,7 +313,7 @@ def cmd_export(arc, out=None):
             print('%s  %dx%d, %d o - bo qua: %s' % (p.lstrip('/'), t.w, t.h, len(mine), t.why_not()))
         img = t.image() if out and t.editable else None
         if img is not None:
-            img.save(os.path.join(out, safe(stem(p)) + '.png'))
+            files.append((safe(stem(p)) + '.png', img))
         for c in mine:
             name = c.file if t.editable else '(khong luu duoc)'
             print('    %-48s %5d %5d %5dx%-5d %s' % (name, c.x, c.y, c.w, c.h, ' '.join(c.parts)))
@@ -299,18 +321,49 @@ def cmd_export(arc, out=None):
                 continue
             rows.append([c.file, stem(p), c.x, c.y, c.w, c.h, ' '.join(c.parts)])
             if img is not None:
-                dst = os.path.join(out, *c.file.split('/'))
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                img.crop(c.box).save(dst)
+                files.append((c.file, img.crop(c.box)))
     for n in arc.notes:
         print('chu y: ' + n)
     if not out:
         print('%d o sua duoc. Chua chon thu muc nen chi liet ke; chon thu muc de luu anh ra.' % len(rows))
         return 0
-    with open(os.path.join(out, 'cells.csv'), 'w', newline='', encoding='utf-8-sig') as f:
-        w = csv.writer(f)
-        w.writerow(['file', 'texture', 'x', 'y', 'w', 'h', 'parts'])
-        w.writerows(rows)
+    table = io.StringIO()
+    w = csv.writer(table, lineterminator='\r\n')
+    w.writerow(['file', 'texture', 'x', 'y', 'w', 'h', 'parts'])
+    w.writerows(rows)
+    files.append(('cells.csv', table.getvalue().encode('utf-8-sig')))
+
+    def path_of(rel):
+        return os.path.join(out, *rel.split('/'))
+
+    def same(rel, data):
+        if isinstance(data, bytes):
+            with open(path_of(rel), 'rb') as f:
+                return f.read() == data
+        return same_png(path_of(rel), data)
+    have = [(rel, data) for rel, data in files if os.path.isfile(path_of(rel))]
+    changed = [rel for rel, data in have if not same(rel, data)]
+    if have and not overwrite:
+        print('')
+        print('%s da co %d file lay ra truoc do; %d file khac ban goc cua game (co the la o da ve lai).'
+              % (out, len(have), len(changed)))
+        if changed:
+            pairs = ['%s -> %s' % (rel, os.path.basename(backup_name(path_of(rel)))) for rel in changed]
+            print('se thay file da co, ban cu chep sang file .bak cung thu muc: %s' % ', '.join(pairs))
+        print('chua ghi gi - them --overwrite de ghi de vao %s' % out)
+        return 0
+    for rel, data in files:
+        dst = path_of(rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if rel in changed:
+            bak = backup_name(dst)
+            shutil.copy2(dst, bak)
+            print('ban cu -> %s' % bak)
+        if isinstance(data, bytes):
+            with open(dst, 'wb') as f:
+                f.write(data)
+        else:
+            data.save(dst)
     print('da luu %d o -> %s (cells.csv ghi vi tri tung o)' % (len(rows), out))
     return 0
 
@@ -400,6 +453,11 @@ def verify(arc, mem, body, new):
 
 
 def cmd_import(arc, folder, out, apply):
+    if folder_state(arc, folder) != 'taken':
+        print('LOI: %s chua co anh lay ra tu %s.' % (folder, arc.name))
+        print('Chay buoc lay anh ra (export) voi mot thu muc trong truoc, ve lai cac o ngay trong thu muc do,')
+        print('roi chon chinh thu muc do o day.')
+        return 1
     new, report, problems = plan_import(arc, folder)
     for line in report:
         print(line)
@@ -422,6 +480,7 @@ def cmd_import(arc, folder, out, apply):
         len(new), len(arc.body), len(body), len(arc.memfs), len(mem)))
     print('kiem tra: OK (file khong sua giong tung byte, anh da sua dung tung diem anh)')
     if not apply:
+        say_replaced(out, (arc.name + '.memfs', arc.name + '.membody'))
         print('chay thu - them --apply de ghi vao %s' % out)
         return 0
     write_files(out, ((arc.name + '.memfs', mem), (arc.name + '.membody', body)))
@@ -493,6 +552,8 @@ def main():
     ap.add_argument('--body', help='the .membody, if not next to the memfs')
     ap.add_argument('--out', help='translate, import: where the new memfs/membody go')
     ap.add_argument('--apply', action='store_true', help='translate, import: write the files')
+    ap.add_argument('--overwrite', action='store_true',
+                    help='export: replace images already in the folder (those that differ are copied to .bak first)')
     a = ap.parse_args()
     if a.cmd == 'import' and not a.folder:
         ap.error('import: can thu muc anh')
@@ -502,7 +563,7 @@ def main():
     if a.cmd == 'translate':
         return cmd_translate(arc, a.folder, a.out, a.apply)
     if a.cmd in ('list', 'export'):
-        return cmd_export(arc, a.folder if a.cmd == 'export' else None)
+        return cmd_export(arc, a.folder if a.cmd == 'export' else None, a.overwrite)
     if a.cmd == 'import':
         return cmd_import(arc, a.folder, a.out, a.apply)
     return cmd_check(arc)

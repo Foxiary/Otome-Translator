@@ -152,7 +152,7 @@ function makeArgs(tool, values) {
 function createWindow() {
   window = new BrowserWindow({
     width: 1450, height: 940, minWidth: 1050, minHeight: 690,
-    title: 'Otome Translator', backgroundColor: '#11131b',
+    title: 'OTOME TRANSLATOR', backgroundColor: '#11131b',
     icon: path.resolve(__dirname, '..', 'assets', 'icon.png'),
     webPreferences: {preload: path.join(__dirname, 'preload.js'), contextIsolation: true,
       nodeIntegration: false, sandbox: true}

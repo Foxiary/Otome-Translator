@@ -363,14 +363,14 @@ function documentationPage({title, intro, pages}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>
-:root{color-scheme:light;--ink:#241f33;--muted:#5c5670;--line:#e6e3ee;--field:#f4f2f8;--accent:#4c32b3}
+:root{color-scheme:light;--ink:#3a2433;--muted:#7d5c70;--line:#f0e2ea;--field:#fbf4f8;--accent:#9a3474}
 *{box-sizing:border-box}
-body{margin:0;background:#f7f6fb;color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}
+body{margin:0;background:#fdf8fb;color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}
 .layout{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh}
-nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:28px 18px;border-right:1px solid var(--line);background:#fcfbfe}
+nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:28px 18px;border-right:1px solid var(--line);background:#fffafd}
 nav p{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5}
 nav a{display:block;margin:2px 0;padding:8px 10px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px}
-nav a:hover{background:#efeafc}
+nav a:hover{background:#fde8f6}
 main{padding:36px 40px 64px;max-width:820px}
 article{padding-bottom:28px;margin-bottom:28px;border-bottom:1px solid var(--line)}
 article:last-child{border-bottom:0}

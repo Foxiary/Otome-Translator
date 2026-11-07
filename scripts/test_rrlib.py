@@ -474,6 +474,36 @@ class SpriteTest(unittest.TestCase):
         self.assertTrue(any('label_of.png' in r for r in report))
         self.assertEqual(self.quiet(sprite.cmd_import, arc, folder, os.path.join(self.d, 'mod'), True)[0], 1)
 
+    def test_import_needs_a_folder_taken_out_of_this_screen(self):
+        arc = sprite.Archive(self.memfs)
+        empty = os.path.join(self.d, 'empty')
+        os.makedirs(empty)
+        rc, log = self.quiet(sprite.cmd_import, arc, empty, os.path.join(self.d, 'mod'), False)
+        self.assertEqual(rc, 1)
+        self.assertIn('chua co anh lay ra', log)
+
+    def test_export_asks_before_overwriting(self):
+        from PIL import Image
+        arc, folder = self.export()
+        mine = os.path.join(folder, 'ui', 'label_on.png')
+        Image.new('RGBA', (4, 2), (9, 9, 9, 9)).save(mine)                      # a redrawn cell
+        rc, log = self.quiet(sprite.cmd_export, arc, folder)                      # held back
+        self.assertEqual(rc, 0)
+        self.assertIn('1 file khac ban goc', log)
+        self.assertIn('ui/label_on.png -> label_on.png.bak', log)
+        self.assertIn('them --overwrite de ghi de vao %s' % folder, log)
+        with Image.open(mine) as im:
+            self.assertEqual(im.convert('RGBA').getpixel((0, 0)), (9, 9, 9, 9))
+        self.assertFalse(os.path.exists(mine + '.bak'))
+        rc, log = self.quiet(sprite.cmd_export, arc, folder, True)                # the user said yes
+        self.assertEqual(rc, 0)
+        with Image.open(mine + '.bak') as im:                                      # the drawing is kept
+            self.assertEqual(im.convert('RGBA').getpixel((0, 0)), (9, 9, 9, 9))
+        before = arc.textures['/ui.rtex'].image().crop((1, 3, 5, 5)).tobytes()
+        with Image.open(mine) as im:
+            self.assertEqual(im.convert('RGBA').tobytes(), before)
+        self.assertEqual([n for n in os.listdir(os.path.join(folder, 'ui')) if n.endswith('.bak')], ['label_on.png.bak'])
+
     def test_translate_picks_the_half_by_the_folder(self):
         from PIL import Image
         arc = sprite.Archive(self.memfs)
@@ -494,6 +524,13 @@ class SpriteTest(unittest.TestCase):
         self.assertFalse(os.path.exists(out))
         self.assertEqual(self.quiet(sprite.cmd_translate, arc, folder, out, True)[0], 0)
         self.assertTrue(os.path.exists(os.path.join(out, 'ui.membody')))
+        rc, log = self.quiet(sprite.cmd_translate, arc, folder, out, False)         # the dialog says what goes
+        self.assertIn('se thay file da co, ban cu chep sang file .bak cung thu muc: '
+                      'ui.memfs -> ui.memfs.bak, ui.membody -> ui.membody.bak', log)
+        rc, log = self.quiet(sprite.cmd_translate, arc, folder, out, True)          # and where it went
+        self.assertIn('ban cu -> %s' % os.path.join(out, 'ui.membody.bak'), log)
+        rc, log = self.quiet(sprite.cmd_translate, arc, folder, out, False)         # never over an older copy
+        self.assertIn('ui.membody -> ui.membody.bak2', log)
         other = os.path.join(self.d, 'other')                                      # someone else's files
         os.makedirs(other)
         open(os.path.join(other, 'notes.txt'), 'w').close()

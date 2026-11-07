@@ -69,6 +69,6 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
 
 ## Quy ước
 
-- Lệnh ghi file thì chạy thử trước; thêm `--apply` mới ghi. File đã có giữ thành `.bak`.
+- Lệnh ghi file thì chạy thử trước; thêm `--apply` mới ghi. File đã có được chép sang `<tên>.bak` nằm cạnh nó trong cùng thư mục (đã có `.bak` thì `.bak2`, `.bak3`…); lần chạy thử và nhật ký ghi đúng tên bản sao.
 - Mọi đường dẫn nhận qua tham số; không có gì gắn cứng với máy nào.
 - Comment trong code bằng tiếng Anh, tài liệu bằng tiếng Việt, `CLAUDE.md` bằng tiếng Anh.

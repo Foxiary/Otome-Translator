@@ -194,22 +194,42 @@ def main():
         write_report(a.report, rep['rows'])
         print('bao cao -> %s' % a.report)
     if not a.apply:
+        say_replaced(a.out, ('script.membody', 'script.memfs'))
         print('chay thu - them --apply de ghi vao %s' % a.out)
         return 0
     write_files(a.out, (('script.membody', body), ('script.memfs', mem)))
     return 0
 
 
+def backup_name(dst):
+    """Where write_files copies an existing dst first: dst.bak, or dst.bak2,
+    dst.bak3 ... when an older copy is already there - never over one."""
+    bak, n = dst + '.bak', 2
+    while os.path.exists(bak):
+        bak, n = '%s.bak%d' % (dst, n), n + 1
+    return bak
+
+
+def say_replaced(folder, names):
+    """For a dry run: name the files write_files would replace in folder, and
+    the copy each old one goes to, beside it. The app shows this line in the
+    dialog that asks before writing."""
+    have = [n for n in names if os.path.isfile(os.path.join(folder, n))]
+    if have:
+        pairs = ['%s -> %s' % (n, os.path.basename(backup_name(os.path.join(folder, n)))) for n in have]
+        print('se thay file da co, ban cu chep sang file .bak cung thu muc: %s' % ', '.join(pairs))
+
+
 def write_files(folder, files):
-    """Write (name, bytes) pairs into folder; a file already there is kept as .bak."""
+    """Write (name, bytes) pairs into folder; a file already there is first
+    copied to backup_name() beside it."""
     os.makedirs(folder, exist_ok=True)
     for name, data in files:
         dst = os.path.join(folder, name)
         if os.path.exists(dst):
-            bak = dst + '.bak'; n = 2
-            while os.path.exists(bak):
-                bak = '%s.bak%d' % (dst, n); n += 1
+            bak = backup_name(dst)
             shutil.copy2(dst, bak)
+            print('ban cu -> %s' % bak)
         with open(dst, 'wb') as f:
             f.write(data)
         print('-> %s' % dst)

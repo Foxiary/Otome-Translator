@@ -28,10 +28,10 @@
     banner.className = `update-banner ${result.status === 'available' ? '' : result.status === 'error' ? 'error' : 'info'}`;
     openButton.classList.toggle('hidden', result.status !== 'available');
     if (result.status === 'available') {
-      byId('update-title').textContent = say('update.available', 'Otome Translator {version} is available', {version: result.latestVersion});
+      byId('update-title').textContent = say('update.available', 'OTOME TRANSLATOR {version} is available', {version: result.latestVersion});
       byId('update-message').textContent = result.title || say('update.release', 'A new release is available.');
     } else if (result.status === 'current') {
-      byId('update-title').textContent = say('update.current', 'Otome Translator is up to date');
+      byId('update-title').textContent = say('update.current', 'OTOME TRANSLATOR is up to date');
       byId('update-message').textContent = say('update.version', 'This app is version {version}.', {version: result.currentVersion});
     } else {
       byId('update-title').textContent = say('update.failed', 'Could not check for updates');
@@ -67,7 +67,7 @@
     dialog.classList.toggle('error', result.status === 'error');
     dialogClose.title = dialogClose.ariaLabel = say('tools.close', 'Close');
     if (result.status === 'available') {
-      dialogTitle.textContent = say('update.available', 'Otome Translator {version} is available', {version: result.latestVersion});
+      dialogTitle.textContent = say('update.available', 'OTOME TRANSLATOR {version} is available', {version: result.latestVersion});
       dialogMessage.textContent = say('update.installed', 'Installed version: {version}.', {version: result.currentVersion});
       dialogActions.replaceChildren(
         action(say('update.later', 'Later'), 'button', () => dialog.close()),
@@ -77,7 +77,7 @@
         }));
     } else {
       if (result.status === 'current') {
-        dialogTitle.textContent = say('update.current', 'Otome Translator is up to date');
+        dialogTitle.textContent = say('update.current', 'OTOME TRANSLATOR is up to date');
         dialogMessage.textContent = say('update.version', 'This app is version {version}.', {version: result.currentVersion});
       } else {
         dialogTitle.textContent = say('update.failed', 'Could not check for updates');

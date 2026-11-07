@@ -75,30 +75,32 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
 6. **Dịch chữ vẽ trong ảnh giao diện.** Chữ ở menu tiêu đề, nút bấm và câu chú thích (新しく始める, ロード, 戻る, セーブデータをロードします。…) không phải chuỗi chữ mà là ảnh, nên sheet dịch không có. Mỗi màn hình là một cặp `romfs/spec_win/ssdata/<tên>.memfs` + `.membody`: menu tiêu đề là `ttlm_nam`; các gói khác đặt tên theo màn hình (`opt` cài đặt, `log` backlog, `dialog` hộp thoại…).
 
+   Trong app việc này có hai bước, nằm ở nhóm **Ảnh giao diện**:
+
+   **Bước 1: "Lấy ảnh của một màn hình ra".** Chọn màn hình và một thư mục, tốt nhất là thư mục trống. Nếu thư mục đã có ảnh lấy ra từ trước, công cụ chưa ghi gì: app hỏi "Ghi đè ảnh?" và liệt kê những ảnh khác ảnh gốc của game (thường là ô bạn đã vẽ lại). Đồng ý thì mỗi ảnh đó được chép sang `<tên>.png.bak` nằm cạnh nó trước, rồi mới thay bằng ảnh gốc. Bằng dòng lệnh thì thêm `--overwrite`. Bỏ trống thư mục thì chỉ xem danh sách các ô. Bằng dòng lệnh:
+
    ```
    python tools/nsp.py romfs "<game>.nsp" jp "spec_win/ssdata/ttlm_nam.*"
-   python tools/sprite.py translate jp/spec_win/ssdata/ttlm_nam.memfs anh_menu
+   python tools/sprite.py export jp/spec_win/ssdata/ttlm_nam.memfs anh_menu
    ```
 
-   Trong app đây là công cụ **"Dịch ảnh của một màn hình"**. Nó tự biết phải làm gì nhờ thư mục ảnh:
-   - **thư mục trống (hoặc chưa có):** lấy ảnh ra vào đó, in danh sách các ô (tên file, vị trí, kích thước);
-   - **thư mục đã chứa ảnh lấy ra từ màn hình này:** đưa các ô đã vẽ lại vào game (xem dưới);
-   - **thư mục chứa thứ khác:** báo lỗi, không ghi gì;
-   - **bỏ trống thư mục:** chỉ in danh sách.
-
-   Lần đầu, thư mục `anh_menu/` có:
+   Thư mục `anh_menu/` có:
    - `mat_ttlm.png`: cả tấm ảnh 4096×4096, để xem tổng thể;
    - `mat_ttlm/<tên ô>.png`: mỗi ô một file, tên lấy theo phần hình dùng nó. Ví dụ `mat_ttlm_com01_off.png` / `_on.png` là chữ 新しく始める lúc chưa chọn / đang chọn, `mat_ttlm_com01_setu.png` là câu chú thích dọc của nó, `mat_nam_bodoru_txt.png` là 戻る;
    - `cells.csv`: vị trí và kích thước từng ô.
 
-   Vẽ lại ô cần dịch bằng phần mềm sửa ảnh bất kỳ (Photoshop, GIMP, Krita…), **lưu đè lên đúng file đó, giữ nguyên kích thước và tên file**, nền trong suốt vẫn trong suốt. Muốn sửa thẳng trên ảnh lớn cũng được; nếu sửa cả hai thì ô nhỏ được dán sau nên đè lên. Rồi chạy lại với cùng thư mục, thêm nơi ghi. Lần đầu là chạy thử; trong app, chạy thử không lỗi thì app hỏi có ghi không:
+   Chạy xong, app hiện nút mở thư mục và nút **"Bước tiếp: Đưa ảnh đã vẽ lại vào game"**, đồng thời điền sẵn màn hình và thư mục này vào bước 2. Mở bước 2 mà các ô đó còn trống thì app cũng lấy từ lần chạy bước 1 gần nhất.
+
+   **Vẽ lại** ô cần dịch bằng phần mềm sửa ảnh bất kỳ (Photoshop, GIMP, Krita…), **lưu đè lên đúng file đó, giữ nguyên kích thước và tên file**, nền trong suốt vẫn trong suốt. Muốn sửa thẳng trên ảnh lớn cũng được; nếu sửa cả hai thì ô nhỏ được dán sau nên đè lên.
+
+   **Bước 2: "Đưa ảnh đã vẽ lại vào game".** Chọn thêm thư mục Ghi vào: `romfs/spec_win/ssdata` trong mod. Lần chạy đầu là chạy thử; không lỗi thì app hỏi có ghi không. Bằng dòng lệnh:
 
    ```
-   python tools/sprite.py translate jp/spec_win/ssdata/ttlm_nam.memfs anh_menu --out <thư mục mod>/romfs/spec_win/ssdata
-   python tools/sprite.py translate jp/spec_win/ssdata/ttlm_nam.memfs anh_menu --out <thư mục mod>/romfs/spec_win/ssdata --apply
+   python tools/sprite.py import jp/spec_win/ssdata/ttlm_nam.memfs anh_menu --out <thư mục mod>/romfs/spec_win/ssdata
+   python tools/sprite.py import jp/spec_win/ssdata/ttlm_nam.memfs anh_menu --out <thư mục mod>/romfs/spec_win/ssdata --apply
    ```
 
-   Chưa vẽ lại ô nào thì công cụ báo vậy và không ghi gì. (`export` và `import` vẫn có cho ai muốn chạy riêng từng nửa.)
+   Thư mục ảnh không phải do bước 1 tạo cho đúng màn hình đó thì bị từ chối. Chưa vẽ lại ô nào thì công cụ báo vậy và không ghi gì. Nếu thư mục Ghi vào đã có file của màn hình đó, lần chạy thử nêu tên chúng và hộp hỏi của app ghi rõ "sẽ bị thay". Trước khi ghi, mỗi file cũ được chép sang `<tên>.bak` nằm ngay cạnh nó, trong chính thư mục Ghi vào, ví dụ `ttl.memfs` → `ttl.memfs.bak`. Nếu `.bak` đã có từ lần trước thì thành `.bak2`, `.bak3`…, nên không bản sao nào bị đè. Hộp hỏi và nhật ký đều ghi đúng tên bản sao. (`sprite.py translate` làm một trong hai bước tuỳ thư mục, cho ai quen chạy một lệnh.)
 
    Công cụ chỉ dán những ô khác bản game. Nó báo ô sai kích thước, file đặt sai tên, và ô nào đè lên ô khác. Bản dựng được tự kiểm: file không sửa phải giữ nguyên từng byte, ảnh đã sửa phải đúng từng điểm ảnh. Chữ vẽ ra ngoài khung ô sẽ không hiện, vì game chỉ cắt đúng khung đó.
 

@@ -41,6 +41,18 @@ function argText(item, arg, field) {
   const vi = language() === 'vi' ? item.vi?.args?.[arg.name]?.[field] : '';
   return vi || (field === 'label' ? titleOf(arg.name) : arg.help);
 }
+// A tool that `follows` another (catalog: {tool, fields: {mine: theirs}}) takes
+// those fields from it: the folder step 1 saved to is the folder step 2 reads.
+// Null unless every one of them is filled in `source`.
+function handedOn(item, source) {
+  const out = {};
+  for (const [mine, theirs] of Object.entries(item.follows?.fields || {})) {
+    const value = String(source?.[theirs] ?? '').trim();
+    if (!value) return null;
+    out[mine] = value;
+  }
+  return item.follows ? out : null;
+}
 const SVG = 'http://www.w3.org/2000/svg';
 function icon(name, className = 'icon') {
   const svg = document.createElementNS(SVG, 'svg');
@@ -346,25 +358,62 @@ function captureValues() {
   }
   formValues[current.id] = values;
 }
-// A tool that writes only when given --apply has no Apply checkbox: Run always
-// does a dry run, and when that ends cleanly and says there is something to
-// write (the tools print "add --apply to write <where>"), the app asks whether
-// to write, then runs it again with --apply. A tick nobody remembers is gone.
-const APPLY = '--apply';
-const appliesLater = item => item.args.some(arg => arg.kind === 'bool' && arg.name === APPLY);
-let applyOffer = null;   // {id, values, output} while such a dry run is going
+// A tool that writes only when given --apply (or replaces files only when
+// given --overwrite) has no checkbox for it: Run never sets it, and when the run
+// ends cleanly and says it held back (the tools print "add --apply to write
+// <where>", "them --overwrite de ghi de vao <where>"), the app asks, then runs
+// it again with the flag. A tick nobody remembers is gone.
+const CONFIRM = ['--apply', '--overwrite'];
+const confirmFlag = item => CONFIRM.find(flag => item.args.some(arg => arg.kind === 'bool' && arg.name === flag)) || '';
+let applyOffer = null;   // {id, values, output, flag} while such a run is going
 let runRequest = null;   // {id, values} for the run in progress, including a hidden --apply
 let runReveal = null;    // {id, path} after a run that left files to open
-function offerApply(offer) {
+async function offerApply(offer) {
   const item = tools().find(t => t.id === offer.id);
   if (!item) return;
-  const where = offer.output.match(/--apply\s+(?:de ghi vao|to write)\s+(.+?)\s*$/m)?.[1];
+  const overwrite = offer.flag === '--overwrite';
+  const words = overwrite ? 'overwrite' : 'apply';
+  const where = offer.output.match(new RegExp(`${offer.flag}\\s+(?:de ghi de vao|de ghi vao|to overwrite|to write)\\s+(.+?)\\s*$`, 'm'))?.[1];
+  // What the write would replace, as "old -> backup" where a copy is kept.
+  // rrlib tools name both (the copy sits beside the old file); for a tool that
+  // names one output file, look whether it is already there: it is copied to
+  // .bak, .bak2 ... only when it is also the file the tool read.
+  let replaced = offer.output.match(/^se thay file da co[^:]*:\s*(.+?)\s*$/m)?.[1]?.split(/,\s*/) || [];
+  let kept = replaced.length > 0;
+  if (!replaced.length && where && !overwrite) {
+    const absolute = /^([a-zA-Z]:)?[\\/]/.test(where) ? where : `${state.workspace}/${where}`;
+    try {
+      if (await window.vees.fileExists(absolute)) {
+        const name = where.split(/[\\/]/).pop();
+        kept = Object.entries(offer.values).some(([field, value]) => field !== '--out' && String(value ?? '').trim() === where);
+        let backup = `${absolute}.bak`;
+        for (let n = 2; kept && n < 100 && await window.vees.fileExists(backup); n++) backup = `${absolute}.bak${n}`;
+        replaced = [kept ? `${name} -> ${backup.split(/[\\/]/).pop()}` : where];
+      }
+    } catch {}
+  }
   // True until the user says write, and that run starts a log of its own.
   setLog(`${currentLog}${text('apply.declined')}\n`);
   whenNoDialog(() => {
-    dialogContent(text('apply.title'), body => {
-      paragraph(body, text('apply.body', {tool: toolText(item, 'title')}));
-      if (where) {paragraph(body, text('apply.where')); paragraph(body, where, 'mono dialog-path');}
+    dialogContent(text(`${words}.title`), body => {
+      paragraph(body, text(`${words}.body`, {tool: toolText(item, 'title')}));
+      if (where) {paragraph(body, text(overwrite ? 'overwrite.where' : 'apply.where')); paragraph(body, where, 'mono dialog-path');}
+      // Files that get replaced stand out in a warning box: yellow while a
+      // .bak keeps the old one, red when nothing does.
+      if (replaced.length) {
+        const box = elt('div', `notice dialog-warning${!overwrite && !kept ? ' missing' : ''}`);
+        const lines = elt('div');
+        // The heading names the files (up to three); the list below has them all.
+        const names = replaced.map(line => line.split(/\s*->\s*/)[0]);
+        const heading = key => text(names.length === 1 ? `${key}One` : names.length <= 3 ? `${key}Few` : `${key}Title`,
+          {file: names[0], files: names.join(', '), count: names.length});
+        if (overwrite) lines.append(elt('strong', '', heading('overwrite.changed')), elt('div', '', text('overwrite.changed')));
+        else if (kept) lines.append(elt('strong', '', heading('apply.replace')), elt('div', '', text('apply.replaceKept')));
+        else lines.append(elt('strong', '', text('apply.replace', {file: names[0].split(/[\\/]/).pop()})));
+        for (const line of replaced) lines.append(elt('div', 'mono', line.replace(/\s*->\s*/, '  →  ')));
+        box.append(lines);
+        body.append(box);
+      } else if (overwrite) paragraph(body, text('overwrite.same'));
       const actions = elt('div', 'dialog-actions');
       const add = (label, onClick, className) => {
         const node = elt('button', className, label);
@@ -372,13 +421,13 @@ function offerApply(offer) {
         node.addEventListener('click', onClick);
         actions.append(node);
       };
-      add(text('apply.write'), async () => {
+      add(text(`${words}.write`), async () => {
         $('info-dialog').close();
-        const values = {...offer.values, [APPLY]: true};
+        const values = {...offer.values, [offer.flag]: true};
         try {runRequest = {id: offer.id, values}; await window.vees.run(offer.id, values);}
         catch (error) {runRequest = null; showError(error.message);}
       }, 'button primary');
-      add(text('apply.notNow'), () => $('info-dialog').close(), 'button quiet');
+      add(text(overwrite ? 'overwrite.cancel' : 'apply.notNow'), () => $('info-dialog').close(), 'button quiet');
       body.append(actions);
     });
     $('info-dialog').querySelector('.dialog-actions .primary')?.focus();
@@ -398,13 +447,17 @@ function renderForm() {
   $('fonts-panel').classList.toggle('hidden', !mapping);
   $('form-generic').classList.toggle('hidden', mapping);
   if (mapping) renderFonts();
-  const values = formValues[current.id] || state.settings.values[current.id] || {};
+  const values = {...(formValues[current.id] || state.settings.values[current.id] || {})};
+  if (current.follows) {
+    const given = handedOn(current, formValues[current.follows.tool] || state.settings.values[current.follows.tool]);
+    for (const [name, value] of Object.entries(given || {})) if (!String(values[name] ?? '').trim()) values[name] = value;
+  }
   $('form-fields').replaceChildren();
   $('fonts-options').replaceChildren();
   const fields = mapping ? $('fonts-options') : $('form-fields');
   for (const [index, arg] of current.args.entries()) {
     if (mapping && MAPPED_ARGS.includes(arg.name)) continue;
-    if (arg.name === APPLY && appliesLater(current)) continue;
+    if (arg.kind === 'bool' && arg.name === confirmFlag(current)) continue;
     const field = elt('div',`field ${arg.kind === 'bool' ? 'toggle-field' : ''} ${arg.repeat || arg.help?.length > 85 ? 'wide' : ''}`);
     const label = elt('label','',argText(current, arg, 'label'));
     label.htmlFor = `arg-${index}`;
@@ -1189,10 +1242,14 @@ function renderRunReveal() {
   box.classList.toggle('hidden', !show);
   box.replaceChildren();
   if (!show) return;
-  const words = elt('span');
-  words.append(elt('strong', '', text('run.saved')), pathText(runReveal.path));
   const body = elt('div', 'hint-body');
-  body.append(words, revealButton(runReveal.path, showError, 'button primary'));
+  if (runReveal.path) {
+    const words = elt('span');
+    words.append(elt('strong', '', text('run.saved')), pathText(runReveal.path));
+    body.append(words, revealButton(runReveal.path, showError, runReveal.next ? 'button' : 'button primary'));
+  }
+  const next = runReveal.next && tools().find(item => item.id === runReveal.next);
+  if (next) body.append(actionButton('button primary', text('run.next', {tool: toolText(next, 'title')}), () => openTool(next.id)));
   box.append(body);
 }
 function showFontsError(message) {
@@ -1442,7 +1499,8 @@ async function start() {
     const current = tool();
     const values = {...formValues[current.id]};
     applyOffer = null;
-    if (appliesLater(current)) {delete values[APPLY]; applyOffer = {id: current.id, values, output: ''};}
+    const flag = confirmFlag(current);
+    if (flag) {delete values[flag]; applyOffer = {id: current.id, values, output: '', flag};}
     try {
       runRequest = {id: current.id, values};
       await window.vees.run(current.id,values);
@@ -1469,13 +1527,18 @@ async function start() {
     running=false;const ok=event.code===0;
     setLog(`${currentLog}\n${ok?text('log.success'):event.signal?text('status.stopped'):text('log.exit', {code: event.code})}\n`);
     status(ok?'status.complete':event.signal?'status.stopped':'status.failed',ok?'success':'failed');
-    if (!event.id) {
+    // A run that held back and is about to ask has written nothing yet.
+    const asking = !!(applyOffer && ok && !event.id && applyOffer.output.includes(applyOffer.flag));
+    if (!event.id && !asking) {
       const current = tool();
       const values = current && runRequest?.id === current.id ? runRequest.values : {};
       const target = ok && current ? outputTarget(current, values) : '';
       let kind = '';
       try { kind = target ? await window.vees.pathKind(target) : ''; } catch { kind = ''; }
-      runReveal = kind && current ? {id: current.id, path: target} : null;
+      // The tool that follows this one gets its fields now, and a button to it.
+      const next = ok && current ? tools().find(item => item.follows?.tool === current.id && handedOn(item, values)) : null;
+      if (next) formValues[next.id] = {...(formValues[next.id] || state.settings.values[next.id] || {}), ...handedOn(next, values)};
+      runReveal = (kind || next) && current ? {id: current.id, path: kind ? target : '', next: next?.id} : null;
     }
     if (event.id === 'patch') applyPatchResult(event);
     else {
@@ -1484,7 +1547,7 @@ async function start() {
     }
     const offer = applyOffer;
     applyOffer = null;
-    if (offer && ok && !event.id && offer.output.includes(APPLY)) offerApply(offer);
+    if (asking) offerApply(offer);
     window.vees.state().then(fresh=>{state.settings=fresh.settings;state.workspace=fresh.workspace;updatePython(fresh.python);}).catch(()=>{});
   });
   $('tour-button').addEventListener('click', tour.start);
@@ -1573,4 +1636,4 @@ async function startPatch(confirmed) {
     applyPatchResult(result);
   } catch (error) {running = false; showPatchError(error.message); render();}
 }
-start().catch(error=>{document.body.textContent=`Unable to start Otome Translator: ${error.message}`;});
+start().catch(error=>{document.body.textContent=`Unable to start OTOME TRANSLATOR: ${error.message}`;});
