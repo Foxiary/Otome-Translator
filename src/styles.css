@@ -43,12 +43,12 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 .folder-box{display:grid;place-items:center;width:29px;height:29px;border:1px solid var(--border);background:var(--glyph);border-radius:8px;color:var(--accent-text);flex-shrink:0}
 .workspace-copy{min-width:0}
 .workspace-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.workspace-path{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workspace-path{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
 .workspace-actions{border-top:1px solid var(--line);display:flex;align-items:center;gap:4px;padding:3px 6px;background:var(--field)}
 .workspace-actions button{border:0;background:transparent;border-radius:4px;padding:5px;font-size:11px;color:var(--secondary);display:flex;gap:5px;align-items:center}
 .workspace-actions button:hover{background:var(--hover);color:var(--ink)}
 .workspace-actions .icon{width:12px;height:12px}.workspace-actions .change-button{margin-left:auto}
-.engine-section{margin-top:16px}
+.workspace-section{margin-top:18px}
 .engine-options{min-width:0;margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:7px}
 .engine-choice{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);cursor:pointer;transition:background .15s,border-color .15s}
 .engine-choice:hover{border-color:var(--border-hover);background:var(--hover)}
@@ -63,7 +63,7 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 .engine-choice.is-selected .engine-description{color:var(--secondary)}
 .engine-radio{appearance:auto;width:14px;height:14px;flex-shrink:0;margin:0;accent-color:var(--accent);cursor:pointer}
 .engine-help{margin:6px 8px 0;font-size:11px;color:var(--muted);line-height:1.5}
-.navigation{margin-top:16px;flex:1;min-height:0;overflow:auto}
+.navigation{margin-top:18px;flex:1;min-height:0;overflow:auto}
 .nav-list{display:flex;flex-direction:column;gap:2px}
 .nav-item{display:flex;align-items:center;gap:11px;padding:7px 11px;width:100%;border:1px solid transparent;border-radius:8px;background:transparent;text-align:left;font-size:12px;color:var(--secondary)}
 .nav-item:hover:not(:disabled){background:var(--hover);color:var(--ink)}
@@ -74,10 +74,14 @@ body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none
 .nav-item.active .nav-count{color:var(--accent-text)}
 .sidebar-bottom{flex-shrink:0;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.sidebar-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.utility-list,.prefs{display:flex;align-items:center;gap:6px}
-.utility{position:relative;width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--field);color:var(--secondary)}
-.theme-toggle,.language-toggle{position:relative;width:auto;min-height:32px;display:flex;align-items:center;gap:6px;padding:0 8px;border:1px solid var(--border);border-radius:8px;background:var(--field);text-align:left;font-size:12px;color:var(--secondary)}
+.sidebar-tools{display:flex;flex-direction:column;gap:6px}
+.utility-list,.prefs{display:grid;gap:6px}
+.utility-list{grid-template-columns:repeat(4,minmax(0,1fr))}
+.prefs{grid-template-columns:repeat(2,minmax(0,1fr))}
+.prefs>*{min-width:0}
+.theme-toggle .theme-track,.language-toggle>.language-chevron{margin-left:auto}
+.utility{position:relative;width:100%;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--field);color:var(--secondary)}
+.theme-toggle,.language-toggle{position:relative;width:100%;min-height:32px;display:flex;align-items:center;gap:6px;padding:0 8px;border:1px solid var(--border);border-radius:8px;background:var(--field);text-align:left;font-size:12px;color:var(--secondary)}
 .utility .icon,.theme-toggle>.icon,.language-toggle>.icon{width:14px;height:14px}
 .utility .icon{width:16px;height:16px}
 .utility:hover{background:var(--hover);border-color:var(--border);color:var(--ink)}
@@ -405,3 +409,7 @@ button.runtime.bad:hover{border-color:var(--bad-ink)}
 .dialog-body .python-error{font-size:11px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
 .dialog-actions button.quiet{border-color:transparent;background:transparent;color:var(--secondary);padding-inline:6px}
 .dialog-actions button.quiet:hover{color:var(--ink);background:transparent;text-decoration:underline;text-underline-offset:3px}
+
+/* Python not ready: the footer button carries a dot, like the badge's colour. */
+.utility.needs-attention{color:var(--bad-ink)}
+.utility.needs-attention::after{content:'';position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--failed);box-shadow:0 0 0 2px var(--field)}

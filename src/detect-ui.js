@@ -1,9 +1,10 @@
 // Drop-a-game, the main way to pick the tools. Until an engine has been chosen
 // once, the app opens on a start page that asks for the game; choosing the
 // engine yourself sits under "Choose the engine yourself" for those who know
-// it. Afterwards the same card sits at the top of the engine section, and a game
-// dropped anywhere on the window switches to its engine and fills the empty
-// fields of its tools. The reading itself happens in the main process
+// it. Afterwards the sidebar names the engine in use, with the pickers and the
+// full list folded under it; a game dropped anywhere on the window switches to
+// its engine and fills the empty fields of its tools, and the sidebar card
+// shows only to report what a drop found. The reading itself happens in the main process
 // (detect-engine.js); everything here is the cards, the overlay and the switch.
 // Loaded before renderer.js, so that the tour and the engine list are hooked
 // before its start() runs: at load only the DOM is used; renderer.js's functions
@@ -208,7 +209,9 @@
       }, 'primary'));
     }
     if (!result.engine || !result.confident) actions.append(button(text('detect.chooseByHand'), openAdvanced));
-    actions.append(button(text('detect.again'), () => { view = {kind: 'idle'}; paint(); }, 'quiet'));
+    // On the start page this asks for another game; in the sidebar, where a drop
+    // works anywhere, it puts the report away.
+    actions.append(button(text(card.id === 'start-detect' ? 'detect.again' : 'detect.dismiss'), () => { view = {kind: 'idle'}; paint(); }, 'quiet'));
     card.append(actions);
 
     const evidence = result.candidates[0]?.evidence || [];
@@ -281,8 +284,15 @@
   // is also the first moment `state` exists: open the start page then if no
   // engine was ever chosen.
   function renderCurrent() {
-    $('engine-current-name').textContent = text('engine.current', {engine: engine().name});
+    const current = engine();
+    $('engine-current-glyph').replaceChildren(icon(current.id));
+    $('engine-current-name').textContent = current.name;
+    $('engine-current-for').textContent = current.subtitle;
   }
+  // The folded panel offers the same pickers as the drop card; dropping works
+  // anywhere in the window.
+  byId('engine-pick-file').addEventListener('click', () => pick('file'));
+  byId('engine-pick-folder').addEventListener('click', () => pick('dir'));
   new MutationObserver(() => {
     renderCurrent();
     if (started) return;

@@ -6,8 +6,8 @@ const tour = (() => {
   // and a step without a target shows its card in the middle of the window.
   const STEPS = [
     {key: 'welcome'},
-    {key: 'workspace', target: ['.workspace-card']},
     {key: 'engine', target: ['.engine-section']},
+    {key: 'workspace', target: ['.workspace-card']},
     {key: 'groups', target: ['.navigation']},
     {key: 'tools', target: ['.tool-panel']},
     {key: 'main', target: ['.main']},

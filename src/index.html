@@ -47,26 +47,32 @@
       <div class="sidebar-resize" id="sidebar-resize" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="rail.resize" aria-label="Resize sidebar" aria-valuemin="200" aria-valuemax="480" aria-valuenow="250"></div>
       <div class="brand"><div class="brand-mark"><svg viewBox="0 0 44 44" fill="none" aria-hidden="true"><rect x="7.5" y="13" width="13" height="18" rx="6.5" stroke="currentColor" stroke-width="3.2"/><path d="M23.5 14.5h13M30 14.5v16" stroke="currentColor" stroke-width="3.2" stroke-linecap="square"/></svg></div><div><div class="wordmark">otome</div><div class="brand-caption">TRANSLATOR</div></div></div>
 
-      <section aria-labelledby="workspace-heading">
-        <div class="section-label"><h2 class="eyebrow" id="workspace-heading" data-i18n="rail.workspace"></h2><span class="local-label"><i class="dot"></i><bdi data-i18n="rail.local"></bdi></span></div>
+      <!-- Engine first: each engine keeps its own project folder, so the folder below follows it. -->
+      <section class="engine-section" aria-labelledby="engine-heading">
+        <div class="section-label"><h2 class="eyebrow" id="engine-heading" data-i18n="rail.engine"></h2></div>
+        <details class="engine-advanced" id="engine-advanced">
+          <summary class="engine-current" data-i18n-title="engine.changeTitle"><span class="engine-glyph" id="engine-current-glyph"></span><span class="engine-current-copy"><span class="engine-current-name" id="engine-current-name"></span><span class="engine-current-for" id="engine-current-for"></span></span><svg class="icon engine-current-chevron"><use href="#i-chevrons"/></svg></summary>
+          <div class="engine-panel">
+            <div class="engine-drop"><svg class="icon"><use href="#i-drop"/></svg><span class="engine-drop-copy" data-i18n="engine.dropHint"></span><div class="engine-drop-actions"><button type="button" id="engine-pick-file" data-i18n="engine.pickFile"></button><button type="button" id="engine-pick-folder" data-i18n="engine.pickFolder"></button></div></div>
+            <div class="engine-list-label" data-i18n="engine.change"></div>
+            <fieldset class="engine-options" id="engines" aria-labelledby="engine-heading" aria-describedby="engine-help"></fieldset>
+            <p class="engine-help" id="engine-help" data-i18n="engine.help"></p>
+          </div>
+        </details>
+        <!-- What a drop found; empty (and hidden) until something is dropped. -->
+        <div class="detect-card" id="detect-card" aria-live="polite"></div>
+      </section>
+
+      <section class="workspace-section" aria-labelledby="workspace-heading">
+        <div class="section-label"><h2 class="eyebrow" id="workspace-heading" data-i18n="rail.workspace"></h2></div>
         <div class="workspace-card">
           <div class="workspace-info"><span class="folder-box"><svg class="icon"><use href="#i-folder"/></svg></span><div class="workspace-copy"><div class="workspace-name" id="workspace-name" data-i18n="workspace.loading"></div><div class="workspace-path mono" id="workspace-path"></div></div></div>
           <div class="workspace-actions"><button type="button" id="open-folder"><svg class="icon"><use href="#i-external"/></svg><bdi data-i18n="workspace.open"></bdi></button><button type="button" class="change-button" id="workspace-button" data-i18n="workspace.change"></button></div>
         </div>
       </section>
 
-      <section class="engine-section" aria-labelledby="engine-heading">
-        <div class="section-label"><h2 class="eyebrow" id="engine-heading" data-i18n="rail.engine"></h2><span class="local-label" id="engine-count"></span></div>
-        <div class="detect-card" id="detect-card" aria-live="polite"></div>
-        <details class="engine-advanced" id="engine-advanced">
-          <summary class="engine-current"><span class="engine-current-copy"><span class="engine-current-name" id="engine-current-name"></span><span class="engine-current-change" data-i18n="engine.change"></span></span><svg class="icon engine-current-chevron"><use href="#i-chevrons"/></svg></summary>
-          <fieldset class="engine-options" id="engines" aria-labelledby="engine-heading" aria-describedby="engine-help"></fieldset>
-          <p class="engine-help" id="engine-help" data-i18n="engine.help"></p>
-        </details>
-      </section>
-
       <nav class="navigation" aria-labelledby="groups-heading">
-        <div class="section-label"><span class="eyebrow" id="groups-heading" data-i18n="rail.groups"></span><span class="local-label" id="groups-engine"></span></div>
+        <div class="section-label"><span class="eyebrow" id="groups-heading" data-i18n="rail.groups"></span></div>
         <div class="nav-list" id="groups"></div>
       </nav>
 

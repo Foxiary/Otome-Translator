@@ -171,10 +171,16 @@ function toggleLanguageMenu(open) {
     menu.querySelector('[aria-checked=true]')?.focus();
   }
 }
+// The folder's name, and under it the folder it sits in (the name is not
+// repeated). The stylesheet clips that path from its start, so the nearest
+// folders stay readable.
 function updateWorkspace() {
-  $('workspace-name').textContent = state.workspace.split(/[\\/]/).pop() || text('workspace.project');
-  const parts = state.workspace.split(/[\\/]/).filter(Boolean);
-  $('workspace-path').textContent = parts.length > 2 ? `…\\${parts.slice(-2).join('\\')}` : state.workspace;
+  const trimmed = state.workspace.replace(/[\\/]+$/, '');
+  const cut = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  $('workspace-name').textContent = trimmed.slice(cut + 1) || text('workspace.project');
+  const where = elt('bdi', '', cut > 0 ? trimmed.slice(0, cut) : trimmed.slice(0, cut + 1));
+  where.dir = 'ltr';
+  $('workspace-path').replaceChildren(where);
   $('workspace-path').title = state.workspace;
 }
 function renderEngines() {
@@ -196,8 +202,6 @@ function renderEngines() {
     choice.append(glyph, copy, radio);
     box.append(choice);
   }
-  $('engine-count').textContent = text('engine.count', {count: state.engines.length});
-  $('groups-engine').textContent = engine().name;
 }
 async function switchEngine(id) {
   if (id === state.settings.engine) return;
@@ -218,6 +222,8 @@ function updatePython(check) {
   badge.className = `runtime${check.ok ? '' : ' bad'}`;
   badge.textContent = check.ok ? text('python.ready', {version: check.version}) : text('python.needed');
   badge.title = check.ok ? state.settings.python : check.message;
+  // The footer's Python button carries the same warning on pages without the badge.
+  $('python-button').classList.toggle('needs-attention', !check.ok);
   promptPython();
 }
 // A Python that cannot run the engine's tools is said at once, in a dialog with

@@ -31,17 +31,30 @@
 .detect-why li{margin:1px 0;font-size:10px;overflow-wrap:anywhere}
 .detect-why p{margin:5px 0 0}
 
-/* The engine list, folded: the summary names the engine in use. */
-.engine-advanced{margin-top:10px}
-.engine-current{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;list-style:none;color:var(--secondary)}
+/* The engine in use, as one card that opens like a picker: under it, a game to
+   switch to and the full engine list. */
+.engine-current{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);cursor:pointer;list-style:none;transition:border-color .15s ease-out,background-color .15s ease-out}
 .engine-current::-webkit-details-marker{display:none}
-.engine-current:hover{background:var(--hover);color:var(--ink)}
+.engine-current:hover{border-color:var(--border-hover)}
+.engine-current:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.engine-current .engine-glyph{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .engine-current-copy{display:flex;flex-direction:column;min-width:0;flex:1}
-.engine-current-name{font-size:11.5px;font-weight:600;color:var(--ink)}
-.engine-current-change{font-size:10px;color:var(--subtle)}
-.engine-current-chevron{width:14px;height:14px;color:var(--subtle)}
-.engine-advanced[open] .engine-current{margin-bottom:7px}
+.engine-current-name{font-size:13px;font-weight:600;color:var(--ink)}
+.engine-current-for{margin-top:2px;font-size:11px;line-height:1.4;color:var(--muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.engine-current-chevron{width:14px;height:14px;color:var(--subtle);flex-shrink:0}
+.engine-advanced[open] .engine-current{border-color:var(--accent-line)}
 .engine-advanced[open] .engine-current-chevron{color:var(--ink)}
+.engine-panel{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.engine-drop{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:9px;padding:10px;border:1px dashed var(--accent-line);border-radius:10px;background:var(--accent-soft);font-size:11px;line-height:1.45;color:var(--secondary)}
+.engine-drop>.icon{width:16px;height:16px;flex-shrink:0;margin-top:1px;color:var(--accent-text)}
+/* Side by side when they fit; stacked at the narrowest sidebar. */
+.engine-drop-actions{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px;margin-top:8px}
+.engine-drop-actions button{white-space:nowrap;border:1px solid var(--border);background:var(--elevated);border-radius:6px;padding:5px 8px;font-size:11px;font-weight:600;color:var(--ink)}
+.engine-drop-actions button:hover{border-color:var(--border-hover);background:var(--hover)}
+.engine-list-label{margin:4px 2px 0;font-size:11px;color:var(--muted)}
+/* In the sidebar the card only reports a drop; idle, the panel above offers it. */
+#detect-card{margin-top:8px}
+#detect-card[data-state=idle]{display:none}
 
 /* While files are dragged over the window. */
 .drop-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#0009;pointer-events:none}
@@ -128,3 +141,5 @@
 .project-actions .button.quiet:hover{color:var(--ink)}
 @media (max-width:1200px){.project-modes{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.project-mode,.project-bar-fill{transition:none}}
+/* The list's label already says what it is for; the help stays for screen readers. */
+.engine-panel .engine-help{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;margin:0}
