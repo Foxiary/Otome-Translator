@@ -88,9 +88,9 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
 - Comment trong code bằng tiếng Anh, tài liệu bằng tiếng Việt, `CLAUDE.md` bằng tiếng Anh.
 
 - `exetext.py` trên `main` JP và `main` của bản mod (2026-11-08), khoảng 1 giây:
-  - tìm thấy 784 chuỗi tiếng Nhật có chỗ trỏ tới: 718 con trỏ, 155 cặp
+  - tìm thấy 783 chuỗi tiếng Nhật có chỗ trỏ tới: 717 con trỏ, 154 cặp
     ADRP+ADD, 1 ADR; 7 chuỗi không có chỗ trỏ, đều là dữ liệu nhị phân;
-  - `check`: dời cả 784 chuỗi sang vùng mới, mọi chỗ trỏ đọc ra đúng chuỗi cũ,
+  - `check`: dời cả 783 chuỗi sang vùng mới, mọi chỗ trỏ đọc ra đúng chuỗi cũ,
     hoàn tác ra đúng exe; 3 đoạn chuyển hướng của bản patch giữ nguyên;
   - ghi thử 2 câu của hộp thoại đặt tên vào `main` của bản mod: tự kiểm OK,
     header và SHA-256 từng phần kiểm lại riêng đều đúng, `export --map` trên
@@ -98,3 +98,8 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
   - **trong game (Astrid):** game chạy bình thường, hộp thoại đặt tên hiện đúng
     hai câu tiếng Việt. Hai câu này đều đi qua con trỏ; câu mà code trỏ tới bằng
     ADRP (cột `refs` ghi "code") chưa thử trong game.
+  - lỗi văng game (2026-11-08): bản cũ còn lấy cả "chuỗi" `あ` ở 0x5557d0 - thật
+    ra là ô đầu của bảng thuật ngữ trong .data - nên dời luôn cái bảng; game tra
+    thuật ngữ ngay sau đoạn mở đầu thì đọc phải con trỏ rỗng và văng. Giờ công
+    cụ chỉ lấy chuỗi trong .rodata; dòng `0x5557d0` trong bảng dịch cũ bị bỏ qua
+    ("Exe không có chuỗi tiếng Nhật nào ở địa chỉ này").

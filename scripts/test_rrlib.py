@@ -677,6 +677,7 @@ class SpriteResizeTest(unittest.TestCase):
 NOP, BL = 0xd503201f, 0x94000001
 S1, S2, S3, S4, S5 = 0x1010, 0x1100, 0x1200, 0x1300, 0x1400      # rodata strings
 RELA, DYN = 0x1800, 0x2000
+TABLE = 0x20c0          # in .data: a struct whose first u32 is 'あ' then 0, like the glossary table
 
 
 def u32text(s):
@@ -710,7 +711,8 @@ def make_main(compress=False):
              0x40: exetext.adrp(0x40, S1, 1), 0x44: add_imm(1, 1, S1 & 0xfff),     # S1 by code
              0x48: adr(0x48, S4, 2),                                                # S4 by ADR
              0x4c: exetext.adrp(0x4c, S3, 3), 0x50: add_imm(3, 3, S3 & 0xfff),     # S3 is ASCII
-             0x54: exetext.adrp(0x54, S5, 1), 0x58: BL, 0x5c: add_imm(0, 1, S5 & 0xfff)}  # x1 lost in the call
+             0x54: exetext.adrp(0x54, S5, 1), 0x58: BL, 0x5c: add_imm(0, 1, S5 & 0xfff),  # x1 lost in the call
+             0x60: exetext.adrp(0x60, TABLE, 4), 0x64: add_imm(4, 4, TABLE & 0xfff)}    # a table, not text
     for i in range(0, 0x1000, 4):
         struct.pack_into('<I', text, i, words.get(i, NOP))
     text[8:12] = b'MOD0'
@@ -725,6 +727,7 @@ def make_main(compress=False):
         struct.pack_into('<QQq', ro, RELA - 0x1000 + 24 * k, off, 1027, add)
     data = bytearray(0x100)
     struct.pack_into('<8Q', data, 0, 7, RELA, 8, 24 * len(relas), 9, 24, 0, 0)
+    struct.pack_into('<II', data, TABLE - 0x2000, ord('あ'), 0)
     h = bytearray(0x100)
     h[:4] = b'NSO0'
     struct.pack_into('<I', h, 0x0C, 0x3f if compress else 0x38)
@@ -766,6 +769,8 @@ class ExeTextTest(unittest.TestCase):
     def test_finds_what_the_program_points_at(self):
         exe = exetext.Exe(make_main(compress=True))
         self.assertEqual(sorted(exe.strings), [S1, S2, S2 + 4, S4])       # not ASCII, not S5 after the call
+        self.assertIn(TABLE, exetext.code_refs(exe.img, exe.text_size, 0x1000, 0x2100))   # the code reaches it,
+        self.assertNotIn(TABLE, exe.strings)                              # but text in .data is a struct
         self.assertEqual(sorted(k for k, _ in exe.refs[S1]), ['add', 'rela'])
         self.assertEqual(exe.refs[S4], [('adr', 0x48)])
         self.assertEqual(exe.strings[S2 + 4], 'よろしいですか？')

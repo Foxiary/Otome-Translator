@@ -306,9 +306,13 @@ class Exe(object):
         for t, rs in rela_refs(img, lo, hi).items():
             refs.setdefault(t, []).extend(rs)
         self.refs, self.strings = {}, {}
+        # String literals live in .rodata. Text-looking bytes in .data are a
+        # struct: the glossary table (0x5557d0) starts with the u32 'あ', a 0,
+        # then pointers - moving it as a string crashes the game on wcslen(NULL).
+        ro_end = self.ro_moff + self.ro_size
         for t in sorted(refs):
             rs = [r for r in refs[t] if r not in bad]
-            s = read_text(img, t, hi) if t % 4 == 0 else None
+            s = read_text(img, t, ro_end) if t % 4 == 0 and t < ro_end else None
             if rs and s and is_japanese(s):
                 self.refs[t], self.strings[t] = rs, s
 

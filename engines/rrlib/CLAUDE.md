@@ -192,11 +192,20 @@ two strings from one message table, `前回と同じ名前を使用します｡`
 and `\nよろしいですか？` (0x38b8ac). The 02/10 patch left all of them Japanese,
 so they draw as Vietnamese letters wherever a kana code carries one.
 
-How the program reaches them, on the JP 1.0.0 main: 784 Japanese strings are
-pointed at - 718 `R_AARCH64_RELATIVE` relocations (their in-place value is 0;
-the address is the addend), 155 `ADRP`+`ADD` pairs and one `ADR`. 7 runs of
+How the program reaches them, on the JP 1.0.0 main: 783 Japanese strings are
+pointed at - 717 `R_AARCH64_RELATIVE` relocations (their in-place value is 0;
+the address is the addend), 154 `ADRP`+`ADD` pairs and one `ADR`. 7 runs of
 UTF-32-looking Japanese have no pointer; all are binary data. The linker
 merges string tails, so a pointer may land inside a longer string.
+
+Only .rodata counts. The glossary table at 0x5557d0 (.data, 124 entries of
+32 bytes: u32 heading kana, 0, term pointer, description pointer, ...) starts
+with `あ` + 0, which reads as a one-letter string, and both the code
+(`ADRP`+`ADD` at 0x10ccb0) and a relocation (0x335528) point at it. The
+2026-11-08 14:53 main had it "translated" as `a`: the game then walked the
+moved copy, read a NULL term pointer and crashed in `wcslen` (LR main:0x10cd8c)
+right after the prologue text when it looked a glossary term up. The tool now
+ignores anything outside .rodata.
 
 Space: VI is about twice as long, so nothing is rewritten in place. The
 module image ends at 0x6a6000 (.data 0x549000 + 0x5f6f8, .bss 0xfd908);
