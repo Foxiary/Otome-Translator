@@ -23,7 +23,7 @@ mat_ttlm_com01_off is the 新しく始める label, mat_ttlm_com01_setu its help
 
 export   lists every texture and its cells - file name, place, size, parts.
          Given a folder it also writes every texture as <texture>.png and
-         every cell as <texture>/<part>.png, plus cells.csv with the same
+         every cell as <texture>/<part>.png, plus cells_<screen>.csv with the same
          list. Into a folder that already holds any of them it writes
          nothing unless --overwrite: the run names the files that differ from
          the game (cells someone redrew), and with --overwrite each of those is
@@ -31,10 +31,17 @@ export   lists every texture and its cells - file name, place, size, parts.
 import   reads that folder back. A cell PNG that differs from the game's
          pixels is pasted at its rectangle; a <texture>.png that differs
          replaces the whole texture first, so an edited cell wins over it.
-         A PNG must keep its size: nothing outside the rectangle is drawn.
+         A cell PNG of another size (a label grown to fit longer Vietnamese)
+         goes to an empty place of the same texture, and every part state
+         that drew the old rectangle is pointed at the new one. Parts are
+         drawn centred on their position, so the label grows evenly round
+         the same centre. Only cells whose states hold nothing but position,
+         rotation, scale and alpha can change size (ROUND_CENTRE); the old
+         rectangle keeps its pixels.
          Without --apply it only reports. The result is opened again and
          checked: untouched files byte for byte, changed textures pixel for
-         pixel. A file already in --out is first copied beside it, to
+         pixel, a changed .ssdata only in states' x, y, w, h. A file already
+         in --out is first copied beside it, to
          <name>.bak (or .bak2, .bak3 ... if that is taken); the dry run names
          each file and its copy (`se thay file da co`), and the app shows
          them when it asks.
@@ -65,6 +72,14 @@ RTEX_HEAD = 0x20
 FMT_RGBA8 = 0x02
 BLOCK_COMPRESSED = 0x80000
 STATE_SIZE = 40
+STATE_RECT = 6                          # u16 x, y, w, h inside a state
+# State flags whose fields only turn, scale or fade a part round its position,
+# read from their values: 0x40 a float in degrees, 0x80 / 0x100 floats near 1,
+# 0x200 0..255. A part whose states carry nothing else is drawn centred on its
+# position, so its cell can change size without the part moving. 0x10 / 0x20
+# add an i16 each (maybe a pivot or a size in pixels) and are not in it.
+ROUND_CENTRE = 0x40 | 0x80 | 0x100 | 0x200
+CELL_GAP = 4                            # empty pixels kept round a cell moved to new space
 
 
 def need_pil():
@@ -138,12 +153,15 @@ class Texture(object):
 
 # --- .ssdata ---------------------------------------------------------------
 
-def cells(data):
-    """{(texture name, x, y, w, h): set of part names} drawn by a SpriteStudio .ssdata.
+def states(data):
+    """Yield (state offset, texture name, part name) for every part state a
+    frame of a SpriteStudio .ssdata draws (w and h not 0), once per pack.
 
     'SSAD1.03' | u32 header size H | u32 16 | u32 pack offsets, 0-terminated
-    part states, 40 bytes each from H: u32 ?, u16 part, u16 x, y, w, h (source
-        rectangle in the part's texture, pixels), then position and the rest
+    part states, 40 bytes each from H: u32 flags, u16 part, u16 x, y, w, h
+        (source rectangle in the part's texture, pixels), i16 x, y position
+        (from the screen centre, y down; the cell is drawn centred on it),
+        then the fields the flags add (ROUND_CENTRE)
     pack: ff ff ff ff 'ABSS' u32 3, 0, parts, frames, textures | u16 parts,
         frames, fps
       textures: 0-terminated u32 pointers to names ('mat_ttlm.png')
@@ -157,7 +175,6 @@ def cells(data):
         return data[p:data.index(b'\0', p)].decode('utf-8')
 
     hsize = struct.unpack_from('<I', data, 8)[0]
-    out = {}
     for po in struct.unpack_from('<%dI' % ((hsize - 0x10) // 4), data, 0x10):
         if not po:
             break
@@ -171,17 +188,44 @@ def cells(data):
                 break
             texs.append(cstr(t))
         parts = [struct.unpack_from('<I3H', data, parts_p + 16 * i) for i in range(nparts)]
+        seen = set()
         for f in range(nframes):
             lp, _, cnt = struct.unpack_from('<3I', data, frames_p + 12 * f)
             for si in struct.unpack_from('<%dH' % cnt, data, lp):
-                part, x, y, w, h = struct.unpack_from('<5H', data, hsize + STATE_SIZE * si + 4)
-                if not (w and h):
+                off = hsize + STATE_SIZE * si
+                part, x, y, w, h = struct.unpack_from('<5H', data, off + 4)
+                if si in seen or not (w and h):
                     continue
+                seen.add(si)
                 name_p, _, _, tex = parts[part]
                 if tex >= len(texs):
                     raise ValueError('part %s uses texture %d of %d' % (cstr(name_p), tex, len(texs)))
-                out.setdefault((texs[tex], x, y, w, h), set()).add(cstr(name_p))
+                yield off, texs[tex], cstr(name_p)
+
+
+def cells(data):
+    """{(texture name, x, y, w, h): set of part names} drawn by a SpriteStudio
+    .ssdata (layout in states())."""
+    out = {}
+    for off, tname, pname in states(data):
+        rect = struct.unpack_from('<4H', data, off + STATE_RECT)
+        out.setdefault((tname,) + rect, set()).add(pname)
     return out
+
+
+def rects_only(old, new):
+    """True when the .ssdata new differs from old only in the x, y, w, h of
+    states a frame draws."""
+    if len(old) != len(new):
+        return False
+    hsize = struct.unpack_from('<I', old, 8)[0]
+    offs = set(off for off, _, _ in states(old))
+    for i, (a, b) in enumerate(zip(old, new)):
+        if a != b:
+            off = hsize + (i - hsize) // STATE_SIZE * STATE_SIZE
+            if i < hsize or off not in offs or not STATE_RECT <= i - off < STATE_RECT + 8:
+                return False
+    return True
 
 
 # --- the archive -------------------------------------------------------------
@@ -296,14 +340,17 @@ def same_png(path, img):
         return False
 
 
-def cmd_export(arc, out=None, overwrite=False):
-    """List every texture and its cells; with out, also save them as PNG and cells.csv.
+def cmd_export(arc, out=None, overwrite=False, keep=()):
+    """List every texture and its cells; with out, also save them as PNG and
+    cells_<screen>.csv (named per screen, so screens can share a folder).
 
     Files already in out may be cells someone redrew, so without overwrite
     nothing is written: the run lists them, names the ones that differ from
     the game, and says to add --overwrite (the app turns that into a question).
     With overwrite, each file that differs is first copied beside itself
-    (backup_name: <name>.bak, .bak2 ...); identical ones are just rewritten."""
+    (backup_name: <name>.bak, .bak2 ...); identical ones are just rewritten.
+    keep names files (as listed, e.g. mat_ttl/mat_ttl_btn.png) to leave as
+    they are: the ones the user chose to keep, one by one, in the app."""
     rows, files = [], []          # files: (path in out, image or bytes)
     for p, t in sorted(arc.textures.items()):
         mine = [c for c in arc.cells if c.texture == p]
@@ -331,7 +378,7 @@ def cmd_export(arc, out=None, overwrite=False):
     w = csv.writer(table, lineterminator='\r\n')
     w.writerow(['file', 'texture', 'x', 'y', 'w', 'h', 'parts'])
     w.writerows(rows)
-    files.append(('cells.csv', table.getvalue().encode('utf-8-sig')))
+    files.append(('cells_%s.csv' % safe(arc.name), table.getvalue().encode('utf-8-sig')))
 
     def path_of(rel):
         return os.path.join(out, *rel.split('/'))
@@ -352,9 +399,13 @@ def cmd_export(arc, out=None, overwrite=False):
             print('se thay file da co, ban cu chep sang file .bak cung thu muc: %s' % ', '.join(pairs))
         print('chua ghi gi - them --overwrite de ghi de vao %s' % out)
         return 0
+    keep = set(k.replace('\\', '/').strip() for k in keep)
     for rel, data in files:
         dst = path_of(rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if rel in changed and rel in keep:
+            print('giu nguyen %s' % rel)
+            continue
         if rel in changed:
             bak = backup_name(dst)
             shutil.copy2(dst, bak)
@@ -364,22 +415,138 @@ def cmd_export(arc, out=None, overwrite=False):
                 f.write(data)
         else:
             data.save(dst)
-    print('da luu %d o -> %s (cells.csv ghi vi tri tung o)' % (len(rows), out))
+    print('da luu %d o -> %s (cells_%s.csv ghi vi tri tung o)' % (len(rows), out, safe(arc.name)))
     return 0
 
 
-def load_png(path, size):
+def load_png(path, size=None):
     Image = need_pil()
     img = Image.open(path)
     img.load()
-    if img.size != size:
+    if size and img.size != size:
         raise ValueError('%s la %dx%d, phai dung %dx%d' % ((path,) + img.size + size))
     return img.convert('RGBA')
 
 
+def free_spots(img, taken, sizes, gap=CELL_GAP):
+    """Top-left corners for rectangles of sizes ([(w, h)]) in img, each at
+    least gap pixels from the rectangles in taken, from one another and from
+    every pixel that is not fully transparent; None for one that does not
+    fit. Searched top to bottom, left to right on blocks of g pixels (a power
+    of two that keeps the atlas within 512 blocks): a block holding any such
+    pixel counts as used, so a 4096 atlas places a cell in well under a second."""
+    W, H = img.size
+    g = 1
+    while max(W, H) > 512 * g:
+        g *= 2
+    m = -(-gap // g)                                   # blocks kept free round a cell
+    used = img.getchannel('A').point(lambda v: 255 if v else 0)
+    k = 1
+    while k < g:
+        used = used.reduce(2).point(lambda v: 255 if v else 0)
+        k *= 2
+    GW, GH = used.size
+    px = used.tobytes()
+    occ = [bytearray(1 if v else 0 for v in px[r * GW:(r + 1) * GW]) for r in range(GH)]
+
+    def mark(x, y, w, h):
+        for by in range(y // g, min(GH, (y + h - 1) // g + 1)):
+            for bx in range(x // g, min(GW, (x + w - 1) // g + 1)):
+                occ[by][bx] = 1
+
+    def sums():
+        s = [[0] * (GW + 1)]
+        for row in occ:
+            prev, acc, r = s[-1], 0, [0]
+            for i, v in enumerate(row):
+                acc += v
+                r.append(prev[i + 1] + acc)
+            s.append(r)
+        return s
+
+    for x, y, w, h in taken:
+        mark(x, y, w, h)
+    s, out = sums(), []
+    for w, h in sizes:
+        bw, bh, spot = -(-w // g), -(-h // g), None
+        for by in range(GH - bh + 1):
+            if by * g + h > H or spot:
+                break
+            y0, y1 = max(0, by - m), min(GH, by + bh + m)
+            for bx in range(GW - bw + 1):
+                if bx * g + w > W:
+                    break
+                x0, x1 = max(0, bx - m), min(GW, bx + bw + m)
+                if s[y1][x1] - s[y0][x1] - s[y1][x0] + s[y0][x0] == 0:
+                    spot = (bx * g, by * g)
+                    break
+        out.append(spot)
+        if spot:
+            mark(spot[0], spot[1], w, h)
+            s = sums()
+    return out
+
+
+def drawn_by(arc):
+    """{(texture path, x, y, w, h): {(ssdata path, state offset)}} for every
+    state a frame draws, and {(ssdata path, offset): set of those keys}."""
+    drawn, uses = {}, {}
+    for sp, d in sorted(arc.files.items()):
+        if not sp.endswith('.ssdata'):
+            continue
+        for off, tname, _ in states(d):
+            key = (arc.by_stem.get(stem(tname)),) + struct.unpack_from('<4H', d, off + STATE_RECT)
+            drawn.setdefault(key, set()).add((sp, off))
+            uses.setdefault((sp, off), set()).add(key)
+    return drawn, uses
+
+
+def resize_cells(arc, p, img, resized, drawn, uses):
+    """Put the cells of texture p whose PNG has another size (resized:
+    [(cell, image)]) into empty space of img. Returns ({old key: new rect},
+    report lines, problems); a cell with a problem is left out."""
+    moves, report, problems = {}, [], []
+    mine = [c for c in arc.cells if c.texture == p]
+    ok = []
+    for c, cell in resized:
+        key = (p, c.x, c.y, c.w, c.h)
+        where = drawn.get(key, set())
+        odd = sorted(set(f for f in (struct.unpack_from('<I', arc.files[sp], off)[0] for sp, off in where)
+                         if f & ~ROUND_CENTRE))
+        shared = [k for sp_off in where for k in uses[sp_off] if k != key]
+        if odd:
+            problems.append('%s la %dx%d, o game %dx%d: chi doi co duoc o ma phan hinh chi dich, xoay, phong, '
+                            'mo quanh tam; trang thai cua %s con co %s (chua biet la gi) - ve dung %dx%d'
+                            % ((c.file,) + cell.size + (c.w, c.h, ' '.join(c.parts), ' '.join('%#x' % f for f in odd),
+                                                       c.w, c.h)))
+        elif shared:
+            problems.append('%s: co trang thai ve ca o khac (%s %d,%d %dx%d), khong doi co duoc - ve dung %dx%d'
+                            % ((c.file, stem(shared[0][0] or '?')) + shared[0][1:] + (c.w, c.h)))
+        else:
+            ok.append((c, cell))
+    ok.sort(key=lambda ci: (-ci[1].size[1], -ci[1].size[0], ci[0].file))      # tall ones first pack better
+    spots = free_spots(img, [(c.x, c.y, c.w, c.h) for c in mine], [cell.size for _, cell in ok])
+    for (c, cell), spot in zip(ok, spots):
+        w, h = cell.size
+        if spot is None:
+            problems.append('%s la %dx%d, o game %dx%d: %s khong con cho trong %dx%d (cach moi thu %d diem anh) '
+                            '- ve nho lai hoac ve dung %dx%d' % (c.file, w, h, c.w, c.h, safe(stem(p)) + '.png',
+                                                                 w, h, CELL_GAP, c.w, c.h))
+            continue
+        img.paste(cell, spot)
+        moves[(p, c.x, c.y, c.w, c.h)] = spot + (w, h)
+        report.append('%s: %dx%d thay cho %dx%d - dat vao cho trong (%d,%d), %d trang thai tro sang o moi, '
+                      've quanh tam nhu cu' % ((c.file, w, h, c.w, c.h) + spot + (len(drawn.get((p, c.x, c.y, c.w, c.h), ())),)))
+        hit = [o.file for o in mine if c.overlaps(o)]
+        if hit:
+            report.append('  chu y: o cu cua %s giu nguyen diem anh, %s van ve tu do' % (c.file, ', '.join(hit)))
+    return moves, report, problems
+
+
 def plan_import(arc, folder):
-    """({texture path: new image}, report lines, problems)."""
+    """({texture path: new image, .ssdata path: new bytes}, report lines, problems)."""
     report, problems, new = [], [], {}
+    moves, drawn = {}, None
     known = set()
     for p, t in sorted(arc.textures.items()):
         whole = safe(stem(p)) + '.png'
@@ -399,15 +566,15 @@ def plan_import(arc, folder):
             if full.tobytes() != orig.tobytes():
                 img = full
                 report.append('%s: thay ca anh' % whole)
-        changed = []
+        changed, resized = [], []
         for c in mine:
             path = os.path.join(folder, *c.file.split('/'))
             if not os.path.exists(path):
                 continue
-            try:
-                cell = load_png(path, (c.w, c.h))
-            except ValueError as e:
-                problems.append(str(e)); continue
+            cell = load_png(path)
+            if cell.size != (c.w, c.h):
+                resized.append((c, cell))
+                continue
             if cell.tobytes() == orig.crop(c.box).tobytes():
                 continue
             if img is None:
@@ -419,13 +586,30 @@ def plan_import(arc, folder):
             hit = [o.file for o in mine if c.overlaps(o)]
             if hit:
                 report.append('  chu y: %s de len o khac: %s' % (c.file, ', '.join(hit)))
+        if resized:
+            if drawn is None:
+                drawn = drawn_by(arc)
+            work = orig.copy() if img is None else img
+            m, r, bad = resize_cells(arc, p, work, resized, *drawn)
+            moves.update(m); report += r; problems += bad
+            if m:
+                img = work
         if img is not None:
             new[p] = img
+    # Point every state that drew a moved cell at its new rectangle.
+    ss = {}
+    for key, rect in sorted(moves.items()):
+        for sp, off in sorted(drawn[0][key]):
+            struct.pack_into('<4H', ss.setdefault(sp, bytearray(arc.files[sp])), off + STATE_RECT, *rect)
+    new.update((sp, bytes(d)) for sp, d in ss.items())
+    # A stray PNG inside one of this screen's texture folders is most likely a
+    # renamed cell; files of other screens sharing the folder are not ours.
+    mine = tuple(safe(stem(p)) + '/' for p in arc.textures)
     for dirpath, _, names in os.walk(folder):
         for n in names:
             if n.lower().endswith('.png'):
                 rel = os.path.relpath(os.path.join(dirpath, n), folder).replace(os.sep, '/')
-                if rel not in known:
+                if rel not in known and rel.startswith(mine):
                     report.append('khong dung %s: khong co o nao ten nhu vay (doi ten file?)' % rel)
     return new, report, problems
 
@@ -441,7 +625,16 @@ def verify(arc, mem, body, new):
         out.append('memfs moi co danh sach file khac')
     for p, a in ents.items():
         d = body[a.vals[0]:a.vals[0] + a.vals[1]]
-        if p in new:
+        if isinstance(new.get(p), bytes):                # a .ssdata pointed at moved cells
+            if d != new[p]:
+                out.append('%s: khac ban da sua' % p)
+            elif not rects_only(arc.files[p], d):
+                out.append('%s: doi ca ngoai o x/y/w/h cua trang thai' % p)
+            for tname, x, y, w, h in cells(d):
+                t = arc.textures.get(arc.by_stem.get(stem(tname)))
+                if t and (x + w > t.w or y + h > t.h):
+                    out.append('%s: o %d,%d %dx%d vuot ra ngoai %s' % (p, x, y, w, h, tname))
+        elif p in new:
             t = Texture(d)
             if t.image().tobytes() != new[p].tobytes():
                 out.append('%s: diem anh khac anh da dan' % p)
@@ -470,15 +663,17 @@ def cmd_import(arc, folder, out, apply):
     if not out:
         print('LOI: chua chon noi ghi (--out): thu muc romfs/spec_win/ssdata trong mod.')
         return 1
-    replaced = dict((p, arc.textures[p].rebuild(img)) for p, img in new.items())
+    replaced = dict((p, v if isinstance(v, bytes) else arc.textures[p].rebuild(v)) for p, v in new.items())
     mem, body = arc.build(replaced)
     bad = verify(arc, mem, body, new)
     if bad:
         print('KIEM TRA LOI:'); [print('  ' + x) for x in bad]
         return 1
+    images = sum(1 for v in new.values() if not isinstance(v, bytes))
     print('%d anh doi; membody %d -> %d byte, memfs %d -> %d byte' % (
-        len(new), len(arc.body), len(body), len(arc.memfs), len(mem)))
-    print('kiem tra: OK (file khong sua giong tung byte, anh da sua dung tung diem anh)')
+        images, len(arc.body), len(body), len(arc.memfs), len(mem)))
+    print('kiem tra: OK (file khong sua giong tung byte, anh da sua dung tung diem anh%s)'
+          % ('' if images == len(new) else ', .ssdata chi doi o x/y/w/h cua trang thai'))
     if not apply:
         say_replaced(out, (arc.name + '.memfs', arc.name + '.membody'))
         print('chay thu - them --apply de ghi vao %s' % out)
@@ -494,7 +689,7 @@ def folder_state(arc, folder):
     names = [n for n in os.listdir(folder) if not n.startswith('.')]
     if not names:
         return 'empty'
-    # cells.csv is in every export, so only the texture names tell screens apart.
+    # Only the texture names tell screens apart (an older export wrote cells.csv for any).
     ours = set(safe(stem(p)) for p in arc.textures)
     ours |= set(n + '.png' for n in ours)
     return 'taken' if any(n in ours for n in names) else 'other'
@@ -514,7 +709,8 @@ def cmd_translate(arc, folder, out, apply):
         rc = cmd_export(arc, folder)
         print('')
         print('Buoc tiep theo: ve lai cac o can dich ngay trong %s, luu de len dung file do' % folder)
-        print('(giu ten, kich thuoc, dinh dang PNG), roi chay lai voi cung thu muc de dua anh vao game.')
+        print('(giu ten va dinh dang PNG; chu dai hon o thi ve anh to hon, cong cu tim cho trong cho no),')
+        print('roi chay lai voi cung thu muc de dua anh vao game.')
         return rc
     return cmd_import(arc, folder, out, apply)
 
@@ -554,6 +750,8 @@ def main():
     ap.add_argument('--apply', action='store_true', help='translate, import: write the files')
     ap.add_argument('--overwrite', action='store_true',
                     help='export: replace images already in the folder (those that differ are copied to .bak first)')
+    ap.add_argument('--keep', action='append', default=[],
+                    help='export --overwrite: a file already there to leave as it is, e.g. mat_ttl/mat_ttl_btn.png (repeat)')
     a = ap.parse_args()
     if a.cmd == 'import' and not a.folder:
         ap.error('import: can thu muc anh')
@@ -563,7 +761,7 @@ def main():
     if a.cmd == 'translate':
         return cmd_translate(arc, a.folder, a.out, a.apply)
     if a.cmd in ('list', 'export'):
-        return cmd_export(arc, a.folder if a.cmd == 'export' else None, a.overwrite)
+        return cmd_export(arc, a.folder if a.cmd == 'export' else None, a.overwrite, a.keep)
     if a.cmd == 'import':
         return cmd_import(arc, a.folder, a.out, a.apply)
     return cmd_check(arc)

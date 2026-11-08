@@ -11,8 +11,8 @@ const EXE = V('--exe', 'file', 'Patched exefs/main, to follow the read redirects
 
 const SCREEN = A('screen', 'file', 'A screen\'s .memfs under romfs/spec_win/ssdata, e.g. ttlm_nam.memfs (title menu); its data file must sit next to it');
 
-const groups = ['Dump', 'Inspect', 'Patch', 'Sheets', 'Images', 'Executable'];
-const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦', Images: '▣', Executable: '⌘'};
+const groups = ['Dump', 'Inspect', 'Patch', 'Sheets', 'Images', 'Executable', 'Fonts'];
+const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦', Images: '▣', Executable: '⌘', Fonts: 'Ａ'};
 const summaries = {
   Dump: 'Take the whole game, or single files, out of your .nsp or .xci, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
@@ -20,7 +20,15 @@ const summaries = {
   Sheets: 'Turn the translation sheet into a list of tag fixes.',
   Images: 'Menu labels, buttons and help lines are painted into textures: take them out as images, redraw them and put them back.',
   Executable: 'Text built into the program file (exefs/main): dialog questions, quick save messages, button help, glossary and chapter titles.',
+  Fonts: 'Redraw the Latin and Vietnamese letters of the game\'s fonts from a font file of your choice, and look at the result.'
 };
+
+const FONT = A('font', 'file', 'A font under romfs/spec_win/font, e.g. standard.font.memfs');
+// The help names the source font's type and not the game file it is for: the
+// file dialog takes its filter from these words (src/file-types.js).
+const FAMILY = name => V(`--font-${name}`, 'file', `Font file (.ttf, .otf, .ttc) used only for the ${name} font and its outline, tried before Font`);
+const SIZE = name => V(`--px-${name}`, 'number', `Letter size in pixels for the ${name} font and its outline only, over Size; the dry run prints the size that fits H and how much wider the letters come out`);
+const FAMILIES = ['standard', 'extra', 'extra2', 'extra3', 'ui'].flatMap(name => [FAMILY(name), SIZE(name)]);
 
 const tools = [
   // Runs in the app (src/game-extract.js), the extractor the project set-up uses.
@@ -71,11 +79,13 @@ const tools = [
   // Two steps, the second filled in from the first: `follows` names the tool
   // whose last run gives these fields their values (renderer.js), so the
   // folder step 1 saved to is the folder step 2 reads.
-  T('sprite-export', 'Images', 'Take a screen\'s images out', 'Menu labels, buttons and help lines are painted into images. Saves every piece of one screen as its own image in an empty folder, named after the part that draws it (新しく始める on the title menu is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu), plus cells.csv with where each one sits. Redraw the pieces you translate in that folder, then use "Put redrawn images back": the app fills in this screen and folder there.', 'tools/sprite.py', ['export'],
+  T('sprite-export', 'Images', 'Take a screen\'s images out', 'Menu labels, buttons and help lines are painted into images. Saves every piece of one screen as its own image in an empty folder, named after the part that draws it (新しく始める on the title menu is mat_ttlm_com01_off, its help line mat_ttlm_com01_setu), plus a cells_<screen>.csv with where each one sits. Redraw the pieces you translate in that folder, then use "Put redrawn images back": the app fills in this screen and folder there.', 'tools/sprite.py', ['export'],
     [SCREEN, A('output folder', 'dir', 'Best an empty folder: the images are saved here. If it already holds images, the app asks before replacing them, and copies the ones you redrew to .bak first. Leave it empty to only see the list', true),
-      B('--overwrite', 'Replace images already in the folder')]),
-  {...T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder "Take a screen\'s images out" saved to, after you redrew pieces in it: each piece that differs from the game is pasted back at its place, and the screen is rebuilt into Out and checked, untouched files byte for byte. Once step 1 has run, the screen and the folder are filled in for you.', 'tools/sprite.py', ['import'],
-    [SCREEN, A('image folder', 'dir', 'The folder step 1 saved to (filled in for you), with the pieces you redrew saved over the same files: same name, same size, PNG'),
+      B('--overwrite', 'Replace images already in the folder'),
+      // Set by the app from the keep-or-replace questions, never typed.
+      {...V('--keep', 'text', 'Files already in the folder to leave as they are, one per line', false, true), hidden: true}]),
+  {...T('sprite-import', 'Images', 'Put redrawn images back', 'Reads the folder "Take a screen\'s images out" saved to, after you redrew pieces in it: each piece that differs from the game is pasted back at its place. A piece drawn bigger, for a longer Vietnamese label, gets an empty place in the same image, and the game still draws it centred where the old one was. The screen is rebuilt into Out and checked, untouched files byte for byte. Once step 1 has run, the screen and the folder are filled in for you.', 'tools/sprite.py', ['import'],
+    [SCREEN, A('image folder', 'dir', 'The folder step 1 saved to (filled in for you), with the pieces you redrew saved over the same files: same name, PNG. A piece may be bigger than before if its text needs the room'),
       V('--out', 'dir', 'Where the rebuilt screen is written: romfs/spec_win/ssdata inside your mod. An older file there is first copied to .bak beside it', true), B('--apply', 'Write the files')]),
   follows: {tool: 'rrlib-sprite-export', fields: {screen: 'screen', 'image folder': 'output folder'}}},
   T('sprite-check', 'Images', 'Check a screen\'s files', 'Rebuilds one screen unchanged, which has to match byte for byte, and packs every texture the tools can write again.', 'tools/sprite.py', ['check'],
@@ -95,7 +105,29 @@ const tools = [
     'Runs as a dry run first and asks before writing. A line the program builds some other way keeps its Japanese: try each screen in the game.'),
   follows: {tool: 'rrlib-exetext-export', fields: {main: 'main', list: 'list'}}},
   T('exetext-check', 'Executable', 'Check the program\'s text', 'Lists the Japanese lines found in exefs/main and what points at them, then moves them all to the new area unchanged and checks that every pointer still reads the same line and that undoing it gives the program back byte for byte. Nothing is written.', 'tools/exetext.py', ['check'],
-    [A('main', 'file', 'exefs/main')])
+    [A('main', 'file', 'exefs/main')]),
+
+  T('font-gen', 'Fonts', 'Make the Vietnamese font', 'Redraws the ASCII and Vietnamese letters of every font in the Japanese font folder from the font file you choose (.ttf/.otf), sized so they match the game\'s letters, and builds the outline fonts from them. Kana and kanji stay as they are. With Map, each Vietnamese letter is drawn on the kana code the mod\'s scripts use for it, so the scripts built today show the new typeface; letters the map lacks (Ể, Ổ) get codes of their own, and Map out saves the result for "Write the sheet into the game" (Use map) and the program text tools.', 'tools/font.py', ['gen'],
+    [V('--template', 'dir', 'The Japanese romfs/spec_win/font folder', true), V('--out', 'dir', 'romfs/spec_win/font inside your mod. An older file there is first copied to .bak beside it', true),
+      V('--font', 'file', 'Font file with Vietnamese letters (.ttf, .otf; file.ttc#1 picks a face). Repeat for fallbacks', true, true),
+      ...FAMILIES,
+      // Required here: today's scripts carry Vietnamese on kana codes, and a font
+      // built without the map leaves those cells Japanese (the game then shows
+      // ば for ộ). Unicode-only builds stay possible from the command line.
+      V('--map', 'file', 'Font encoding (.json), the file the Map field saves when writing the translation into the game. Without it the Vietnamese letters of today\'s scripts show as kana', true),
+      V('--map-out', 'save', 'Save the encoding of the new font (.json), for Use map'),
+      V('--px', 'number', 'Letter size in pixels for every font; empty fits the height of H to each of the game\'s fonts'),
+      V('--chars', 'text', 'More characters to draw under their own code'),
+      B('--no-latin', 'Keep the game\'s ASCII letters, draw only the Vietnamese ones'),
+      V('--outline-radius', 'number', 'Outline width in pixels; empty measures it on the Japanese fonts'), B('--apply', 'Write the files')],
+    'Runs as a dry run first and asks before writing. It says when the letters come out wider than the game\'s, which can push long lines out of the box: try the result in the game.'),
+  T('font-preview', 'Fonts', 'Preview a font', 'Draws a line of text with one font of the game into an image, the way the game lays it out, with its outline font underneath if you give it. Use it to look at a font before trying it in the game.', 'tools/font.py', ['preview'],
+    [FONT, A('text', 'text', 'Text to draw; \\n starts a new line'), A('image', 'save', 'Image to save (.png)'),
+      V('--outline', 'file', 'The matching outline font, e.g. standard_outline.font.memfs'), V('--map', 'file', 'Font encoding (.json): encode the text with it first, as the scripts are')]),
+  T('font-export', 'Fonts', 'Take a font\'s images out', 'Saves every texture of one font as a PNG and a glyphs.tsv listing each character with its place and width. Nothing is changed.', 'tools/font.py', ['export'],
+    [FONT, A('output folder', 'dir')]),
+  T('font-check', 'Fonts', 'Check the fonts', 'Reads every font in a folder and writes it back unchanged; each copy has to match its file byte for byte.', 'tools/font.py', ['check'],
+    [A('folder', 'dir', 'A romfs/spec_win/font folder')])
 ];
 
 module.exports = {tools, groups, symbols, summaries};

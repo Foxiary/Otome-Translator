@@ -317,11 +317,13 @@ def make_rtex(w, h, pw, ph, pixel, flags=0x02):
 
 
 def make_ssdata(textures, parts, states, frames):
-    """parts: [(name, texture index)]; states: [(part, x, y, w, h)]; frames: [[state index]]."""
+    """parts: [(name, texture index)]; states: [(part, x, y, w, h[, flags])], each
+    at position (part * 10, -part); frames: [[state index]]."""
     hsize = 0x18
     out = bytearray(hsize)
-    for part, x, y, w, h in states:
-        out += struct.pack('<IH4H', 0, part, x, y, w, h) + b'\0' * 26
+    for s in states:
+        part, x, y, w, h = s[:5]
+        out += struct.pack('<IH4H2h', s[5] if len(s) > 5 else 0, part, x, y, w, h, part * 10, -part) + b'\0' * 22
 
     def put(b):
         while len(out) % 4:
@@ -471,7 +473,7 @@ class SpriteTest(unittest.TestCase):
     def test_wrong_size_and_stray_files_are_reported(self):
         from PIL import Image
         arc, folder = self.export()
-        Image.new('RGBA', (5, 2)).save(os.path.join(folder, 'ui', 'label_off.png'))
+        Image.new('RGBA', (5, 2)).save(os.path.join(folder, 'ui', 'label_off.png'))   # bigger: no empty pixel here
         Image.new('RGBA', (2, 2)).save(os.path.join(folder, 'ui', 'label_of.png'))
         _, report, problems = sprite.plan_import(arc, folder)
         self.assertEqual(len(problems), 1)
@@ -509,6 +511,24 @@ class SpriteTest(unittest.TestCase):
             self.assertEqual(im.convert('RGBA').tobytes(), before)
         self.assertEqual([n for n in os.listdir(os.path.join(folder, 'ui')) if n.endswith('.bak')], ['label_on.png.bak'])
 
+    def test_export_keeps_what_the_user_chose(self):
+        from PIL import Image
+        arc, folder = self.export()
+        self.assertTrue(os.path.exists(os.path.join(folder, 'cells_ui.csv')))   # named per screen
+        mine, other = os.path.join(folder, 'ui', 'label_on.png'), os.path.join(folder, 'ui', 'label_off.png')
+        Image.new('RGBA', (4, 2), (9, 9, 9, 9)).save(mine)
+        Image.new('RGBA', (4, 2), (7, 7, 7, 7)).save(other)
+        rc, log = self.quiet(sprite.cmd_export, arc, folder, True, ['ui/label_on.png'])
+        self.assertEqual(rc, 0)
+        self.assertIn('giu nguyen ui/label_on.png', log)
+        with Image.open(mine) as im:                                               # kept as drawn, no copy
+            self.assertEqual(im.convert('RGBA').getpixel((0, 0)), (9, 9, 9, 9))
+        self.assertFalse(os.path.exists(mine + '.bak'))
+        with Image.open(other + '.bak') as im:                                     # replaced, drawing in .bak
+            self.assertEqual(im.convert('RGBA').getpixel((0, 0)), (7, 7, 7, 7))
+        with Image.open(other) as im:
+            self.assertNotEqual(im.convert('RGBA').getpixel((0, 0)), (7, 7, 7, 7))
+
     def test_translate_picks_the_half_by_the_folder(self):
         from PIL import Image
         arc = sprite.Archive(self.memfs)
@@ -543,6 +563,114 @@ class SpriteTest(unittest.TestCase):
         rc, log = self.quiet(sprite.cmd_translate, arc, None, None, False)          # no folder: list
         self.assertEqual(rc, 0)
         self.assertIn('ui/label_on.png', log)
+
+
+@unittest.skipUnless(HAVE_PIL, 'Pillow is not installed')
+class SpriteResizeTest(unittest.TestCase):
+    """A 32x16 atlas, empty but for its cells: label (0,0 6x3, also drawn by
+    twin and once faded, flags 0x200), star (8,0 2x2), odd (0,8 4x2, a state
+    with flags 0x10)."""
+
+    def setUp(self):
+        import shutil
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        boxes = [(0, 0, 6, 3), (8, 0, 2, 2), (0, 8, 4, 2)]
+
+        def px(x, y):
+            inside = any(bx <= x < bx + bw and by <= y < by + bh for bx, by, bw, bh in boxes)
+            return bytes([x * 7, y * 9, 50, 255]) if inside else b'\0\0\0\0'
+        parts = [('root', 0), ('label', 0), ('twin', 0), ('star', 0), ('odd', 0)]
+        states = [(0, 0, 0, 0, 0), (1, 0, 0, 6, 3), (1, 0, 0, 6, 3, 0x200), (2, 0, 0, 6, 3), (3, 8, 0, 2, 2),
+                  (4, 0, 8, 4, 2), (4, 0, 8, 4, 2, 0x10)]
+        ss = make_ssdata(['ui.png'], parts, states, [[0, 1, 3, 4, 5], [0, 2, 3, 6]])
+        self.files = [('/ui.rtex', make_rtex(32, 16, 32, 16, px)), ('/ui.ssdata', ss), ('/ui.rson', b'RSON-ish')]
+        self.memfs = write_sprite_pair(os.path.join(self.d, 'jp'), self.files)
+        self.arc = sprite.Archive(self.memfs)
+        self.folder = os.path.join(self.d, 'anh')
+        self.out = os.path.join(self.d, 'mod')
+        with contextlib.redirect_stdout(io.StringIO()):
+            sprite.cmd_export(self.arc, self.folder)
+
+    def draw(self, name, w, h, colour=(200, 10, 10, 255)):
+        from PIL import Image
+        img = Image.new('RGBA', (w, h), colour)
+        img.putpixel((0, 0), (1, 2, 3, 255))
+        img.save(os.path.join(self.folder, 'ui', name))
+        return img
+
+    def run_import(self, apply=True):
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            rc = sprite.cmd_import(self.arc, self.folder, self.out, apply)
+        return rc, buf.getvalue()
+
+    def test_bigger_cell_moves_to_empty_space(self):
+        from PIL import Image
+        img = self.draw('label.png', 9, 4)
+        rc, log = self.run_import()
+        self.assertEqual(rc, 0, log)
+        self.assertIn('ui/label.png: 9x4 thay cho 6x3 - dat vao cho trong (14,0), 3 trang thai', log)
+        self.assertIn('.ssdata chi doi o x/y/w/h', log)
+        res = sprite.Archive(os.path.join(self.out, 'ui.memfs'))
+        got = dict((c.file, c) for c in res.cells)
+        c = got['ui/label.png']
+        self.assertEqual(((c.x, c.y, c.w, c.h), c.parts), ((14, 0, 9, 4), ['label', 'twin']))
+        atlas = res.textures['/ui.rtex'].image()
+        self.assertEqual(atlas.crop(c.box).tobytes(), img.tobytes())
+        old = self.arc.textures['/ui.rtex'].image()
+        self.assertEqual(atlas.crop((0, 0, 6, 3)).tobytes(), old.crop((0, 0, 6, 3)).tobytes())   # old place kept
+        for x in range(32):                                    # nothing else drawn on
+            for y in range(16):
+                if not (14 <= x < 23 and y < 4):
+                    self.assertEqual(atlas.getpixel((x, y)), old.getpixel((x, y)))
+        self.assertEqual((got['ui/star.png'].x, got['ui/odd.png'].y), (8, 8))
+        self.assertTrue(sprite.rects_only(self.arc.files['/ui.ssdata'], res.files['/ui.ssdata']))
+        for p in ('/ui.rson',):
+            self.assertEqual(res.files[p], self.arc.files[p])
+        again = os.path.join(self.d, 'again')                  # taken out of the rebuilt screen: the new size
+        with contextlib.redirect_stdout(io.StringIO()):
+            sprite.cmd_export(res, again)
+        with Image.open(os.path.join(again, 'ui', 'label.png')) as im:
+            self.assertEqual(im.convert('RGBA').tobytes(), img.tobytes())
+
+    def test_smaller_cell_moves_too_and_keeps_distance(self):
+        self.draw('star.png', 1, 1)
+        new, report, problems = sprite.plan_import(self.arc, self.folder)
+        self.assertEqual(problems, [])
+        ss = new['/ui.ssdata']
+        rect = struct.unpack_from('<4H', ss, 0x18 + 4 * sprite.STATE_SIZE + sprite.STATE_RECT)
+        self.assertEqual(rect[2:], (1, 1))
+        x, y = rect[:2]                  # 4 empty pixels from label (0..5) and star's old place (8..9)
+        self.assertTrue(x >= 14 or y >= 7, rect)
+
+    def test_cell_with_unknown_state_fields_keeps_its_size(self):
+        self.draw('odd.png', 5, 2)
+        rc, log = self.run_import()
+        self.assertEqual(rc, 1)
+        self.assertIn('ui/odd.png la 5x2, o game 4x2', log)
+        self.assertIn('0x10', log)
+        self.assertFalse(os.path.exists(self.out))
+
+    def test_no_room(self):
+        self.draw('label.png', 30, 4)
+        new, report, problems = sprite.plan_import(self.arc, self.folder)
+        self.assertEqual(len(problems), 1)
+        self.assertIn('ui.png khong con cho trong 30x4', problems[0])
+        self.assertEqual(new, {})
+
+    def test_free_spots_keeps_off_pixels_and_uses_blocks(self):
+        from PIL import Image
+        img = Image.new('RGBA', (2048, 64), (0, 0, 0, 0))
+        img.putpixel((30, 3), (0, 0, 0, 1))                    # barely visible still counts
+        spots = sprite.free_spots(img, [(0, 0, 10, 10)], [(16, 8), (5000, 1), (8, 8)])
+        self.assertEqual(spots[1], None)
+        for (x, y), (w, h) in ((spots[0], (16, 8)), (spots[2], (8, 8))):
+            self.assertEqual((x % 4, y % 4), (0, 0))           # 2048 wide: 4-pixel blocks
+            self.assertTrue(x >= 14 or y >= 14)                # clear of the taken rectangle
+            self.assertFalse(x - 4 <= 30 < x + w + 4 and y - 4 <= 3 < y + h + 4)
+        (ax, ay), (bx, by) = spots[0], spots[2]                # and clear of each other
+        self.assertTrue(bx >= ax + 16 + 4 or ax >= bx + 8 + 4 or by >= ay + 8 + 4 or ay >= by + 8 + 4)
+        self.assertEqual(spots[2], (16, 0))                    # the gap between the two is used
 
 
 # A tiny exefs/main: text at 0, rodata at 0x1000, data at 0x2000, then .bss.

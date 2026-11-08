@@ -29,3 +29,25 @@ assert.equal(companionPath('/ssdata/ttlm_nam.memfs', 'membody'), '/ssdata/ttlm_n
 assert.equal(companionPath('C:\\ssdata\\ttlm_nam.memfs', 'membody'), 'C:\\ssdata\\ttlm_nam.membody');
 assert.equal(companionPath('/ssdata/ttlm_nam.membody', 'membody'), '');
 assert.equal(companionPath('/ssdata/ttlm_nam', 'membody'), '');
+assert.deepEqual(extensions({name: '--font', help: 'A font (.otf)'}), ['ttf', 'otf', 'ttc']);
+assert.deepEqual(extensions({name: '--map', help: 'Font encoding (.json)'}), ['json']);
+
+// The rrlib font tools: the dialog of each file field lists the type it wants.
+// Their help used to name the game font the field is for (standard.font.memfs)
+// and offered .memfs for a source font, and .xlsx for the map ("the sheet").
+{
+  const {tools} = require('../src/catalog-rrlib');
+  const font = ['ttf', 'otf', 'ttc'];
+  const want = {
+    'rrlib-font-gen': {'--font': font, '--font-standard': font, '--font-extra': font, '--font-extra2': font,
+      '--font-extra3': font, '--font-ui': font, '--map': ['json'], '--map-out': ['json']},
+    'rrlib-font-preview': {font: ['memfs'], image: ['png'], '--outline': ['memfs'], '--map': ['json']},
+    'rrlib-font-export': {font: ['memfs']}
+  };
+  for (const [id, fields] of Object.entries(want)) {
+    const tool = tools.find(t => t.id === id);
+    for (const [name, wanted] of Object.entries(fields)) {
+      assert.deepEqual(extensions(tool.args.find(a => a.name === name)), wanted, `${id} ${name}`);
+    }
+  }
+}

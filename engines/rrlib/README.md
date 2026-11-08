@@ -77,7 +77,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Trong app việc này có hai bước, nằm ở nhóm **Ảnh giao diện**:
 
-   **Bước 1: "Lấy ảnh của một màn hình ra".** Chọn màn hình và một thư mục, tốt nhất là thư mục trống. Nếu thư mục đã có ảnh lấy ra từ trước, công cụ chưa ghi gì: app hỏi "Ghi đè ảnh?" và liệt kê những ảnh khác ảnh gốc của game (thường là ô bạn đã vẽ lại). Đồng ý thì mỗi ảnh đó được chép sang `<tên>.png.bak` nằm cạnh nó trước, rồi mới thay bằng ảnh gốc. Bằng dòng lệnh thì thêm `--overwrite`. Bỏ trống thư mục thì chỉ xem danh sách các ô. Bằng dòng lệnh:
+   **Bước 1: "Lấy ảnh của một màn hình ra".** Chọn màn hình và một thư mục, tốt nhất là thư mục trống. Nếu thư mục đã có ảnh lấy ra từ trước, công cụ chưa ghi gì: app hỏi "Ghi đè ảnh trong thư mục này?" và nêu những ảnh khác ảnh gốc của game (thường là ô bạn đã vẽ lại). Giống Finder hay File Explorer, bạn chọn: **giữ ảnh đã sửa** (chỉ ghi lại phần còn lại), **thay bằng ảnh gốc**, hoặc **chọn từng ảnh** (mỗi ảnh một câu hỏi "Giữ hay thay?", có ô "Làm vậy với các ảnh còn lại"). Ảnh nào bị thay thì được chép sang `<tên>.png.bak` nằm cạnh nó trước. Bằng dòng lệnh thì thêm `--overwrite`, và `--keep <file>` cho từng ảnh muốn giữ. Bỏ trống thư mục thì chỉ xem danh sách các ô. Bằng dòng lệnh:
 
    ```
    python tools/nsp.py romfs "<game>.nsp" jp "spec_win/ssdata/ttlm_nam.*"
@@ -87,11 +87,13 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    Thư mục `anh_menu/` có:
    - `mat_ttlm.png`: cả tấm ảnh 4096×4096, để xem tổng thể;
    - `mat_ttlm/<tên ô>.png`: mỗi ô một file, tên lấy theo phần hình dùng nó. Ví dụ `mat_ttlm_com01_off.png` / `_on.png` là chữ 新しく始める lúc chưa chọn / đang chọn, `mat_ttlm_com01_setu.png` là câu chú thích dọc của nó, `mat_nam_bodoru_txt.png` là 戻る;
-   - `cells.csv`: vị trí và kích thước từng ô.
+   - `cells_ttlm_nam.csv`: vị trí và kích thước từng ô. Tên có kèm màn hình, nên nhiều màn hình dùng chung một thư mục cũng không đè nhau.
 
    Chạy xong, app hiện nút mở thư mục và nút **"Bước tiếp: Đưa ảnh đã vẽ lại vào game"**, đồng thời điền sẵn màn hình và thư mục này vào bước 2. Mở bước 2 mà các ô đó còn trống thì app cũng lấy từ lần chạy bước 1 gần nhất.
 
-   **Vẽ lại** ô cần dịch bằng phần mềm sửa ảnh bất kỳ (Photoshop, GIMP, Krita…), **lưu đè lên đúng file đó, giữ nguyên kích thước và tên file**, nền trong suốt vẫn trong suốt. Muốn sửa thẳng trên ảnh lớn cũng được; nếu sửa cả hai thì ô nhỏ được dán sau nên đè lên.
+   **Vẽ lại** ô cần dịch bằng phần mềm sửa ảnh bất kỳ (Photoshop, GIMP, Krita…), **lưu đè lên đúng file đó, giữ nguyên tên file**, nền trong suốt vẫn trong suốt. Muốn sửa thẳng trên ảnh lớn cũng được; nếu sửa cả hai thì ô nhỏ được dán sau nên đè lên.
+
+   Chữ Việt dài hơn ô thì **vẽ ảnh to hơn** cũng được (ví dụ ロード 178×52 thành "TẢI GAME" 276×72). Bước 2 tìm một chỗ trống trong cùng tấm ảnh lớn, đặt ô vào đó và cho game cắt ô ở chỗ mới. Game vẽ mỗi ô quanh tâm của nó, nên chữ nở đều sang hai bên, tâm vẫn ở chỗ chữ Nhật cũ. Vì vị trí không đổi, ô sát mép màn hình mà vẽ to quá thì có thể tràn ra ngoài: 戻る ở góc phải trên menu tiêu đề nên giữ cỡ cũ. Ô nào có chuyển động chưa rõ cách vẽ (không chỉ xoay, phóng to thu nhỏ, mờ dần quanh tâm) thì công cụ từ chối đổi cỡ và báo phải vẽ đúng cỡ cũ. Công cụ cũng báo khi tấm ảnh lớn không còn chỗ trống.
 
    **Bước 2: "Đưa ảnh đã vẽ lại vào game".** Chọn thêm thư mục Ghi vào: `romfs/spec_win/ssdata` trong mod. Lần chạy đầu là chạy thử; không lỗi thì app hỏi có ghi không. Bằng dòng lệnh:
 
@@ -102,7 +104,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Thư mục ảnh không phải do bước 1 tạo cho đúng màn hình đó thì bị từ chối. Chưa vẽ lại ô nào thì công cụ báo vậy và không ghi gì. Nếu thư mục Ghi vào đã có file của màn hình đó, lần chạy thử nêu tên chúng và hộp hỏi của app ghi rõ "sẽ bị thay". Trước khi ghi, mỗi file cũ được chép sang `<tên>.bak` nằm ngay cạnh nó, trong chính thư mục Ghi vào, ví dụ `ttl.memfs` → `ttl.memfs.bak`. Nếu `.bak` đã có từ lần trước thì thành `.bak2`, `.bak3`…, nên không bản sao nào bị đè. Hộp hỏi và nhật ký đều ghi đúng tên bản sao. (`sprite.py translate` làm một trong hai bước tuỳ thư mục, cho ai quen chạy một lệnh.)
 
-   Công cụ chỉ dán những ô khác bản game. Nó báo ô sai kích thước, file đặt sai tên, và ô nào đè lên ô khác. Bản dựng được tự kiểm: file không sửa phải giữ nguyên từng byte, ảnh đã sửa phải đúng từng điểm ảnh. Chữ vẽ ra ngoài khung ô sẽ không hiện, vì game chỉ cắt đúng khung đó.
+   Công cụ chỉ dán những ô khác bản game. Nó báo ô nào được đổi cỡ (cỡ mới, chỗ mới, số trạng thái trỏ sang), file đặt sai tên, và ô nào đè lên ô khác. Bản dựng được tự kiểm: file không sửa phải giữ nguyên từng byte, ảnh đã sửa phải đúng từng điểm ảnh, và file `.ssdata` chỉ được đổi khung x/y/w/h của các ô đã dời. Chữ vẽ ra ngoài khung ô sẽ không hiện, vì game chỉ cắt đúng khung đó. Luôn chọn màn hình gốc của game (bản lấy ra ở bước 1), không chọn bản đã dựng trong mod.
 
 7. **Dịch chữ nằm trong file chương trình.** Câu hỏi trong hộp thoại (`前回と同じ名前を使用します｡` + `よろしいですか？` khi đặt tên), thông báo lưu nhanh/tải nhanh, câu hỏi ở màn hình cài đặt, chú thích nút (`{B} 戻る`), mục từ điển và tên chương không nằm trong kịch bản mà nằm sẵn trong `exefs/main`. Sheet dịch không có dòng nào cho chúng, và bản patch 02/10 chưa dịch câu nào. Vì font Việt dùng các ô kana cho chữ có dấu, những câu đó hiện thành chữ sai (`と` → `Ề`, `を` → `ặ`, `よ` → `Ở`).
 
@@ -125,7 +127,23 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Câu dịch dài hơn tiếng Nhật cũng được: công cụ không ghi đè chỗ cũ mà đặt câu dịch vào một vùng mới ở cuối file chương trình, rồi trỏ mọi chỗ đang dùng câu tiếng Nhật sang đó. Muốn sửa bản dịch thì cứ chạy lại trên chính file `main` đã ghi: lần nào công cụ cũng gỡ bản dịch cũ, dựng lại từ bản gốc. Ba đoạn chuyển hướng của bản patch 02/10 được giữ nguyên. Kết quả được tự kiểm, nhưng câu nào chương trình tạo ra theo cách khác thì vẫn là tiếng Nhật, và khung chữ không tự rộng ra, nên hãy thử từng màn hình trong game. File `main` mới khoảng 7 MB (bản cũ 3 MB) vì được ghi không nén; game vẫn nạp bình thường.
 
-8. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
+8. **Đổi font.** Font nằm ở `romfs/spec_win/font`: `standard` (gothic tròn), `extra` (gothic đậm), `extra2` (viết tay), `extra3` (có chân), `ui`, mỗi cái kèm một bản `_outline` là viền vẽ bên dưới chữ. Bốn lựa chọn フォント 一 二 三 四 ở màn hình cài đặt lần lượt là `standard`, `extra`, `extra2`, `extra3` (二 = `extra` đã thấy trên màn hình; ba cái kia suy từ thứ tự trong file chương trình). `ui` không nằm trong bốn lựa chọn đó. Tool "Tạo font tiếng Việt" (`font.py gen`) vẽ lại chữ ASCII và chữ tiếng Việt từ file `.ttf`/`.otf` bạn chọn, tự chỉnh cỡ cho chữ H cao bằng chữ của game, rồi dựng luôn bản viền. Kana và kanji giữ nguyên. Font phải có đủ chữ tiếng Việt; muốn mỗi font một kiểu thì điền thêm các ô Font cho standard / extra / extra2 / extra3 / ui.
+
+   Kịch bản hiện tại viết chữ Việt bằng mã kana (`ệ` → `る`), nên cần **bảng mã font** (ô Map, lưu bằng "Ghi bảng dịch vào game"): mỗi chữ được vẽ vào đúng ô kana đó, kịch bản không phải dựng lại. Chữ nào bảng mã chưa có (`Ể`, `Ổ`, các chữ hoa bản mod chưa dùng) được thêm ô với mã riêng; điền ô Lưu bảng mã để lần sau "Ghi bảng dịch vào game" (ô Use map) và "Ghi chữ vào file chương trình" (ô Map) ghi đúng các chữ đó. Template là thư mục font của bản **tiếng Nhật**, Ghi vào là `romfs/spec_win/font` trong mod. Bằng dòng lệnh:
+
+   ```
+   python tools/font.py gen --template <JP>/romfs/spec_win/font --out <thư mục mod>/romfs/spec_win/font \
+       --font MyFont-Regular.ttf --map font.json --map-out font-moi.json
+   python tools/font.py gen ... --apply
+   python tools/font.py preview <thư mục mod>/romfs/spec_win/font/standard.font.memfs "Xin chào, Ể Ổ ặ" thu.png \
+       --outline <thư mục mod>/romfs/spec_win/font/standard_outline.font.memfs --map font-moi.json
+   ```
+
+   Lần chạy thử in cỡ chữ, độ dày viền đo được và **độ rộng trung bình một chữ so với font gốc**: rộng hơn khoảng 8% trở lên thì câu dài (ngắt ở 62 ký tự) có thể tràn khung, nên chọn font hẹp hơn hoặc giảm cỡ (ô Cỡ chữ). "Xem trước font" vẽ thử một dòng ra ảnh. Chưa thử font dựng bằng công cụ này trong game: hãy xem thoại, menu, và các chữ hoa mới thêm.
+
+   Không dùng Map thì chữ Việt được thêm với mã Unicode thật và kana giữ nguyên, nên chữ Nhật còn sót trong file chương trình sẽ hiện đúng tiếng Nhật. Nhưng khi đó **mọi** câu tiếng Việt phải dựng lại bằng Unicode, kể cả tên nhân vật và lựa chọn mà sheet không có — các công cụ chưa làm việc đó, nên hiện giờ hãy dùng Map.
+
+9. **Đóng gói** giống zip gốc: `exefs/` và `romfs/` nằm ngay ở gốc file zip.
 
 ## Những điều cần nhớ
 
@@ -139,7 +157,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
 ## Giới hạn
 
-- Không tạo hay sửa font (`romfs/spec_win/font/*.font.memfs`): `applysheet.py` cần font của một bản mod có sẵn. Chữ hoa nào bản mod chưa từng dùng (lần này là `Ể`, `Ổ`, mỗi chữ một lần) thì ghi bằng chữ thường và báo lại.
+- `applysheet.py` học bảng mã font từ một bản mod có sẵn. Chữ hoa nào bản mod chưa từng dùng (lần này là `Ể`, `Ổ`, mỗi chữ một lần) thì ghi bằng chữ thường và báo lại — trừ khi font được dựng lại bằng `font.py gen --map-out` và bảng mã mới được đưa vào `--use-map`.
 - `#T` và `#KW` bị mất phải sửa tay theo cột JP; công cụ chỉ liệt kê.
 - `exetext.py` chỉ dịch được câu mà nó tìm thấy chỗ trỏ tới (con trỏ trong bảng relocation, hoặc lệnh ADRP+ADD/ADR). Exe JP có 7 chuỗi không tìm thấy, đều là dữ liệu nhị phân trông giống chữ.
 - `sprite.py` chỉ ghi được ảnh RGBA8 thường. Mọi ảnh chữ giao diện của game đều thuộc loại này. Nền nén khối (BC), như 5 ảnh nền `mat_ttlm_bg_chr0N` của menu tiêu đề, và các mặt nạ chuyển cảnh 8/16/24-bit thì được liệt kê rồi bỏ qua. Công cụ không tự vẽ chữ: người dịch tự vẽ lại từng ô.

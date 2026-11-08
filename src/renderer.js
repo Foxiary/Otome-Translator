@@ -392,6 +392,7 @@ async function offerApply(offer) {
       }
     } catch {}
   }
+  const entries = replaced.map(line => {const [name, backup] = line.split(/\s*->\s*/); return {name, backup};});
   // True until the user says write, and that run starts a log of its own.
   setLog(`${currentLog}${text('apply.declined')}\n`);
   whenNoDialog(() => {
@@ -415,23 +416,62 @@ async function offerApply(offer) {
         body.append(box);
       } else if (overwrite) paragraph(body, text('overwrite.same'));
       const actions = elt('div', 'dialog-actions');
-      const add = (label, onClick, className) => {
-        const node = elt('button', className, label);
-        node.type = 'button';
-        node.addEventListener('click', onClick);
-        actions.append(node);
-      };
-      add(text(`${words}.write`), async () => {
-        $('info-dialog').close();
-        const values = {...offer.values, [offer.flag]: true};
-        try {runRequest = {id: offer.id, values}; await window.vees.run(offer.id, values);}
-        catch (error) {runRequest = null; showError(error.message);}
-      }, 'button primary');
+      const add = (label, onClick, className = 'button') => actions.append(actionButton(className, label, onClick));
+      if (overwrite && entries.length) {
+        // Like a file manager: keep what was changed, replace it, or decide one by one.
+        const names = entries.map(entry => entry.name);
+        add(text('overwrite.keepAll'), () => runConfirmed(offer, {'--keep': names.join('\n')}), 'button primary');
+        add(text('overwrite.replaceAll'), () => runConfirmed(offer));
+        if (entries.length > 1) add(text('overwrite.each'), () => askEach(offer, entries));
+      } else add(text(`${words}.write`), () => runConfirmed(offer), 'button primary');
       add(text(overwrite ? 'overwrite.cancel' : 'apply.notNow'), () => $('info-dialog').close(), 'button quiet');
       body.append(actions);
     });
     $('info-dialog').querySelector('.dialog-actions .primary')?.focus();
   });
+}
+// Runs the tool again with the flag it held back for, plus what the questions chose.
+async function runConfirmed(offer, extra = {}) {
+  $('info-dialog').close();
+  const values = {...offer.values, [offer.flag]: true, ...extra};
+  try {runRequest = {id: offer.id, values}; await window.vees.run(offer.id, values);}
+  catch (error) {runRequest = null; showError(error.message);}
+}
+// One changed file at a time, as Finder asks: keep it or replace it, with a box
+// to do the same for the rest. Keep is the default; Stop writes nothing.
+function askEach(offer, entries) {
+  const keep = [];
+  let index = 0;
+  const step = () => {
+    if (index >= entries.length) return runConfirmed(offer, {'--keep': keep.join('\n')});
+    const {name, backup} = entries[index];
+    const left = entries.length - index - 1;
+    dialogContent(text('overwrite.eachTitle', {index: index + 1, total: entries.length}), body => {
+      paragraph(body, name, 'mono dialog-file');
+      paragraph(body, text(/\.png$/i.test(name) ? 'overwrite.eachBody' : 'overwrite.eachOther'));
+      if (backup) paragraph(body, text('overwrite.replaceNote', {backup}), 'help');
+      let same = null;
+      if (left) {
+        const label = elt('label', 'dialog-check');
+        same = elt('input');
+        same.type = 'checkbox';
+        label.append(same, elt('span', '', text('overwrite.sameForRest', {count: left})));
+        body.append(label);
+      }
+      const choose = keepIt => () => {
+        const upto = same?.checked ? entries.length : index + 1;
+        for (; index < upto; index++) if (keepIt) keep.push(entries[index].name);
+        step();
+      };
+      const actions = elt('div', 'dialog-actions');
+      actions.append(actionButton('button primary', text('overwrite.keepOne'), choose(true)),
+        actionButton('button', text('overwrite.replaceOne'), choose(false)),
+        actionButton('button quiet', text('overwrite.stop'), () => $('info-dialog').close()));
+      body.append(actions);
+    });
+    $('info-dialog').querySelector('.dialog-actions .primary')?.focus();
+  };
+  step();
 }
 function renderForm() {
   const current = tool();
@@ -455,10 +495,8 @@ function renderForm() {
   $('form-fields').replaceChildren();
   $('fonts-options').replaceChildren();
   const fields = mapping ? $('fonts-options') : $('form-fields');
-  for (const [index, arg] of current.args.entries()) {
-    if (mapping && MAPPED_ARGS.includes(arg.name)) continue;
-    if (arg.kind === 'bool' && arg.name === confirmFlag(current)) continue;
-    const field = elt('div',`field ${arg.kind === 'bool' ? 'toggle-field' : ''} ${arg.repeat || arg.help?.length > 85 ? 'wide' : ''}`);
+  const fieldFor = (arg, index, paired) => {
+    const field = elt('div',`field ${arg.kind === 'bool' ? 'toggle-field' : ''} ${!paired && (arg.repeat || arg.help?.length > 85) ? 'wide' : ''}`);
     const label = elt('label','',argText(current, arg, 'label'));
     label.htmlFor = `arg-${index}`;
     if (arg.required) label.append(elt('span','required','*'));
@@ -500,7 +538,25 @@ function renderForm() {
       field.append(row);
       if (arg.help) field.append(elt('div','help',argText(current, arg, 'help')));
     }
-    fields.append(field);
+    return field;
+  };
+  for (let index = 0; index < current.args.length; index++) {
+    const arg = current.args[index];
+    if (mapping && MAPPED_ARGS.includes(arg.name)) continue;
+    if (arg.kind === 'bool' && arg.name === confirmFlag(current)) continue;
+    if (arg.hidden) continue;
+    // A font and the size that belongs to it share one row: the file on the
+    // left, the number on the right.
+    const family = /^--font-(.+)$/.exec(arg.name);
+    const next = current.args[index + 1];
+    if (family && next?.name === `--px-${family[1]}`) {
+      const pair = elt('div', 'field-pair');
+      pair.append(fieldFor(arg, index, true), fieldFor(next, index + 1, true));
+      fields.append(pair);
+      index++;
+      continue;
+    }
+    fields.append(fieldFor(arg, index, false));
   }
   checkMissing();
   renderRunReveal();

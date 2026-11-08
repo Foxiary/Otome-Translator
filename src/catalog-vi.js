@@ -81,15 +81,15 @@ const tools = {
   'rrlib-audit': {title: 'Kiểm tra bản patch', description: 'So bản patch tiếng Việt với kịch bản tiếng Nhật: tag vị trí, tag tên và tag dừng bị mất, câu bị đẩy ra ngoài màn hình, header sai. Không thay đổi gì.'},
   'rrlib-patch': {title: 'Dựng lại bản patch', description: 'Dựng lại script.memfs và script.membody: trả lại tag vị trí #P bị mất, giữ cho các câu mà bản Nhật đặt ngoài màn hình vẫn hiện ra, trỏ thẳng từng kịch bản tới dữ liệu của nó rồi tự kiểm tra kết quả.', note: 'Chạy thử trước rồi mới hỏi có ghi không. Hãy thử bản dựng trong game trước khi chia sẻ.'},
   'rrlib-sheetfix': {title: 'Danh sách sửa tag cho bảng dịch', description: 'Đọc bảng dịch (.xlsx) và ghi ra một file đề xuất theo đúng tab và dòng: tag #P cần thêm, câu phải để không có tag, và các câu #T / #KW cần sửa tay.'},
-  'rrlib-sprite-export': {title: 'Lấy ảnh của một màn hình ra', description: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh. Công cụ lưu từng ô của một màn hình thành một file ảnh riêng trong một thư mục trống, đặt tên theo phần hình dùng nó (chữ 新しく始める ở menu tiêu đề là mat_ttlm_com01_off, câu chú thích của nó là mat_ttlm_com01_setu), kèm cells.csv ghi vị trí từng ô. Vẽ lại các ô cần dịch ngay trong thư mục đó, rồi dùng "Đưa ảnh đã vẽ lại vào game": app đã điền sẵn màn hình và thư mục cho bước đó.',
+  'rrlib-sprite-export': {title: 'Lấy ảnh của một màn hình ra', description: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh. Công cụ lưu từng ô của một màn hình thành một file ảnh riêng trong một thư mục trống, đặt tên theo phần hình dùng nó (chữ 新しく始める ở menu tiêu đề là mat_ttlm_com01_off, câu chú thích của nó là mat_ttlm_com01_setu), kèm file cells_<tên màn hình>.csv ghi vị trí từng ô. Vẽ lại các ô cần dịch ngay trong thư mục đó, rồi dùng "Đưa ảnh đã vẽ lại vào game": app đã điền sẵn màn hình và thư mục cho bước đó.',
     args: {
       screen: {label: 'Màn hình', help: 'File .memfs của màn hình cần dịch, trong romfs/spec_win/ssdata. Ví dụ ttlm_nam.memfs là menu tiêu đề. File .membody cùng tên phải nằm cạnh nó.'},
       'output folder': {label: 'Thư mục ảnh', help: 'Nên chọn một thư mục trống: ảnh được lưu vào đây. Nếu thư mục đã có ảnh, app hỏi trước khi ghi đè và chép các ô bạn đã vẽ lại sang file .bak trước. Bỏ trống thì chỉ xem danh sách các ô.'}
     }},
-  'rrlib-sprite-import': {title: 'Đưa ảnh đã vẽ lại vào game', description: 'Đọc thư mục mà "Lấy ảnh của một màn hình ra" đã lưu, sau khi bạn vẽ lại các ô trong đó: ô nào khác bản game thì được dán lại đúng chỗ, rồi file của màn hình được dựng lại vào thư mục Ghi vào và tự kiểm tra; file không sửa giữ nguyên từng byte. Chạy xong bước lấy ảnh ra, app tự điền màn hình và thư mục ảnh ở đây.',
+  'rrlib-sprite-import': {title: 'Đưa ảnh đã vẽ lại vào game', description: 'Đọc thư mục mà "Lấy ảnh của một màn hình ra" đã lưu, sau khi bạn vẽ lại các ô trong đó: ô nào khác bản game thì được dán lại đúng chỗ. Ô vẽ to hơn (cho chữ Việt dài hơn) được đặt vào một chỗ trống trong cùng tấm ảnh, và game vẫn vẽ nó quanh tâm của chữ cũ. Sau đó file của màn hình được dựng lại vào thư mục Ghi vào và tự kiểm tra; file không sửa giữ nguyên từng byte. Chạy xong bước lấy ảnh ra, app tự điền màn hình và thư mục ảnh ở đây.',
     args: {
       screen: {label: 'Màn hình', help: 'File .memfs của màn hình cần dịch, trong romfs/spec_win/ssdata. Ví dụ ttlm_nam.memfs là menu tiêu đề. File .membody cùng tên phải nằm cạnh nó.'},
-      'image folder': {label: 'Thư mục ảnh', help: 'Thư mục mà bước lấy ảnh ra đã lưu (app tự điền), với các ô đã vẽ lại được lưu đè lên đúng file cũ: giữ tên, giữ kích thước, vẫn là PNG.'},
+      'image folder': {label: 'Thư mục ảnh', help: 'Thư mục mà bước lấy ảnh ra đã lưu (app tự điền), với các ô đã vẽ lại được lưu đè lên đúng file cũ: giữ tên, vẫn là PNG. Chữ cần chỗ thì ô được phép to hơn cỡ cũ.'},
       '--out': {label: 'Ghi vào', help: 'Thư mục romfs/spec_win/ssdata trong mod: file của màn hình được ghi vào đây. File cũ cùng tên được chép sang file .bak nằm cạnh nó trước khi ghi.'}
     }},
   'rrlib-sprite-check': {title: 'Kiểm tra file của một màn hình', description: 'Dựng lại một màn hình mà không sửa gì, kết quả phải giống từng byte, và thử nén lại mọi ảnh mà công cụ ghi được.',
@@ -109,7 +109,42 @@ const tools = {
       '--report': {label: 'Báo cáo', help: 'File CSV ghi từng dòng của danh sách và việc đã làm với nó.'}
     }},
   'rrlib-exetext-check': {title: 'Kiểm tra chữ trong file chương trình', description: 'Liệt kê các câu tiếng Nhật tìm thấy trong exefs/main và những chỗ trỏ tới chúng, rồi thử dời tất cả sang vùng mới mà không đổi chữ: mọi chỗ trỏ phải đọc ra đúng câu cũ, và hoàn tác phải ra lại file chương trình giống từng byte. Không ghi gì.',
-    args: {main: {label: 'File chương trình', help: 'exefs/main.'}}}
+    args: {main: {label: 'File chương trình', help: 'exefs/main.'}}},
+  'rrlib-font-gen': {title: 'Tạo font tiếng Việt', description: 'Vẽ lại chữ ASCII và chữ tiếng Việt của mọi font trong thư mục font tiếng Nhật bằng file font bạn chọn (.ttf/.otf), chỉnh cỡ cho khớp với chữ của game, rồi dựng font viền (outline) từ chính các chữ đó. Kana và kanji giữ nguyên. Có Bảng mã thì mỗi chữ Việt được vẽ vào đúng ô kana mà kịch bản của bản mod đang dùng cho nó, nên kịch bản hiện có hiện ngay kiểu chữ mới; chữ nào bảng mã chưa có (Ể, Ổ) được thêm ô với mã riêng, và Lưu bảng mã ghi kết quả lại để dùng cho "Ghi bảng dịch vào game" (ô Use map) và các tool chữ trong file chương trình.',
+    note: 'Chạy thử trước rồi mới hỏi có ghi không. Công cụ báo khi chữ mới rộng hơn chữ của game, vì câu dài có thể tràn khung: hãy thử kết quả trong game.',
+    args: {
+      '--template': {label: 'Thư mục font gốc', help: 'Thư mục romfs/spec_win/font của bản tiếng Nhật.'},
+      '--out': {label: 'Ghi vào', help: 'Thư mục romfs/spec_win/font trong mod. File cũ cùng tên được chép sang file .bak nằm cạnh nó trước khi ghi.'},
+      '--font': {label: 'File font', help: 'File font có đủ chữ tiếng Việt (.ttf, .otf; file.ttc#1 để chọn một kiểu trong bộ). Thêm nhiều file để chữ nào file trước thiếu thì lấy ở file sau.'},
+      '--font-standard': {label: 'Font cho standard (一)', help: 'File font (.ttf, .otf, .ttc) chỉ dùng cho font standard, lựa chọn フォント 一 trong cài đặt (gothic tròn), và bản viền của nó. Được thử trước File font.'},
+      '--font-extra': {label: 'Font cho extra (二)', help: 'File font (.ttf, .otf, .ttc) chỉ dùng cho font extra, lựa chọn フォント 二 (gothic đậm), và bản viền của nó. Được thử trước File font.'},
+      '--font-extra2': {label: 'Font cho extra2 (三)', help: 'File font (.ttf, .otf, .ttc) chỉ dùng cho font extra2, lựa chọn フォント 三 (viết tay), và bản viền của nó. Được thử trước File font.'},
+      '--font-extra3': {label: 'Font cho extra3 (四)', help: 'File font (.ttf, .otf, .ttc) chỉ dùng cho font extra3, lựa chọn フォント 四 (có chân), và bản viền của nó. Được thử trước File font.'},
+      '--font-ui': {label: 'Font cho ui', help: 'File font (.ttf, .otf, .ttc) chỉ dùng cho font ui (không nằm trong 4 lựa chọn フォント) và bản viền của nó. Được thử trước File font.'},
+      '--map': {label: 'Bảng mã', help: 'File .json mã hoá font, lưu bằng "Ghi bảng dịch vào game" (ô Map). Thiếu nó thì chữ Việt trong kịch bản hiện tại hiện thành kana (ộ → ば).'},
+      '--map-out': {label: 'Lưu bảng mã', help: 'Lưu bảng mã của font mới (.json) để dùng ở ô Use map.'},
+      '--px-standard': {label: 'Cỡ chữ standard (一)', help: 'Cỡ chữ (pixel) chỉ cho font standard và bản viền của nó, thay cho ô Cỡ chữ. Bỏ trống thì tự chỉnh; lần chạy thử in cỡ tự chỉnh và chữ rộng hơn font gốc bao nhiêu.'},
+      '--px-extra': {label: 'Cỡ chữ extra (二)', help: 'Cỡ chữ (pixel) chỉ cho font extra và bản viền của nó, thay cho ô Cỡ chữ. Bỏ trống thì tự chỉnh.'},
+      '--px-extra2': {label: 'Cỡ chữ extra2 (三)', help: 'Cỡ chữ (pixel) chỉ cho font extra2 và bản viền của nó, thay cho ô Cỡ chữ. Bỏ trống thì tự chỉnh.'},
+      '--px-extra3': {label: 'Cỡ chữ extra3 (四)', help: 'Cỡ chữ (pixel) chỉ cho font extra3 và bản viền của nó, thay cho ô Cỡ chữ. Bỏ trống thì tự chỉnh.'},
+      '--px-ui': {label: 'Cỡ chữ ui', help: 'Cỡ chữ (pixel) chỉ cho font ui và bản viền của nó, thay cho ô Cỡ chữ. Bỏ trống thì tự chỉnh.'},
+      '--px': {label: 'Cỡ chữ', help: 'Cỡ chữ (pixel) cho mọi font; bỏ trống thì mỗi font tự chỉnh cho chữ H cao bằng chữ của font gốc tương ứng.'},
+      '--chars': {label: 'Thêm ký tự', help: 'Ký tự khác cần vẽ, mỗi ký tự ở mã riêng của nó.'},
+      '--no-latin': {label: 'Giữ chữ ASCII của game', help: 'Không vẽ lại chữ ASCII, chỉ vẽ chữ tiếng Việt.'},
+      '--outline-radius': {label: 'Độ dày viền', help: 'Độ dày viền tính bằng pixel; bỏ trống thì đo trên font tiếng Nhật.'}
+    }},
+  'rrlib-font-preview': {title: 'Xem trước font', description: 'Vẽ một dòng chữ bằng một font của game ra file ảnh, xếp chữ như game làm, có font viền vẽ bên dưới nếu bạn chọn. Dùng để xem font trước khi thử trong game.',
+    args: {
+      font: {label: 'Font', help: 'Một font trong romfs/spec_win/font, ví dụ standard.font.memfs.'},
+      text: {label: 'Chữ', help: 'Dòng chữ cần vẽ; \\n để xuống dòng.'},
+      image: {label: 'Ảnh', help: 'File ảnh cần lưu (.png).'},
+      '--outline': {label: 'Font viền', help: 'Font viền đi kèm, ví dụ standard_outline.font.memfs.'},
+      '--map': {label: 'Bảng mã', help: 'File .json mã hoá font: mã hoá dòng chữ trước, như kịch bản.'}
+    }},
+  'rrlib-font-export': {title: 'Lấy ảnh của font ra', description: 'Lưu mọi ảnh của một font thành file PNG, kèm glyphs.tsv liệt kê từng ký tự với vị trí và độ rộng của nó. Không sửa gì.',
+    args: {font: {label: 'Font', help: 'Một font trong romfs/spec_win/font, ví dụ standard.font.memfs.'}}},
+  'rrlib-font-check': {title: 'Kiểm tra font', description: 'Đọc mọi font trong một thư mục rồi ghi lại mà không sửa gì; bản ghi lại phải giống file gốc từng byte.',
+    args: {folder: {label: 'Thư mục', help: 'Một thư mục romfs/spec_win/font.'}}}
 };
 
 const engines = {
@@ -145,7 +180,8 @@ const engines = {
       Patch: {name: 'Bản patch', summary: 'Ghi bảng dịch vào game, kiểm tra bản patch tiếng Việt so với kịch bản tiếng Nhật và dựng lại nó.'},
       Sheets: {name: 'Bảng dịch', summary: 'Từ bảng dịch ra danh sách các tag cần sửa.'},
       Images: {name: 'Ảnh giao diện', summary: 'Chữ ở menu, nút bấm và câu chú thích được vẽ sẵn trong ảnh: lấy ra thành file ảnh, vẽ lại rồi đưa vào game.'},
-      Executable: {name: 'File chương trình', summary: 'Dịch chữ nằm trong file chương trình của game, như các câu trích ở màn hình chính.'},
+      Executable: {name: 'File chương trình', summary: 'Chữ nằm sẵn trong file chương trình (exefs/main): câu hỏi trong hộp thoại, thông báo lưu nhanh, chú thích nút bấm, từ điển và tên chương.'},
+      Fonts: {name: 'Font', summary: 'Vẽ lại chữ Latin và chữ tiếng Việt trong font của game bằng file font bạn chọn, rồi xem trước kết quả.'}
     }
   }
 };

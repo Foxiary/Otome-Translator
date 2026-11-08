@@ -13,7 +13,7 @@ and on the Vietnamese patch of 02/10/2026 that this engine was built to repair.
 ```
 romfs/common/script.memfs      index (RSON)            11 406 B
 romfs/common/script.membody    130 scripts, compressed 2.08 MB JP
-romfs/spec_win/font/*.font.memfs   fonts - not covered here
+romfs/spec_win/font/*.font.memfs   fonts, see "Fonts" (font.py)
 romfs/spec_win/ssdata/*.memfs  UI art: menu labels and buttons are pixels, see "UI art"
 exefs/main                     system text as UTF-32 (see "Text in the program");
                                the VI patch ships a modified one, see "The exe hook"
@@ -92,8 +92,9 @@ no RZ wrapper around the file itself.
         0x4000), never RZ-wrapped rows then. 0x200000 / 0x400000 seen, meaning
         unknown. Padding rows/columns past w x h are zero and kept.
 .ssdata 'SSAD1.03' | u32 header size H | u32 16 | u32 pack offsets, 0-terminated
-        part states from H, 40 bytes: u32 ?, u16 part, u16 x, y, w, h (source
-            rectangle in pixels), i16 position, rest zero here
+        part states from H, 40 bytes: u32 flags, u16 part, u16 x, y, w, h
+            (source rectangle in pixels), i16 x, y position, then the fields
+            the flags add (see "Resizing a cell")
         pack: ff ff ff ff 'ABSS' u32 3, 0, parts, frames, textures | u16 parts,
             frames, fps (60)
           textures: 0-terminated u32 pointers to names ('mat_ttlm.png' = the
@@ -115,6 +116,45 @@ are not, and sprite.py skips them. Checked in game (Astrid, 2026-11-07): a
 ttlm_nam rebuilt by sprite.py with 17 cells redrawn in Vietnamese (the five
 labels off and on, the five help lines, 戻る, おまけ; texture recompressed
 with zlib 6, membody shorter than JP) loads and shows them as drawn.
+
+### Resizing a cell
+
+A part is drawn **centred on its position**; the origin is the screen centre,
+y down. On ttlm_nam the 2020x1180 background sits at (0,0), line_u at y -472,
+line_d at +486. Positions are absolute: a child and its null both carry the
+same offsets. So a cell can get another size without touching any position,
+and it grows evenly to both sides. The rectangle lives only in the states,
+not in a cell table, and the .rson holds pattern names only.
+
+`sprite.py import` does it when a cell PNG has another size than its
+rectangle:
+- It finds empty space in the same texture with `free_spots`. The space must
+  not hold any cell rectangle or any pixel with alpha above 0, and keeps
+  `CELL_GAP` px clear around it. It is searched on power-of-two blocks so the
+  atlas is at most 512 blocks wide.
+- It pastes the PNG there and rewrites x/y/w/h of every state that drew the
+  old (texture, rectangle), under every part.
+- The old pixels stay.
+- `verify` re-reads the result: the .ssdata may differ only in those 8 bytes
+  of drawn states (`rects_only`).
+
+Which state flags qualify was read from values across all 48 ssdata screens:
+- Flags 0x40 (float in degrees), 0x80 / 0x100 (floats near 1) and 0x200
+  (0..255) only turn, scale or fade the part round its position
+  (`ROUND_CENTRE`).
+- 0x10 / 0x20 add an i16 each (mat_kagee, log, losa), maybe a pivot or a
+  size in pixels. 0x1, 0x2 and 0x4000 are unknown too.
+- A cell drawn by any state with such a flag is refused.
+- A state drawn under two textures by different packs is refused as well.
+
+Checked in game (Astrid, 2026-11-08):
+- ttlm_nam with eight labels grown, com02-05 off/on, e.g. 178x52 → 276x72;
+  their states have flags 0 / 0x200.
+- That build is the one `sprite.py import` makes from the same PNGs: every
+  one of the 2 787 drawn states cuts the same pixels.
+- The labels show centred where the JP ones were.
+- 戻る at 266x68 ran off the right screen edge (centre x 1806). Growing does
+  not move a part, so a big cell near an edge can leave the screen.
 
 ## The exe hook in the 02/10 patch
 
@@ -276,6 +316,83 @@ them by their ASCII fragments. Tags, spaces and ASCII punctuation are
 untouched and one VI letter is one code unit, so every tool but
 `applysheet.py` works without the mapping.
 
+## Fonts (font.py)
+
+Ten files under `romfs/spec_win/font`: `standard` (rounded gothic, the
+dialogue), `extra` (bold gothic), `extra2` (brush), `extra3` (serif, old-style
+figures), `ui` (1 903 glyphs, 2 textures), each with an `_outline` twin that is
+the border drawn under the text. The 02/10 patch redrew texture 0 of all ten
+(VI letters painted over kana cells) and changed only the advance of those 97
+cells in `standard`; it added no glyph, so the `ui` font has no cell at all
+for codes such as ヰ or ㈶ that the encoding uses.
+
+The exe (JP `main`, data at 0x549138) lists them in a table of 24-byte entries
+{u64 id, path pointer (UTF-32 string, RELATIVE reloc), u64 flag}: ids 1-10 =
+standard, standard_outline, extra, extra_outline, extra2, extra2_outline,
+extra3, extra3_outline, ui, ui_outline; flag 1 on standard, standard_outline
+and ui. The four フォント choices of the settings screen (一 二 三 四) follow
+that order: 二 drew the sample line in `extra` on screen (user's screenshot,
+2026-11-08, matched glyph for glyph); 一/三/四 = standard/extra2/extra3 is
+read off the order, not seen. `ui` is not one of the four.
+
+A font is an rrlib/memfs with its body inside (`hasSeparateBody` false), and
+uses more of RSON than `script.memfs`, so font.py has its own reader/writer
+(rson.py untouched). Found on these files and checked by byte-exact round trip
+of all 20 fonts (JP + mod) and 56 other memfs of the game:
+
+```
+tag    kind (top 3 bits) | size code (low 5)
+size   0-7 the value; 8-15 +1 byte, 16-23 +2, 24 +4; code's low 3 bits are the
+       top bits; BIG-endian. Lengths and counts use at least the 1-byte form.
+0x20/21  false / true
+0x40   int: codes 0..7 = 0,1,-1,2,-2,3,-3,4; 1/2/4-byte forms are 11/19/32-bit
+       two's complement (offsetY -19 = 4f ed, 2048 = 50 08 00)
+0x80   UTF-16LE string, byte length, + 2 NULs; text 2-aligned
+0xa0   binary blob, data aligned to alignBytes (4)
+0xc0   array: count, element byte. 0x40/0x30/0x20: u8/u16/u32 LE values,
+       narrowest that fits (negatives as u32). 0..3: node offsets of 1..4
+       bytes - 2-byte ones LITTLE-endian, 3-byte ones BIG-endian (ui has the
+       first, the others the second). Payload 4-aligned for node arrays, to
+       the element size for typed ones.
+0xe0   map: count, h, value offsets (u16 LE; u32 LE when h=1, used when one
+       does not fit), key offsets u16 LE, key hashes u16 LE = CRC-16/CCITT-FALSE
+       (init 0xffff) of the UTF-16LE key, sorted by hash ('alignBytes' and
+       'paddingBottom' collide at 4064). Payload 4-aligned.
+       Children first (values, keys, then the map), offsets back from the tag.
+```
+
+Not handled: map h=3 (`spec_switch/sound/voice.memfs`) and an unknown tag 0x00
+in `spec_win/effect.memfs` - neither is a font.
+
+`/fontdata.rson` (`rrlib/rfnt2`): `baseInfo` - charWidth/charHeight 40,
+renderMarginX/Y 20/22, offsetX/Y -8/-19, packMarginX/Y 1, paddingBottom 8,
+2048² textures, `rgb` FFFFFF, `bTrimGryph` false, `charaCount`; `gryphInfo` -
+per glyph [texture, x, y, w, h, advance, dx, dy]; `charToIndex` - one-character
+key → glyph. Cells are 60x62 on a 62x64 grid, packed column by column (33x32 =
+1 056 per texture). In a cell the pen sits at x 8 (-offsetX) and the baseline at
+row 53 (52 in extra/extra3/ui); 'H' is 32 px tall in standard.
+
+dx/dy (usually 0/7) move a glyph whose ink would leave the cell. The JP 'p'
+sits 3 px higher in its cell than 'o' with dy 10, 'g' 2 px with dy 9, 'î' 3 px
+to the right with dx -3; so the engine draws a cell (dy-7) lower and dx further
+left. Inferred from the cell contents (the bowls of p/q/g line up with o once
+moved back); not yet confirmed on screen. font.py gen follows the same rule:
+ink kept right of x 7 and above row 59.
+
+Textures: RTEX flags 0x84002 = BC3 (DXT5), LINEAR block order (no Switch
+swizzle), payload RZ + zlib. Alpha is the glyph; RGB a white mask 1 px wider
+than the ink (in an _outline font the same as its alpha's extent). The
+_outline glyph is the text glyph widened by a radius that best fits each pair:
+standard 4.7, extra 5.0, extra2 4.3, extra3 4.0, ui 3.2 px. An empty block is
+`00 05` + 14 zero bytes. gen re-encodes only the blocks of cells it draws (no
+block straddles two cells: the 2 px gaps line up with 4x4 blocks), so every
+other glyph keeps its exact bytes.
+
+Adding a character = a new cell in a free grid slot of the last texture, a
+gryphInfo entry, a charToIndex key inserted in hash order and charaCount + 1.
+The last textures have room (standard 972 free cells, ui 209). Whether the
+game finds an added character has not been seen on screen yet.
+
 ## Writing the sheet in (applysheet.py)
 
 The original VI builder is not available; its rules were read off the 02/10
@@ -331,6 +448,9 @@ needs the mod as its base, never JP alone.
 - `applysheet.py` on the 07/11 sheet and the installed build: 30 470 strings
   written, check OK, no translated string turned back to JP, 0 #T / #KW lost
   against JP (the translators had fixed them). Not yet tried in game.
+- `font.py check`: all 20 fonts (JP + 02/10 mod) byte-identical. `gen` with
+  the 70-letter map learnt from the mod: only the drawn cells' blocks change.
+  Not yet tried in game.
 - In game: EV00_0001_01 with restored #P, and the u32-widened memfs, load and
   play. The off-screen untagging and the three widened scenes were not yet
   re-checked in game when this was written.
