@@ -33,7 +33,7 @@ svg.icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;s
 .sidebar-resize:hover::after,.sidebar-resize:focus-visible::after,body.resizing-sidebar .sidebar-resize::after{background:var(--accent)}
 body.resizing-sidebar,body.resizing-sidebar *{cursor:col-resize;user-select:none}
 .brand{display:flex;align-items:center;gap:12px;padding:0 9px 18px}
-.brand-mark{width:40px;height:40px;display:grid;place-items:center;flex-shrink:0}.brand-mark img{width:40px;height:40px;object-fit:contain;transform:translateY(3px)}
+.brand-mark{width:40px;height:40px;display:grid;place-items:center;flex-shrink:0}.brand-mark img{width:40px;height:40px;object-fit:contain}
 .wordmark{font-size:23px;font-weight:650;letter-spacing:-.03em;line-height:1.05}
 .brand-caption{font-size:11px;letter-spacing:.08em;color:var(--muted);margin-top:4px}
 .section-label{display:flex;align-items:center;justify-content:space-between;margin:0 8px 9px}
