@@ -272,6 +272,49 @@ class GenTest(unittest.TestCase):
         with Image.open(png) as im:
             self.assertGreater(im.width, 60)
 
+    def preview(self, *args):
+        old = sys.argv
+        sys.argv = ['font.py', 'preview'] + list(args)
+        try:
+            return quiet(font.main)
+        finally:
+            sys.argv = old
+
+    def test_preview_of_a_folder_stacks_the_four_settings_fonts(self):
+        _, _, out = self.gen('--apply')
+        one, four = os.path.join(self.d, 'one.png'), os.path.join(self.d, 'four.png')
+        rc, _ = self.preview(os.path.join(out, 'standard.font.memfs'), 'Hệ', one,
+                             '--outline', os.path.join(out, 'standard_outline.font.memfs'),
+                             '--map', os.path.join(self.d, 'map-out.json'))
+        self.assertEqual(rc, 0)
+        # The same font under the four names the settings screen uses.
+        for n in font.SETTINGS[1:]:
+            for suffix in ('', '_outline'):
+                shutil.copy(os.path.join(out, 'standard%s.font.memfs' % suffix),
+                            os.path.join(out, '%s%s.font.memfs' % (n, suffix)))
+        rc, log = self.preview(out, 'Hệ', four, '--map', os.path.join(self.d, 'map-out.json'))
+        self.assertEqual(rc, 0)
+        self.assertIn('standard 一, extra 二, extra2 三, extra3 四', log)
+        with Image.open(one) as a, Image.open(four) as b:
+            self.assertEqual(b.size, (a.width, 4 * a.height + 3 * font.PREVIEW_GAP))
+            # each block is the single-font image, outline included
+            block = b.crop((0, a.height + font.PREVIEW_GAP, a.width, 2 * a.height + font.PREVIEW_GAP))
+            self.assertEqual(block.tobytes(), a.convert('RGBA').tobytes())
+
+    def test_preview_of_a_folder_names_what_is_missing(self):
+        _, _, out = self.gen('--apply')
+        png = os.path.join(self.d, 'p.png')
+        rc, log = self.preview(out, 'Hệ', png)
+        self.assertEqual(rc, 0)
+        self.assertIn('khong thay extra.font.memfs', log)
+        self.assertIn('standard khong co: ệ', log)       # no map: ệ is only on its kana code
+        self.assertIn('--map', log)
+        empty = os.path.join(self.d, 'empty')
+        os.makedirs(empty)
+        rc, log = self.preview(empty, 'x', png)
+        self.assertEqual(rc, 1)
+        self.assertIn('LOI', log)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=1)

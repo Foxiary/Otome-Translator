@@ -133,13 +133,13 @@ const tools = {
       '--no-latin': {label: 'Giữ chữ ASCII của game', help: 'Không vẽ lại chữ ASCII, chỉ vẽ chữ tiếng Việt.'},
       '--outline-radius': {label: 'Độ dày viền', help: 'Độ dày viền tính bằng pixel; bỏ trống thì đo trên font tiếng Nhật.'}
     }},
-  'rrlib-font-preview': {title: 'Xem trước font', description: 'Vẽ một dòng chữ bằng một font của game ra file ảnh, xếp chữ như game làm, có font viền vẽ bên dưới nếu bạn chọn. Dùng để xem font trước khi thử trong game.',
+  'rrlib-font-preview': {title: 'Xem trước font', description: 'Vẽ chữ bạn nhập bằng font của game ra file ảnh, xếp chữ như game làm. Chọn một file font, hoặc chọn cả thư mục font để vẽ chữ bằng 4 font trong cài đặt (一 二 三 四), font này dưới font kia, mỗi font có viền. Dùng để xem font trước khi thử trong game.',
     args: {
-      font: {label: 'Font', help: 'Một font trong romfs/spec_win/font, ví dụ standard.font.memfs.'},
+      font: {label: 'Font', help: 'Một font trong romfs/spec_win/font, ví dụ standard.font.memfs, hoặc chọn thư mục đó để xem 4 font trong cài đặt (一 二 三 四), mỗi font có viền.'},
       text: {label: 'Chữ', help: 'Dòng chữ cần vẽ; \\n để xuống dòng.'},
       image: {label: 'Ảnh', help: 'File ảnh cần lưu (.png).'},
-      '--outline': {label: 'Font viền', help: 'Font viền đi kèm, ví dụ standard_outline.font.memfs.'},
-      '--map': {label: 'Bảng mã', help: 'File .json mã hoá font: mã hoá dòng chữ trước, như kịch bản.'}
+      '--outline': {label: 'Font viền', help: 'Font viền đi kèm, ví dụ standard_outline.font.memfs. Chọn thư mục thì không cần.'},
+      '--map': {label: 'Bảng mã', help: 'File .json mã hoá font: mã hoá dòng chữ trước, như kịch bản. Cần cho font dựng có Bảng mã, ví dụ font_map_installed.json.'}
     }},
   'rrlib-font-export': {title: 'Lấy ảnh của font ra', description: 'Lưu mọi ảnh của một font thành file PNG, kèm glyphs.tsv liệt kê từng ký tự với vị trí và độ rộng của nó. Không sửa gì.',
     args: {font: {label: 'Font', help: 'Một font trong romfs/spec_win/font, ví dụ standard.font.memfs.'}}},

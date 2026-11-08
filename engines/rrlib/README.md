@@ -135,11 +135,10 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    python tools/font.py gen --template <JP>/romfs/spec_win/font --out <thư mục mod>/romfs/spec_win/font \
        --font MyFont-Regular.ttf --map font.json --map-out font-moi.json
    python tools/font.py gen ... --apply
-   python tools/font.py preview <thư mục mod>/romfs/spec_win/font/standard.font.memfs "Xin chào, Ể Ổ ặ" thu.png \
-       --outline <thư mục mod>/romfs/spec_win/font/standard_outline.font.memfs --map font-moi.json
+   python tools/font.py preview <thư mục mod>/romfs/spec_win/font "Xin chào, Ể Ổ ặ" thu.png --map font-moi.json
    ```
 
-   Lần chạy thử in cỡ chữ, độ dày viền đo được và **độ rộng trung bình một chữ so với font gốc**: rộng hơn khoảng 8% trở lên thì câu dài (ngắt ở 62 ký tự) có thể tràn khung, nên chọn font hẹp hơn hoặc giảm cỡ (ô Cỡ chữ). "Xem trước font" vẽ thử một dòng ra ảnh. Chưa thử font dựng bằng công cụ này trong game: hãy xem thoại, menu, và các chữ hoa mới thêm.
+   Lần chạy thử in cỡ chữ, độ dày viền đo được và **độ rộng trung bình một chữ so với font gốc**: rộng hơn khoảng 8% trở lên thì câu dài (ngắt ở 62 ký tự) có thể tràn khung, nên chọn font hẹp hơn hoặc giảm cỡ (ô Cỡ chữ). "Xem trước font" vẽ chữ bạn nhập ra ảnh: chọn thư mục font thì ảnh có 4 khối, lần lượt 一 二 三 四, mỗi font kèm viền; chọn một file `.font.memfs` thì chỉ vẽ font đó. Font dựng có Map thì phải chọn cả Bảng mã (bảng đã lưu bằng ô Lưu bảng mã), không thì chữ Việt nằm trên ô kana bị báo thiếu. Chưa thử font dựng bằng công cụ này trong game: hãy xem thoại, menu, và các chữ hoa mới thêm.
 
    Không dùng Map thì chữ Việt được thêm với mã Unicode thật và kana giữ nguyên, nên chữ Nhật còn sót trong file chương trình sẽ hiện đúng tiếng Nhật. Nhưng khi đó **mọi** câu tiếng Việt phải dựng lại bằng Unicode, kể cả tên nhân vật và lựa chọn mà sheet không có — các công cụ chưa làm việc đó, nên hiện giờ hãy dùng Map.
 

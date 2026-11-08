@@ -5,6 +5,7 @@
     python font.py check   standard.font.memfs            # read, write back: must be byte-identical
     python font.py export  standard.font.memfs out/       # textures as PNG + glyphs.tsv
     python font.py preview standard.font.memfs "Xin chào" out.png [--outline standard_outline.font.memfs]
+    python font.py preview <font folder> "Xin chào" out.png [--map map.json]   # 一 二 三 四, each outlined
     python font.py gen --template <JP font folder> --out <mod>/romfs/spec_win/font \\
         --font Foo-Regular.ttf [--font Bar.ttf ...] [--font-extra2 Brush.ttf] \\
         [--map map.json] [--map-out map.json] [--apply]
@@ -990,24 +991,69 @@ def render_text(font, text, outline=None, scale=1):
     return canvas
 
 
+SETTINGS = ('standard', 'extra', 'extra2', 'extra3')   # the settings screen's フォント 一 二 三 四
+SETTINGS_MARKS = '一二三四'
+PREVIEW_GAP = 16
+
+
+def stack(images, gap=0, rule=False):
+    """Images one under another on the preview background; rule draws a thin
+    line in the middle of each gap."""
+    from PIL import Image, ImageDraw
+    im = Image.new('RGBA', (max(i.width for i in images),
+                            sum(i.height for i in images) + gap * (len(images) - 1)), (40, 40, 60, 255))
+    y = 0
+    for n, i in enumerate(images):
+        if n and rule:
+            ImageDraw.Draw(im).line((0, y - gap // 2, im.width, y - gap // 2), fill=(80, 80, 110, 255))
+        im.paste(i, (0, y))
+        y += i.height + gap
+    return im
+
+
+def preview_fonts(path, outline=None):
+    """[(name, font, outline font)] to draw: one file, or a font folder's four
+    settings fonts in their order, each with the _outline beside it."""
+    if not os.path.isdir(path):
+        return [(os.path.basename(path), Font.load(path), Font.load(outline) if outline else None)]
+    if outline:
+        print('--outline bo qua: moi font dung file _outline cua no trong thu muc')
+    have = [n for n in SETTINGS if os.path.isfile(os.path.join(path, n + '.font.memfs'))]
+    for n in SETTINGS:
+        if have and n not in have:
+            print('khong thay %s.font.memfs - bo qua' % n)
+    out = []
+    for n in have:
+        o = os.path.join(path, n + '_outline.font.memfs')
+        out.append((n, Font.load(os.path.join(path, n + '.font.memfs')), Font.load(o) if os.path.isfile(o) else None))
+    return out
+
+
 def cmd_preview(a):
-    font = Font.load(a.font)
-    outline = Font.load(a.outline) if a.outline else None
     text = a.text
     if a.map:
         with open(a.map, encoding='utf-8') as f:
             fmap = json.load(f)
         text = ''.join(fmap.get(c, c) for c in text)
-    missing = sorted(set(c for c in text if font.glyph(c) is None))
-    lines = [render_text(font, line, outline) for line in text.split('\\n')]
-    from PIL import Image
-    im = Image.new('RGBA', (max(l.width for l in lines), sum(l.height for l in lines)), (40, 40, 60, 255))
-    y = 0
-    for l in lines:
-        im.paste(l, (0, y))
-        y += l.height
-    im.save(a.out)
-    print('-> %s%s' % (a.out, ('  (font khong co: %s)' % ''.join(missing)) if missing else ''))
+    fonts = preview_fonts(a.font, a.outline)
+    if not fonts:
+        print('LOI: %s khong co font nao trong %s' % (a.font, ', '.join(n + '.font.memfs' for n in SETTINGS)))
+        return 1
+    blocks, lacking = [], False
+    for name, font, outline in fonts:
+        missing = sorted(set(c for c in text.replace('\\n', '') if font.glyph(c) is None))
+        if missing:
+            lacking = True
+            print('%s khong co: %s' % (name, ''.join(missing)))
+        blocks.append(stack([render_text(font, line, outline) for line in text.split('\\n')]))
+    if lacking and not a.map:
+        print('Font dung bang ma (gen --map) thi chon them --map de ma hoa chu nhu kich ban.')
+    stack(blocks, PREVIEW_GAP, rule=True).save(a.out)
+    order = ''
+    if len(fonts) > 1:
+        order = '  (tu tren xuong: %s)' % ', '.join(
+            '%s %s' % (n, SETTINGS_MARKS[SETTINGS.index(n)]) for n, _, _ in fonts)
+    print('-> %s%s' % (a.out, order))
     return 0
 
 
@@ -1070,7 +1116,8 @@ def main():
     s.add_argument('font')
     s.add_argument('out')
     s = sub.add_parser('preview', help='draw a line of text with the font into a PNG')
-    s.add_argument('font')
+    s.add_argument('font', help='a .font.memfs, or a font folder: its four settings fonts '
+                                '(standard, extra, extra2, extra3), one under another, each with its outline')
     s.add_argument('text', help='text; \\n starts a new line')
     s.add_argument('out')
     s.add_argument('--outline', help='the matching _outline font, drawn under the text in black')
