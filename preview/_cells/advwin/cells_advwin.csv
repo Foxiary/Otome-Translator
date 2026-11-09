@@ -1,0 +1,36 @@
+﻿file,texture,x,y,w,h,parts
+mat_advsen/mat_advsen_bg.png,mat_advsen,4,4,2020,1180,mat_advsen_bg
+mat_advsen/mat_advsen_texbase_off_1.png,mat_advsen,4,1188,840,116,mat_advsen_texbase_off_1 mat_advsen_texbase_off_3 mat_advsen_texbase_off_4
+mat_advsen/mat_advsen_texbase_on_1.png,mat_advsen,848,1188,840,116,mat_advsen_texbase_on_1 mat_advsen_texbase_on_3 mat_advsen_texbase_on_4
+mat_advsen/mat_advsen_bg_acc_r.png,mat_advsen,1692,1188,300,192,mat_advsen_bg_acc_r
+mat_advsen/mat_advsen_bg_acc_l.png,mat_advsen,4,1308,414,202,mat_advsen_bg_acc_l
+mat_advsen/mat_advsen_cursor_1.png,mat_advsen,422,1308,740,56,mat_advsen_cursor_1 mat_advsen_cursor_3 mat_advsen_cursor_4
+mat_advsen/mat_advsen_acc_l_1.png,mat_advsen,1166,1308,98,142,mat_advsen_acc_l_1 mat_advsen_acc_l_3 mat_advsen_acc_l_4
+mat_advsen/mat_advsen_acc_r_1.png,mat_advsen,1268,1308,98,142,mat_advsen_acc_r_1 mat_advsen_acc_r_3 mat_advsen_acc_r_4
+mat_advwin_win_cg/mat_adwin_win.png,mat_advwin_win_cg,0,0,2020,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,480,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,896,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1184,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1376,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1504,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1664,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1792,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1856,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,1984,420,mat_adwin_win
+mat_advwin_win_chr00/mat_adwin_win_0_0.png,mat_advwin_win_chr00,0,0,2016,420,mat_adwin_win
+mat_adwin/mat_adwin_kaisou_base.png,mat_adwin,4,4,1920,1080,mat_adwin_kaisou_base
+mat_adwin/mat_adwin_okuri.png,mat_adwin,1928,4,100,70,mat_adwin_okuri
+mat_adwin/mat_adwin_jisyo_icon.png,mat_adwin,1928,78,48,48,mat_adwin_jisyo_icon
+mat_adwin/text_atari.png,mat_adwin,1980,78,48,48,text_atari
+mat_adwin/name_atari.png,mat_adwin,1928,130,42,42,name_atari name_atari_1
+mat_adwin/mat_adwin_kaisou_blkline.png,mat_adwin,4,1088,1920,114,mat_adwin_kaisou_blkline mat_adwin_kaisou_blkline_1
+mat_adwin/mat_adwin_skip_auto_1.png,mat_adwin,4,1206,322,604,mat_adwin_skip_auto_1
+mat_adwin/mat_adwin_skip_kyosei_1.png,mat_adwin,330,1206,302,550,mat_adwin_skip_kyosei_1
+mat_adwin/mat_adwin_skip_kidoku_1.png,mat_adwin,636,1206,302,550,mat_adwin_skip_kidoku_1
+mat_adwin/mat_adwin_jisyo_icon_base.png,mat_adwin,942,1206,368,66,mat_adwin_jisyo_icon_base
+mat_adwin/mat_adwin_okuri_ef.png,mat_adwin,1314,1206,132,102,mat_adwin_okuri_ef mat_adwin_okuri_ef_1
+mat_adwin/mat_adwin_skip_auto_txt.png,mat_adwin,1450,1206,120,104,mat_adwin_skip_auto_txt
+mat_adwin/mat_adwin_skip_kidoku_txt.png,mat_adwin,1574,1206,120,102,mat_adwin_skip_kidoku_txt
+mat_adwin/mat_adwin_skip_kyosei_txt.png,mat_adwin,1698,1206,116,102,mat_adwin_skip_kyosei_txt
+mat_adwin/mat_adwin_jisyo_icon_txt.png,mat_adwin,1818,1206,170,36,mat_adwin_jisyo_icon_txt
+mat_adwin_facepic_test01/mat_adwin_facepic.png,mat_adwin_facepic_test01,0,0,820,516,mat_adwin_facepic

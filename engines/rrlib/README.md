@@ -39,9 +39,12 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    Mỗi ô được xử lý như builder cũ của nhóm dịch:
    - bỏ `「」『』“”` và đổi `"` thành `'` vì font không có các dấu này;
    - ngắt dòng ở 62 ký tự;
-   - tag (`#P`, `#T`, `#KW`…) ghi **đúng như trong ô**. Có tag hay không là do người sửa bản dịch quyết định; công cụ không tự thêm hay bỏ tag nào. Kiểm tag bằng `audit.py` (bước 3) hoặc `sheetfix.py`.
+   - tag (`#P`, `#T`, `#KW`…) ghi **đúng như trong ô**. Có tag hay không là do người sửa bản dịch quyết định; công cụ không tự thêm tag nào. Kiểm tag bằng `audit.py` (bước 3) hoặc `sheetfix.py`. Chỉ hai lỗi `#P` được tự sửa, vì để nguyên thì câu đó chắc chắn hỏng trong game (báo cáo ghi rõ ô để sửa sheet; sheet 09/11 có 27 và 4 ô):
+     - ô mà mọi `#P` đều đặt câu ra ngoài màn hình (`#P(520,1200)`) thì bỏ tag. Bản JP giấu các câu thơ đó vì chữ đã vẽ sẵn trên ảnh; bản Việt mà giữ tag thì chỉ đọc được trong backlog;
+     - tag bị dời dấu phẩy kiểu `#P(1110220),` thì trả lại tag của câu JP (`#P(1110,220)`).
+   - riêng **khoá từ điển** thì không theo ô. Kịch bản mở một mục từ điển bằng `Mov GAMESTR_DictWords, <khoá>`, và game chỉ tìm thấy mục khi khoá giống *hệt* tiêu đề mục đó trong `exefs/main` (bỏ phần `#R(...)`, phân biệt hoa/thường). Khoá không hiện ra màn hình, nên công cụ ghi khoá theo đúng tiêu đề ở tab `exe` của chính bảng dịch (hoặc file `--exe-list`), mã hoá y như `exetext.py import` sẽ ghi. Tiêu đề nào tab `exe` để tiếng Nhật thì khoá cũng giữ tiếng Nhật. Báo cáo ghi rõ ô nào trong sheet khác tiêu đề để sửa cho giống (sheet 09/11: 71/131 ô). Muốn khớp thì hai bước phải dùng **cùng một bảng mã** (`--use-map` ở đây, `--map` ở exetext).
 
-   Ô nào không ghi được thì giữ câu của bản mod: câu còn sót kana (font dùng các ô kana cho chữ Việt nên sẽ hiện sai chữ), câu chưa dịch, hai dòng dịch khác nhau cho cùng một câu. File báo cáo ghi rõ tab, dòng và lý do. Thêm `--apply` thì ghi vào `out/`, rồi chép vào `romfs/common/` của mod.
+   Ô nào không ghi được thì giữ câu của bản mod: câu còn sót kana (font dùng các ô kana cho chữ Việt nên sẽ hiện sai chữ) hoặc chữ Hán nằm ngoài ngoặc (chữ Hán trong ngoặc như `tộc Hoa (嬅)` là chú thích, vẫn ghi và hiện đúng chữ), câu chưa dịch, hai dòng dịch khác nhau cho cùng một câu. File báo cáo ghi rõ tab, dòng và lý do. Thêm `--apply` thì ghi vào `out/`, rồi chép vào `romfs/common/` của mod.
 
 3. **Kiểm bản patch** mà không sửa gì:
 
@@ -50,6 +53,27 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
    ```
 
    Báo các lỗi: code khác JP, số chuỗi lệch, file đọc nhầm chunk, câu mất `#P` / `#T` / `#KW`, câu bị `#P` đẩy ra ngoài màn hình, trường độ dài code sai.
+
+   **Tìm câu tràn khung** (tool "Tìm câu tràn khung", nhóm Bản patch). Game không tự xuống dòng và không cắt chữ theo khung: dòng nào dài quá thì chạy ra khỏi màn hình, chui dưới dải tên trong backlog, hay ra khỏi cuộn giấy của từ điển. Kịch bản đang ngắt ở 62 ký tự, vừa với font của bản 02/10; font rộng hơn sẽ đẩy các dòng dài ra ngoài.
+
+   ```
+   python tools/overflow.py --mod <thư mục mod> --map font.json --csv tran_khung.csv
+   ```
+
+   Công cụ xếp chữ từng dòng bằng chính font trong mod, như game làm, rồi so với chỗ dòng đó được vẽ:
+   - câu có `#P(x,y)`: từ x tới mép phải màn hình (1920);
+   - câu không có `#P`: khung thoại (**ước lượng** theo ảnh giao diện, chưa đo với câu dài trong game; ô Mép phải khung thoại để chỉnh);
+   - backlog: chữ từ x 240 tới dải tên màu xanh ở x 1258, vẽ nhỏ hơn (0,9);
+   - từ điển (用語解説, chữ trong `exefs/main` do `exetext.py` ghi): từ x 576 tới mép giấy ở x 1362, luôn dùng font `extra2`;
+   - lựa chọn: nút rộng 840 px (**ước lượng**).
+
+   Truyện vẽ bằng font chọn trong cài đặt (一 二 三 四), nên mỗi dòng được đo bằng cả 4 font và báo theo font rộng nhất; ô Chỉ đo font để đo riêng một font. Kết quả in số câu tràn theo từng chỗ, bảng theo từng font (một dòng chứa được bao nhiêu chữ, font cần hẹp lại bao nhiêu % để 99% số dòng vừa), các câu lố nhiều nhất và các chữ font không có. File `.csv` ghi từng câu: kịch bản, số thứ tự (`const_index` trong sheet; với từ điển là địa chỉ trong danh sách của `exetext.py`), lố bao nhiêu px ở đâu, và **gợi ý ngắt dòng** cho vừa mọi chỗ câu đó hiện (với câu chỉ có một vị trí và không có `#T`). Gợi ý làm câu dài thêm dòng thì cột `note` nhắc xem câu nằm ngay dưới có bị đè không.
+
+   Nhiều câu cùng tràn một lúc thường là do font, không phải do bản dịch: bảng theo font cho biết nên giảm cỡ font nào (ô Cỡ chữ của "Tạo font tiếng Việt") thay vì sửa tay từng câu.
+
+   Bản dịch chỉ có một mà người chơi chọn được 4 font, nên phần **kiểu tràn** chia câu tràn làm hai loại:
+   - **tràn ở mọi font**: lỗi của câu (dòng quá dài, câu chưa ngắt dòng, `#P` đặt quá sát mép phải). Sửa bản dịch; cột `fonts` của file `.csv` ghi `mọi font`;
+   - **chỉ tràn ở một số font**: các font chưa rộng đều nhau. Không sửa bản dịch mà chỉnh cỡ hoặc bề ngang font cho tới khi loại này về 0 (hoặc gần 0); cột `fonts` ghi `chỉ extra, standard`…
 
 4. **Sửa bản patch.** Lệnh này chỉ chạy thử, in báo cáo, không ghi file:
 
@@ -77,7 +101,7 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    Trong app việc này có hai bước, nằm ở nhóm **Ảnh giao diện**:
 
-   **Bước 1: "Lấy ảnh của một màn hình ra".** Chọn màn hình và một thư mục, tốt nhất là thư mục trống. Nếu thư mục đã có ảnh lấy ra từ trước, công cụ chưa ghi gì: app hỏi "Ghi đè ảnh trong thư mục này?" và nêu những ảnh khác ảnh gốc của game (thường là ô bạn đã vẽ lại). Giống Finder hay File Explorer, bạn chọn: **giữ ảnh đã sửa** (chỉ ghi lại phần còn lại), **thay bằng ảnh gốc**, hoặc **chọn từng ảnh** (mỗi ảnh một câu hỏi "Giữ hay thay?", có ô "Làm vậy với các ảnh còn lại"). Ảnh nào bị thay thì được chép sang `<tên>.png.bak` nằm cạnh nó trước. Bằng dòng lệnh thì thêm `--overwrite`, và `--keep <file>` cho từng ảnh muốn giữ. Bỏ trống thư mục thì chỉ xem danh sách các ô. Bằng dòng lệnh:
+   **Bước 1: "Lấy ảnh của một màn hình ra".** Chọn màn hình và một thư mục, tốt nhất là thư mục trống. Nếu thư mục đã có ảnh lấy ra từ trước, công cụ chưa ghi gì: app hỏi "Ghi đè ảnh trong thư mục này?" và nêu những ảnh khác ảnh gốc của game (thường là ô bạn đã vẽ lại). Giống Finder hay File Explorer, bạn chọn: **giữ ảnh đã sửa** (chỉ ghi lại phần còn lại), **thay bằng ảnh gốc**, hoặc **chọn từng ảnh** (mỗi ảnh một câu hỏi "Giữ hay thay?", có ô "Làm vậy với các ảnh còn lại", và hiện ảnh của bạn cạnh ảnh gốc của game để so). Ảnh nào bị thay thì được chép sang `<tên>.png.bak` nằm cạnh nó trước. Bằng dòng lệnh thì thêm `--overwrite`, và `--keep <file>` cho từng ảnh muốn giữ. Bỏ trống thư mục thì chỉ xem danh sách các ô. Bằng dòng lệnh:
 
    ```
    python tools/nsp.py romfs "<game>.nsp" jp "spec_win/ssdata/ttlm_nam.*"
@@ -133,12 +157,12 @@ pycryptodome nếu có, không có thì gọi lệnh `openssl`. Repo không ch�
 
    ```
    python tools/font.py gen --template <JP>/romfs/spec_win/font --out <thư mục mod>/romfs/spec_win/font \
-       --font MyFont-Regular.ttf --map font.json --map-out font-moi.json
+       --font MyFont-Regular.ttf --map font.json --map-out font-moi.json --preview xem-thu.png
    python tools/font.py gen ... --apply
    python tools/font.py preview <thư mục mod>/romfs/spec_win/font "Xin chào, Ể Ổ ặ" thu.png --map font-moi.json
    ```
 
-   Lần chạy thử in cỡ chữ, độ dày viền đo được và **độ rộng trung bình một chữ so với font gốc**: rộng hơn khoảng 8% trở lên thì câu dài (ngắt ở 62 ký tự) có thể tràn khung, nên chọn font hẹp hơn hoặc giảm cỡ (ô Cỡ chữ). "Xem trước font" vẽ chữ bạn nhập ra ảnh: chọn thư mục font thì ảnh có 4 khối, lần lượt 一 二 三 四, mỗi font kèm viền; chọn một file `.font.memfs` thì chỉ vẽ font đó. Font dựng có Map thì phải chọn cả Bảng mã (bảng đã lưu bằng ô Lưu bảng mã), không thì chữ Việt nằm trên ô kana bị báo thiếu. Chưa thử font dựng bằng công cụ này trong game: hãy xem thoại, menu, và các chữ hoa mới thêm.
+   Lần chạy thử in cỡ chữ, độ dày viền đo được và **độ rộng trung bình một chữ so với font gốc**: rộng hơn khoảng 8% trở lên (so với font gốc, hoặc với 18,4 px nếu chữ Latin của font gốc hẹp hơn, như `extra3`) thì câu dài (ngắt ở 62 ký tự) có thể tràn khung, nên chọn font hẹp hơn, giảm cỡ (ô Cỡ chữ) hoặc **bóp ngang** (ô Bề ngang, tính bằng %: 90 là mỗi chữ hẹp đi 10% mà vẫn cao như cũ, độ rộng từng chữ cũng giảm theo; có ô riêng cho từng font). "Tìm câu tràn khung" (bước 3) đo trên toàn bộ kịch bản và cho biết font cần hẹp lại bao nhiêu %. Vì người chơi chọn được 4 font mà bản dịch chỉ có một, hãy chỉnh sao cho 4 font rộng đều nhau: phần "kiểu tràn" của công cụ đó phải còn rất ít câu "chỉ tràn ở một số font". Với các file font đang dùng (FertigoPro, UVN La Xanh, SignLanguage, VL Andalusia), bộ đều nhau nhất đã đo là `standard` Bề ngang 80 + Cỡ chữ 40, `extra` Bề ngang 85, `extra2` và `extra3` Bề ngang 90 (giữ cỡ tự chỉnh): 125 câu tràn ở mọi font, 21 câu tràn riêng. Game xếp chữ chỉ theo độ rộng từng chữ, không có kerning hay nét nối, nên font **chữ nối nét / bút lông** (chữ này lấn sang chữ kia, như VL Ricca Script, VL Kathya) sẽ dính thành một khối với viền; công cụ tự giãn thêm vài px cho mỗi chữ và dấu cách của font đó và in dòng "gian them N px". Font chữ đã cách nhau thì giữ nguyên. Mỗi chữ nằm trong một ô 60×62 px, viền nằm chung ô với chữ. Chữ có đuôi (g, p, y, dấu nặng) được dời lên trong ô, còn chữ hoa có hai dấu (Ằ, Ẩ, Ể…) dời xuống, cho viền đủ chỗ. Độ dời ghi vào `dy` nên trên màn hình chữ vẫn nằm đúng dòng, và viền dưới đuôi chữ g không bị cắt phẳng như ở font JP. Chữ nào quá to so với ô (cỡ chữ quá lớn) thì lần chạy thử in "vien bi cat" kèm các chữ đó; khi đó giảm cỡ chữ. Điền ô **Ảnh xem trước** (và **Chữ xem trước** nếu muốn câu của riêng bạn; bỏ trống thì vẽ một câu mẫu và mọi chữ có dấu) thì lần chạy thử vẽ chữ bằng chính các font sắp ghi: 4 khối, lần lượt 一 二 三 四, mỗi font kèm viền. Hộp hỏi "Ghi file?" hiện luôn ảnh đó, nên xem rồi mới quyết định ghi. Font đã cài thì xem bằng "Xem trước font": chọn thư mục font (4 font) hoặc một file `.font.memfs`; font dựng có Map thì chọn cả Bảng mã (bảng đã lưu bằng ô Lưu bảng mã), không thì chữ Việt nằm trên ô kana bị báo thiếu. Chưa thử font dựng bằng công cụ này trong game: hãy xem thoại, menu, và các chữ hoa mới thêm.
 
    Không dùng Map thì chữ Việt được thêm với mã Unicode thật và kana giữ nguyên, nên chữ Nhật còn sót trong file chương trình sẽ hiện đúng tiếng Nhật. Nhưng khi đó **mọi** câu tiếng Việt phải dựng lại bằng Unicode, kể cả tên nhân vật và lựa chọn mà sheet không có — các công cụ chưa làm việc đó, nên hiện giờ hãy dùng Map.
 

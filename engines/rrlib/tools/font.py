@@ -7,8 +7,8 @@
     python font.py preview standard.font.memfs "Xin chào" out.png [--outline standard_outline.font.memfs]
     python font.py preview <font folder> "Xin chào" out.png [--map map.json]   # 一 二 三 四, each outlined
     python font.py gen --template <JP font folder> --out <mod>/romfs/spec_win/font \\
-        --font Foo-Regular.ttf [--font Bar.ttf ...] [--font-extra2 Brush.ttf] \\
-        [--map map.json] [--map-out map.json] [--apply]
+        --font Foo-Regular.ttf [--font Bar.ttf ...] [--font-extra2 Brush.ttf] [--width 90] \\
+        [--map map.json] [--map-out map.json] [--preview new.png [--preview-text "Xin chào"]] [--apply]
 
 `gen` redraws Latin glyphs from OTF/TTF fonts - the same idea as the Otomate
 ffugen.py, for this engine's format. Give it the JP font folder (or one
@@ -39,7 +39,13 @@ the sheet does not cover included; with today's mod scripts use --map.
 The size is fitted so 'H' is as tall as the template's and the letters sit on
 the template's baseline. --px sets one size for every font, --px-standard /
 --px-extra / ... one font's (its _outline follows); the dry run prints the
-fitted size and how much wider the letters come out than the template's. An *_outline font is the border
+fitted size and how much wider the letters come out than the template's.
+--width 90 (or --width-standard / ...) draws every letter 90% as wide at the
+same height, and its advance with it: the way to fit a line in fewer px
+without making the letters shorter. The game has no kerning, so a font whose
+letters run into each other (a joining script, a brush face) gets a few px
+more on every advance and the space - see
+tracking(); the dry run says how many. An *_outline font is the border
 drawn under the text: its glyphs are the text glyphs widened by a radius that
 gen measures on the template pair (4.0-4.8 px depending on the font).
 
@@ -71,7 +77,9 @@ FORMAT (worked out on JP v1.0.0; see also CLAUDE.md "Fonts")
   grid; the pen origin is 8 px in (-offsetX) and the baseline 53 px down.
   dx/dy move a glyph whose ink would leave the cell: the JP 'p' is drawn 3 px
   higher in its cell with dy 10 instead of 7, 'î' 3 px to the right with
-  dx -3; gen follows the same rule (ink kept right of x 7 and above y 59).
+  dx -3; gen follows the same rule (ink kept right of x 7 and above y 59)
+  and also keeps the outline's width clear on every side (place()), so the
+  border under a g's tail is not cut flat on the cell's last row as JP's is.
 
   .rtex: 'RTEX' header (see sprite.py), 2048x2048, flags 0x84002 = BC3/DXT5,
   linear block order (no swizzle), payload 'RZ' + BE size + zlib. Alpha is
@@ -596,10 +604,11 @@ ASCII = [chr(c) for c in range(0x21, 0x7f)]
 
 
 class Source(object):
-    def __init__(self, spec, px):
+    def __init__(self, spec, px, width=1.0):
         from PIL import ImageFont
         path, _, idx = spec.partition('#')
         self.path, self.index, self.px = path, int(idx or 0), px
+        self.width = width                # horizontal scale of every glyph and advance (--width)
         if not os.path.isfile(path):
             raise SystemExit('font not found: %s' % path)
         self.font = ImageFont.truetype(path, px, index=self.index)
@@ -618,6 +627,10 @@ class Source(object):
         m = self.font.getmask(ch, mode='L')
         return (m.size, bytes(m))
 
+    def length(self, text):
+        """Advance of `text` in px, at this source's width."""
+        return self.font.getlength(text) * self.width
+
     def has(self, ch):
         if self.cmap is not None:
             return ord(ch) in self.cmap
@@ -631,8 +644,8 @@ class Source(object):
 
 
 class Chain(object):
-    def __init__(self, specs, px):
-        self.sources = [Source(s, px) for s in specs]
+    def __init__(self, specs, px, width=1.0):
+        self.sources = [Source(s, px, width) for s in specs]
 
     def pick(self, ch):
         for s in self.sources:
@@ -667,6 +680,33 @@ LEFT_MIN = 7         # the JP glyphs keep ink right of this column ...
 BOTTOM_MAX = 59      # ... and above this row; past it the glyph moves (dx/dy)
 
 
+def outline_room(radius):
+    """Px the _outline glyph reaches past the text's ink: widen() spreads
+    `radius` px plus a soft rim that fades out 1 px further (4.7 -> 5)."""
+    return int(math.ceil(radius + 1)) - 1 if radius else 0
+
+
+def place(box, w, h, room=0):
+    """-> (sx, sy, fits) for ink with box (left, top, right, bottom) in a w x h
+    cell: move it sx px right and sy px up so it keeps LEFT_MIN / BOTTOM_MAX
+    and leaves `room` px on every side for the outline drawn from it.
+
+    The JP fonts only keep the text in: their g/p/y end on row 59 and the
+    outline under them is cut flat on the cell's last row. A Vietnamese g has a
+    round tail, and the cut showed (user, 2026-11-08). Moving the ink is free -
+    dx/dy put it back on the line - so it moves as little as it can and only
+    when it must; a glyph too tall for its room keeps the text whole and shares
+    the cut between top and bottom. fits: nothing is cut."""
+    l, t, r, b = box
+    lo_x, hi_x = max(LEFT_MIN, room) - l, (w - room) - r
+    sx = max(lo_x, min(0, hi_x))                     # the left limit wins, as before
+    lo_y, hi_y = b - min(BOTTOM_MAX, h - room), t - room
+    sy = max(lo_y, min(0, hi_y)) if lo_y <= hi_y else (lo_y + hi_y + 1) // 2
+    sy = max(b - h, min(t, sy))                      # never cut the text itself
+    fits = lo_x <= hi_x and lo_y <= hi_y
+    return sx, sy, fits
+
+
 class Metrics(object):
     """Where a template draws its letters, measured on its own glyphs."""
 
@@ -687,24 +727,75 @@ class Metrics(object):
         return max(set(ys), key=ys.count)
 
 
-def draw_glyph(source, text, m, dy0):
-    """-> (alpha image of the cell, advance, dx, dy, clipped?) for `text`."""
+PAD = 32             # room around a cell while drawing, for ink that leaves it
+
+
+def _draw(source, text, m):
+    """`text` drawn with its pen at (PAD + origin, PAD + baseline) of a cell
+    with PAD px around it -> (image, ink bbox or None)."""
     from PIL import Image, ImageDraw
-    pad = 32
-    im = Image.new('L', (m.w + 2 * pad, m.h + 2 * pad), 0)
-    ImageDraw.Draw(im).text((pad + m.origin, pad + m.baseline), text, font=source.font,
+    im = Image.new('L', (m.w + 2 * PAD, m.h + 2 * PAD), 0)
+    ImageDraw.Draw(im).text((PAD + m.origin, PAD + m.baseline), text, font=source.font,
                             fill=255, anchor='ls')
-    adv = max(1, int(round(source.font.getlength(text))))
-    bb = im.getbbox()
+    k = getattr(source, 'width', 1.0)
+    if k != 1:
+        # narrower (or wider) round the pen: the letter keeps its height and
+        # baseline, and still starts where the pen is
+        pen = PAD + m.origin
+        # BOX (area average) when narrowing: LANCZOS rings, and the faint halo
+        # it leaves would count as ink when tracking() measures the gaps
+        sq = im.resize((max(1, int(round(im.width * k))), im.height), Image.BOX if k < 1 else Image.BILINEAR)
+        im = Image.new('L', im.size, 0)
+        im.paste(sq, (int(round(pen - pen * k)), 0))
+    return im, im.getbbox()
+
+
+TRACK_GAP = 1        # px: letters whose ink sits closer than this get spaced out
+WIDTH_MIN, WIDTH_MAX = 50, 150     # --width, in %
+
+
+def tracking(chain, m, text=None):
+    """Px to add to every advance so neighbouring letters stop running into
+    each other: 0 for a font whose letters already clear each other.
+
+    A joining script (VL Ricca Script) or a brush face (VL Kathya) has each
+    letter's strokes reach past its advance into the next one - the font's
+    contextual forms and kerning make them meet, but the game has neither,
+    and the outline under each letter turns the overlaps into one blob. The
+    median clear space between neighbouring letters' ink in `text` (SAMPLE),
+    as gen draws them, is brought up to TRACK_GAP: standard sources measure
+    +2 and get nothing, those two -3 and get 4."""
+    gaps = []
+    for word in (text or SAMPLE).split():
+        prev = None                       # (advance, ink right) of the letter before
+        for ch in word:
+            src = chain.pick(ch)
+            bb = _draw(src, ch, m)[1] if src else None
+            if prev and bb:
+                gaps.append(prev[0] + (bb[0] - PAD - m.origin) - prev[1])
+            prev = (max(1, int(round(src.length(ch)))), bb[2] - PAD - m.origin) if bb else None
+    if not gaps:
+        return 0
+    return max(0, TRACK_GAP - sorted(gaps)[len(gaps) // 2])
+
+
+def draw_glyph(source, text, m, dy0, track=0, room=0):
+    """-> (alpha image of the cell, advance, dx, dy, clipped?, fits?) for
+    `text`; track (from tracking()) is added to the advance, room (from
+    outline_room()) kept clear around the ink for the outline - the same for a
+    font and its _outline so both place every glyph alike. clipped: the text
+    itself is cut; fits: neither text nor outline is."""
+    pad = PAD
+    im, bb = _draw(source, text, m)
+    adv = max(1, int(round(source.length(text)))) + track
     sx = sy = 0
+    fits = True
     if bb:
-        left, bottom = bb[0] - pad, bb[3] - pad
-        sx = max(0, LEFT_MIN - left)
-        sy = max(0, bottom - BOTTOM_MAX)
+        sx, sy, fits = place([v - pad for v in bb], m.w, m.h, room)
     cell = im.crop((pad - sx, pad + sy, pad - sx + m.w, pad + sy + m.h))
     clipped = bool(bb) and cell.getbbox() != (bb[0] - pad + sx, bb[1] - pad - sy,
                                               bb[2] - pad + sx, bb[3] - pad - sy)
-    return cell, adv, -sx, dy0 + sy, clipped
+    return cell, adv, -sx, dy0 + sy, clipped, fits and not clipped
 
 
 def widen(alpha, radius, hard):
@@ -802,21 +893,29 @@ def plan_chars(font, fmap, latin):
     return out
 
 
-def generate(tpl, chain, chars, m, outline=None):
+def generate(tpl, chain, chars, m, outline=None, track=0, room=0):
     """Draw `chars` [(code, text)] into `tpl` (a Font, edited in place).
 
     m: the Metrics to draw on - the main font's, for an _outline font too.
-    outline: (radius, hardness) when tpl is an _outline font. Returns a report."""
+    outline: (radius, hardness) when tpl is an _outline font. track: px
+    added to every advance drawn, and to the space's (see tracking()). room:
+    px kept clear around each glyph for the family's outline, the same for
+    the font and its _outline (see place()). Returns a report."""
     dy0 = Metrics.dy0(tpl)
-    rep = {'drawn': 0, 'added': [], 'missing': [], 'clipped': []}
+    rep = {'drawn': 0, 'added': [], 'missing': [], 'clipped': [], 'tight': []}
+    space = tpl.glyph(' ')
+    if track and space is not None:
+        space.adv += track
     for code, text in chars:
         src = chain.pick(text)
         if src is None:
             rep['missing'].append(text)
             continue
-        alpha, adv, dx, dy, clipped = draw_glyph(src, text, m, dy0)
+        alpha, adv, dx, dy, clipped, fits = draw_glyph(src, text, m, dy0, track, room)
         if clipped:
             rep['clipped'].append(text)
+        elif not fits:
+            rep['tight'].append(text)
         if outline:
             alpha = widen(alpha, *outline)
         g = tpl.glyph(code)
@@ -863,10 +962,15 @@ def font_chains(fonts, own, files):
 
 
 SAMPLE = 'Xin chào, tôi là người Việt Nam. Hôm nay trời rất đẹp, chúng ta cùng đi dạo nhé!'
+# What one character takes on the line the VI scripts are wrapped for (62 to a
+# line, measured in game on the dialogue font). A template whose own Latin is
+# narrower - extra3's 12 px - was never what lines were sized by.
+LINE_CHAR_PX = 18.4
 
 
-def mean_advance(src, fmap=None):
-    """Mean advance in px of SAMPLE: from a template Font, or a Chain."""
+def mean_advance(src, track=0):
+    """Mean advance in px of SAMPLE: from a template Font, or a Chain spaced
+    out by `track` px (what gen writes)."""
     import unicodedata
     total = 0
     for ch in SAMPLE:
@@ -875,7 +979,7 @@ def mean_advance(src, fmap=None):
             total += g.adv if g else 0
         else:
             s = src.pick(ch)
-            total += int(round(s.font.getlength(ch))) if s else 0
+            total += int(round(s.length(ch))) + track if s else 0
     return total / float(len(SAMPLE))
 
 
@@ -894,6 +998,10 @@ def cmd_gen(a):
         print('CANH BAO: khong co --map. Chu Viet duoc them voi ma Unicode that va cac o kana giu chu Nhat,'
               ' nen kich ban hien tai (viet chu Viet bang ma kana) se hien kana (ộ -> ば).'
               ' Chi bo --map khi moi chuoi tieng Viet da dung Unicode.')
+    if a.preview_text and not a.preview:
+        raise SystemExit('--preview-text needs --preview: the image (.png) to draw it into')
+    if a.preview and os.path.isdir(a.preview):
+        raise SystemExit('--preview is the image file to save (.png), not a folder')
     files = font_files(a.template)
     if os.path.isfile(a.out):
         raise SystemExit('--out is a folder (e.g. <mod>/romfs/spec_win/font), not a file')
@@ -904,11 +1012,29 @@ def cmd_gen(a):
 
     extra = [(c, c) for c in (a.chars or '') if not c.isspace()]
     newmap = dict(fmap)
-    results = []
+    results, built = [], {}
+    borders = {}
+
+    def border_of(p):
+        """(radius, hardness) of the outline the family of `p` gets, or None
+        when its _outline font is not being built. Measured once on the
+        templates, so the font and its outline leave the same room."""
+        fam = family(p)
+        if fam not in borders:
+            d = os.path.dirname(p)
+            mp = os.path.join(d, fam + '.font.memfs')
+            op = os.path.join(d, fam + '_outline.font.memfs')
+            if op not in files or not os.path.isfile(mp):
+                borders[fam] = None
+            elif a.outline_radius:
+                borders[fam] = (a.outline_radius, 1.0)
+            else:
+                borders[fam] = fit_outline(Font.load(mp), Font.load(op))
+        return borders[fam]
+
     for p in files:
         tpl = Font.load(p)
         main_path = main_of(p)
-        outline = None
         if main_path:
             if not os.path.isfile(main_path):
                 raise SystemExit('%s is an outline font; its main font %s must sit beside it'
@@ -916,26 +1042,37 @@ def cmd_gen(a):
             ref = Font.load(main_path)
             if [g.vals() for g in ref.glyphs] != [g.vals() for g in tpl.glyphs]:
                 print('  ! %s: glyph table differs from %s' % (tpl.name, ref.name))
-            outline = (a.outline_radius, 1.0) if a.outline_radius else fit_outline(ref, tpl)
         else:
             ref = tpl
+        border = border_of(p)
+        outline = border if main_path else None
+        room = outline_room(border[0]) if border else 0
         m = Metrics(ref)
         specs = chains[family(p)]
         fit = fit_px(specs[0], m.cap)
         px = getattr(a, 'px_' + family(p), None) or a.px or fit
-        chain = Chain(specs, px)
+        width = getattr(a, 'width_' + family(p), None) or a.width or 100
+        if not WIDTH_MIN <= width <= WIDTH_MAX:
+            raise SystemExit('--width %g: be ngang phai tu %d den %d (%%)' % (width, WIDTH_MIN, WIDTH_MAX))
+        chain = Chain(specs, px, width / 100.0)
         chars = plan_chars(tpl, fmap, not a.no_latin) + extra
-        print('%s: %d glyph, chu H cao %d px, baseline %d -> %s %d px%s%s'
+        # measured on the main font's metrics, so the outline gets the same advances
+        track = tracking(chain, m)
+        print('%s: %d glyph, chu H cao %d px, baseline %d -> %s %d px%s%s%s'
               % (tpl.name, len(tpl.glyphs), m.cap, m.baseline, chain.sources[0].name, px,
                  ' (dat tay; vua chu H la %d px)' % fit if px != fit else ' (vua chu H)',
+                 ', be ngang %g%%' % width if width != 100 else '',
                  ', vien %.1f px' % outline[0] if outline else ''))
         if not main_path:
-            old, new = mean_advance(ref, fmap), mean_advance(chain, fmap)
+            if track:
+                print('  chu cua font nay de len nhau (net noi / but long): gian them %d px moi chu va dau cach'
+                      % track)
+            old, new = mean_advance(ref), mean_advance(chain, track)
             print('  rong TB 1 chu: font goc %.1f px -> moi %.1f px (%+d%%)%s' % (
                 old, new, round(100 * (new / old - 1)),
-                ' - cau dai co the tran khung, thu --px nho hon' if new > old * 1.08 else ''))
+                ' - cau dai co the tran khung, thu --px nho hon' if new > max(old, LINE_CHAR_PX) * 1.08 else ''))
         # an outline font is drawn on its main font's metrics: it must hug those letters
-        rep = generate(tpl, chain, chars, m, outline)
+        rep = generate(tpl, chain, chars, m, outline, track, room)
         data = tpl.to_bytes()
         check = Font(data, tpl.name)
         if len(check.glyphs) != len(tpl.glyphs):
@@ -943,11 +1080,22 @@ def cmd_gen(a):
         for code, text in rep['added']:
             if code == text and not code.isascii():
                 newmap[code] = code       # a letter under its own code: applysheet must pass it through
-        print('  ve %d chu, them %d o moi%s%s' % (
+        print('  ve %d chu, them %d o moi%s%s%s' % (
             rep['drawn'], len(rep['added']),
             ('; font khong co: ' + ''.join(rep['missing'])) if rep['missing'] else '',
-            ('; bi cat mep: ' + ''.join(rep['clipped'])) if rep['clipped'] else ''))
+            ('; bi cat mep: ' + ''.join(rep['clipped'])) if rep['clipped'] else '',
+            ('; vien bi cat (chu cao/rong qua o %dx%d, thu --px nho hon): %s'
+             % (m.w, m.h, ''.join(rep['tight']))) if rep['tight'] and not main_path else ''))
         results.append((os.path.basename(p), data))
+        built[os.path.basename(p)] = check
+
+    if a.preview:
+        # the new fonts as they would be written, the text encoded as applysheet
+        # would with the saved map - drawn on the dry run too, before any write
+        have = set(family(n) for n in built)
+        fonts = pick_fonts(have, built.get)
+        text = ''.join(newmap.get(c, c) for c in (a.preview_text or PREVIEW_SAMPLE))
+        draw_preview(fonts, text, a.preview, decode=dict((v, k) for k, v in newmap.items()))
 
     from patch import say_replaced, write_files
     if not a.apply:
@@ -1011,22 +1159,60 @@ def stack(images, gap=0, rule=False):
     return im
 
 
+# The text gen --preview draws when no --preview-text is given: a sentence,
+# then every small and the capital letters that sit on kana codes or are new.
+PREVIEW_SAMPLE = ('Ngày xưa ở làng ven biển, có cô gái tên Hằng: "Đừng sợ, tôi ở đây!"\\n'
+                  'ả ã ạ ằ ẳ ẵ ặ ầ ẩ ẫ ậ ề ể ễ ệ ỉ ĩ ị ồ ổ ỗ ộ ờ ở ỡ ợ ừ ử ữ ự ỳ ỷ ỹ ỵ đ\\n'
+                  'Ả Ạ Ằ Ặ Ẫ Ậ Đ Ể Ễ Ệ Ỉ Ị Ổ Ộ Ờ Ợ Ừ Ữ Ự Ỳ Ỹ 0123456789')
+
+
+def pick_fonts(have, load):
+    """[(name, font, outline font)] to draw from the families in `have`: the
+    four settings fonts in their order, or every font when none of them is
+    there. load(file name) gives a Font or None."""
+    names = [n for n in SETTINGS if n in have] or sorted(have)
+    if any(n in have for n in SETTINGS):
+        for n in SETTINGS:
+            if n not in have:
+                print('khong thay %s.font.memfs - bo qua' % n)
+    return [(n, load(n + '.font.memfs'), load(n + '_outline.font.memfs')) for n in names]
+
+
 def preview_fonts(path, outline=None):
-    """[(name, font, outline font)] to draw: one file, or a font folder's four
-    settings fonts in their order, each with the _outline beside it."""
+    """What `preview` draws: one file, or a font folder's settings fonts,
+    each with the _outline beside it."""
     if not os.path.isdir(path):
         return [(os.path.basename(path), Font.load(path), Font.load(outline) if outline else None)]
     if outline:
         print('--outline bo qua: moi font dung file _outline cua no trong thu muc')
-    have = [n for n in SETTINGS if os.path.isfile(os.path.join(path, n + '.font.memfs'))]
-    for n in SETTINGS:
-        if have and n not in have:
-            print('khong thay %s.font.memfs - bo qua' % n)
-    out = []
-    for n in have:
-        o = os.path.join(path, n + '_outline.font.memfs')
-        out.append((n, Font.load(os.path.join(path, n + '.font.memfs')), Font.load(o) if os.path.isfile(o) else None))
-    return out
+
+    def load(name):
+        p = os.path.join(path, name)
+        return Font.load(p) if os.path.isfile(p) else None
+    have = set(n[:-len('.font.memfs')] for n in os.listdir(path)
+               if n.endswith('.font.memfs') and not n.endswith('_outline.font.memfs'))
+    return pick_fonts(have, load)
+
+
+def draw_preview(fonts, text, out, encoded=True, decode=None):
+    """Draw text (\\n splits lines) with each (name, font, outline) into one
+    PNG, one block per font, and say what each font lacks (shown through
+    decode, {code: letter}, when the text is encoded)."""
+    blocks, lacking = [], False
+    for name, font, outline in fonts:
+        missing = sorted(set(c for c in text.replace('\\n', '') if font.glyph(c) is None))
+        if missing:
+            lacking = True
+            print('%s khong co: %s' % (name, ''.join((decode or {}).get(c, c) for c in missing)))
+        blocks.append(stack([render_text(font, line, outline) for line in text.split('\\n')]))
+    if lacking and not encoded:
+        print('Font dung bang ma (gen --map) thi chon them --map de ma hoa chu nhu kich ban.')
+    stack(blocks, PREVIEW_GAP, rule=True).save(out)
+    order = ''
+    if len(fonts) > 1:
+        order = '  (tu tren xuong: %s)' % ', '.join(
+            '%s %s' % (n, SETTINGS_MARKS[SETTINGS.index(n)]) if n in SETTINGS else n for n, _, _ in fonts)
+    print('anh xem truoc -> %s%s' % (out, order))
 
 
 def cmd_preview(a):
@@ -1037,23 +1223,9 @@ def cmd_preview(a):
         text = ''.join(fmap.get(c, c) for c in text)
     fonts = preview_fonts(a.font, a.outline)
     if not fonts:
-        print('LOI: %s khong co font nao trong %s' % (a.font, ', '.join(n + '.font.memfs' for n in SETTINGS)))
+        print('LOI: %s khong co file *.font.memfs nao' % a.font)
         return 1
-    blocks, lacking = [], False
-    for name, font, outline in fonts:
-        missing = sorted(set(c for c in text.replace('\\n', '') if font.glyph(c) is None))
-        if missing:
-            lacking = True
-            print('%s khong co: %s' % (name, ''.join(missing)))
-        blocks.append(stack([render_text(font, line, outline) for line in text.split('\\n')]))
-    if lacking and not a.map:
-        print('Font dung bang ma (gen --map) thi chon them --map de ma hoa chu nhu kich ban.')
-    stack(blocks, PREVIEW_GAP, rule=True).save(a.out)
-    order = ''
-    if len(fonts) > 1:
-        order = '  (tu tren xuong: %s)' % ', '.join(
-            '%s %s' % (n, SETTINGS_MARKS[SETTINGS.index(n)]) for n, _, _ in fonts)
-    print('-> %s%s' % (a.out, order))
+    draw_preview(fonts, text, a.out, bool(a.map))
     return 0
 
 
@@ -1134,8 +1306,18 @@ def main():
     for n in FAMILIES:
         s.add_argument('--px-' + n, type=int, metavar='PX',
                        help='pixel size for %s(_outline).font.memfs only, over --px' % n)
+    s.add_argument('--width', type=float, metavar='PCT',
+                   help='letter width in %% of the source font for every font (90 = 10%% narrower, same height);'
+                        ' default 100')
+    for n in FAMILIES:
+        s.add_argument('--width-' + n, type=float, metavar='PCT',
+                       help='letter width in %%%% for %s(_outline).font.memfs only, over --width' % n)
     s.add_argument('--map', help='JSON {letter: code} from applysheet.py --map: draw letters on those codes')
     s.add_argument('--map-out', help='write the map plus every letter added under its own code')
+    s.add_argument('--preview', metavar='PNG', help='draw text with the new fonts into this image, also on a dry run:'
+                                                    ' the four settings fonts (一 二 三 四), each with its outline')
+    s.add_argument('--preview-text', metavar='TEXT', help='text for --preview (\\n starts a new line);'
+                                                          ' default: a sentence and every Vietnamese letter')
     s.add_argument('--chars', help='more characters to draw at their own code')
     s.add_argument('--no-latin', action='store_true', help="keep the template's ASCII glyphs")
     s.add_argument('--outline-radius', type=float, help='outline width in px; default: measured')

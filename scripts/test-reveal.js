@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const {outputTarget} = require('../src/reveal');
+const {outputTarget, previewOf} = require('../src/reveal');
 
 const tool = args => ({args});
 const dir = (name) => ({name, kind: 'dir'});
@@ -25,3 +25,9 @@ assert.equal(outputTarget(tool([file('workbook'), dir('output folder'), flag('--
 assert.equal(outputTarget(tool([dir('--out-dir'), flag('--build')]), {'--out-dir': '/zips'}), '');
 assert.equal(outputTarget(tool([dir('--out-dir'), flag('--build')]), {'--out-dir': '/zips', '--build': true}), '/zips');
 assert.equal(outputTarget(tool([save('output XLSX')]), {'output XLSX': '/sheet.xlsx'}), '/sheet.xlsx');
+
+// The preview image a dry run of font.py gen drew, for the write dialog.
+assert.equal(previewOf('ui.font.memfs: ...\nanh xem truoc -> /tmp/xem thu.png  (tu tren xuong: standard 一, extra 二)\nchay thu - them --apply de ghi vao /mod/font\n'), '/tmp/xem thu.png');
+assert.equal(previewOf('anh xem truoc -> C:\\Users\\me\\p.png\r\n'), 'C:\\Users\\me\\p.png');
+assert.equal(previewOf('10 font san sang.\nchay thu - them --apply de ghi vao /mod/font'), '');
+assert.equal(previewOf(undefined), '');

@@ -16,7 +16,7 @@ const symbols = {Dump: '⇣', Inspect: '◎', Patch: '◈', Sheets: '▦', Image
 const summaries = {
   Dump: 'Take the whole game, or single files, out of your .nsp or .xci, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
-  Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it.',
+  Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it, find lines too wide for their box.',
   Sheets: 'Turn the translation sheet into a list of tag fixes.',
   Images: 'Menu labels, buttons and help lines are painted into textures: take them out as images, redraw them and put them back.',
   Executable: 'Text built into the program file (exefs/main): dialog questions, quick save messages, button help, glossary and chapter titles.',
@@ -28,7 +28,8 @@ const FONT = A('font', 'file', 'A font under romfs/spec_win/font, e.g. standard.
 // file dialog takes its filter from these words (src/file-types.js).
 const FAMILY = name => V(`--font-${name}`, 'file', `Font file (.ttf, .otf, .ttc) used only for the ${name} font and its outline, tried before Font`);
 const SIZE = name => V(`--px-${name}`, 'number', `Letter size in pixels for the ${name} font and its outline only, over Size; the dry run prints the size that fits H and how much wider the letters come out`);
-const FAMILIES = ['standard', 'extra', 'extra2', 'extra3', 'ui'].flatMap(name => [FAMILY(name), SIZE(name)]);
+const WIDTH = name => V(`--width-${name}`, 'number', `Letter width in % for the ${name} font and its outline only, over Width: 90 makes its letters 10% narrower at the same height`);
+const FAMILIES = ['standard', 'extra', 'extra2', 'extra3', 'ui'].flatMap(name => [FAMILY(name), SIZE(name), WIDTH(name)]);
 
 const tools = [
   // Runs in the app (src/game-extract.js), the extractor the project set-up uses.
@@ -60,14 +61,26 @@ const tools = [
   T('exehook', 'Inspect', 'Find redirects in the program', 'Lists the script reads a patched program file (exefs/main) sends elsewhere. An earlier patch used them for three prologue scripts.', 'tools/exehook.py', [],
     [A('main', 'file', 'exefs/main')]),
 
-  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped and encoded for the mod\'s Vietnamese font, with its tags exactly as the sheet has them, and the result is checked. Check the tags with Check a patch. Lines the sheet has no row for (names, choices) keep the mod\'s text.', 'tools/applysheet.py', [],
+  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped and encoded for the mod\'s Vietnamese font, with its tags as the sheet has them, and the result is checked. Check the tags with Check a patch. Two #P faults are mended and reported: tags that put a whole line off the screen are dropped (Japanese hides poems the art already shows; the translation would only show in the backlog), and a tag whose comma slipped out, #P(1110220), gets the Japanese tag back. Lines the sheet has no row for (names, choices) keep the mod\'s text. Glossary keys (never shown) are written as their glossary title from the sheet\'s exe tab, so the game finds the entry.', 'tools/applysheet.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true),
       V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/): its font, program and names are kept', true), V('--out', 'dir', 'Output folder', true), EXE,
       V('--report', 'save', 'CSV of the rows not written and the lines to look at'), V('--map', 'save', 'Save the font encoding learnt from the mod (.json)'),
-      V('--use-map', 'file', 'Read the font encoding from a saved .json instead'), B('--apply', 'Write the files')],
+      V('--use-map', 'file', 'Read the font encoding from a saved .json instead'),
+      V('--exe-list', 'file', 'Glossary titles: the program text list (address, jp_text, vi_text), if not the sheet\'s own exe tab'), B('--apply', 'Write the files')],
     'Runs as a dry run first and asks before writing. A row left out keeps the mod\'s line; the report says why.'),
   T('audit', 'Patch', 'Check a patch', 'Compares a Vietnamese patch with the Japanese scripts: lost position, name and pause tags, lines hidden off-screen, broken headers. Nothing is changed.', 'tools/audit.py', [],
     [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--patch', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/)', true), EXE, V('--csv', 'save', 'Every finding with its Japanese and Vietnamese text')]),
+  T('overflow', 'Patch', 'Find lines too wide for their box', 'The game never wraps or clips a line: one that is too wide runs on past its box, off the screen, under the backlog\'s name strip or off the glossary scroll. Lays every line of the mod out with the mod\'s own fonts, the way the game does, and lists the ones that run out - story lines on the screen and in the message window, the backlog, glossary descriptions (exefs/main) and choices - with how many pixels over and a re-wrap that fits. For each font of the settings screen it also says how many characters a line holds and how much narrower the font must get. Nothing is changed.', 'tools/overflow.py', [],
+    [V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/): its scripts, fonts and program are read', true),
+      V('--map', 'file', 'Font encoding (.json), saved by "Write the sheet into the game" (its Map field): shows the lines as readable Vietnamese'),
+      V('--csv', 'save', 'Every string that runs out, with its script and index (the sheet\'s const_index), how far over and a re-wrap'),
+      V('--font', 'text', 'Only these settings fonts (standard, extra, extra2, extra3), one per line; empty measures all four', false, true),
+      V('--name', 'text', 'Heroine name for ${FirstName}; empty uses Naya'),
+      V('--margin', 'number', 'Also list lines that come closer than this many pixels to the edge'),
+      V('--window-right', 'number', 'Where message window text must stop, in pixels of the 1920 screen; empty uses the estimate, 1374'),
+      V('--fonts', 'dir', 'Font folder, if not romfs/spec_win/font inside the mod'),
+      V('--exe', 'file', 'exefs/main, if not the mod\'s: for read redirects and the glossary')],
+    'The message window and the choice buttons are estimated from their art; the screen, the backlog and the glossary were measured on screenshots of the game.'),
   T('patch', 'Patch', 'Rebuild the patch', 'Rebuilds script.memfs and script.membody: puts the lost #P position tags back, keeps lines Japanese draws off-screen visible, points every script straight at its data and checks the result.', 'tools/patch.py', [],
     [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--patch', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/)', true), V('--out', 'dir', 'Output folder', true), EXE,
       B('--no-restore', 'Only rebuild, do not touch #P'), B('--keep-offscreen', 'Keep #P tags that put a line off-screen'), V('--report', 'save', 'CSV of every line touched'), B('--apply', 'Write the files')],
@@ -107,7 +120,7 @@ const tools = [
   T('exetext-check', 'Executable', 'Check the program\'s text', 'Lists the Japanese lines found in exefs/main and what points at them, then moves them all to the new area unchanged and checks that every pointer still reads the same line and that undoing it gives the program back byte for byte. Nothing is written.', 'tools/exetext.py', ['check'],
     [A('main', 'file', 'exefs/main')]),
 
-  T('font-gen', 'Fonts', 'Make the Vietnamese font', 'Redraws the ASCII and Vietnamese letters of every font in the Japanese font folder from the font file you choose (.ttf/.otf), sized so they match the game\'s letters, and builds the outline fonts from them. Kana and kanji stay as they are. With Map, each Vietnamese letter is drawn on the kana code the mod\'s scripts use for it, so the scripts built today show the new typeface; letters the map lacks (Ể, Ổ) get codes of their own, and Map out saves the result for "Write the sheet into the game" (Use map) and the program text tools.', 'tools/font.py', ['gen'],
+  T('font-gen', 'Fonts', 'Make the Vietnamese font', 'Redraws the ASCII and Vietnamese letters of every font in the Japanese font folder from the font file you choose (.ttf/.otf), sized so they match the game\'s letters, and builds the outline fonts from them. Kana and kanji stay as they are. With Map, each Vietnamese letter is drawn on the kana code the mod\'s scripts use for it, so the scripts built today show the new typeface; letters the map lacks (Ể, Ổ) get codes of their own, and Map out saves the result for "Write the sheet into the game" (Use map) and the program text tools. Preview draws your text with the new fonts on the dry run, so you can look before writing.', 'tools/font.py', ['gen'],
     [V('--template', 'dir', 'The Japanese romfs/spec_win/font folder', true), V('--out', 'dir', 'romfs/spec_win/font inside your mod. An older file there is first copied to .bak beside it', true),
       V('--font', 'file', 'Font file with Vietnamese letters (.ttf, .otf; file.ttc#1 picks a face). Repeat for fallbacks', true, true),
       ...FAMILIES,
@@ -116,7 +129,10 @@ const tools = [
       // ば for ộ). Unicode-only builds stay possible from the command line.
       V('--map', 'file', 'Font encoding (.json), the file the Map field saves when writing the translation into the game. Without it the Vietnamese letters of today\'s scripts show as kana', true),
       V('--map-out', 'save', 'Save the encoding of the new font (.json), for Use map'),
+      V('--preview', 'save', 'Preview image (.png): your text drawn with the new fonts 一 二 三 四, each with its outline. Made on the dry run, before anything is written'),
+      V('--preview-text', 'text', 'Text for the preview image; \\n starts a new line. Empty draws a sentence and every Vietnamese letter'),
       V('--px', 'number', 'Letter size in pixels for every font; empty fits the height of H to each of the game\'s fonts'),
+      V('--width', 'number', 'Letter width in % for every font: 90 draws each letter 10% narrower at the same height, so a line takes less room without smaller letters; empty keeps 100'),
       V('--chars', 'text', 'More characters to draw under their own code'),
       B('--no-latin', 'Keep the game\'s ASCII letters, draw only the Vietnamese ones'),
       V('--outline-radius', 'number', 'Outline width in pixels; empty measures it on the Japanese fonts'), B('--apply', 'Write the files')],

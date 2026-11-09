@@ -17,8 +17,10 @@ sys.path.insert(0, os.path.join(ROOT, 'engines', 'rrlib', 'tools'))
 import applysheet  # noqa: E402
 import exehook  # noqa: E402
 import exetext  # noqa: E402
+import font     # noqa: E402
 import kuv      # noqa: E402
 import memfs    # noqa: E402
+import overflow  # noqa: E402
 import patch    # noqa: E402
 import rson     # noqa: E402
 import sprite   # noqa: E402
@@ -283,6 +285,104 @@ class ApplySheetTest(unittest.TestCase):
                          {2: 'write', 3: 'write', 4: 'japanese', 5: 'untranslated', 6: 'jp-mismatch',
                           7: 'duplicate', 8: 'write'})
 
+    def test_a_pasted_csv_row_writes_only_its_vi_part(self):
+        jp1 = '「……ふふ。ありがとう、皆さん。\r\n　良き一年に！」'
+        jp2 = '影は濃くなっていた。\r\n蛇が這う音が、\r\nどこからか聞こえる。'
+        js = {'A.tat': ['', jp1, jp2, '「――……」', '一', '「んっ……、――」', '「はい」']}
+        said = lambda row: dict(row, cmd='NameMess')
+        sheet = lambda t: t.replace('\r\n', '\n\n')
+        rows = [said(sheet_row(2, 1, sheet(jp1), '「……ふふ.ありがとう,皆さん. 良き一年に！」,Ko Seirin,'
+                                                 '「...Phù phù. Cảm ơn mọi người!」')),
+                # narration: no speaker, empty columns after it, a typo in the JP part
+                sheet_row(3, 2, sheet(jp2), '影は濃くなってぃた. 蛇が這う音が, どこからか聞こえる.,'
+                                            'Cái bóng đậm hơn, tiếng rắn vang lên.,,,,,'),
+                said(sheet_row(4, 3, '「――……」', '「――……」,Ko Seirin,「—...」')),   # VI all punctuation
+                sheet_row(5, 4, '一', 'Một, hai,,,,,'),                               # only the empty columns
+                sheet_row(6, 5, '「んっ……、――」', '「んっ……,――」'),                     # the JP line itself
+                said(sheet_row(7, 6, '「はい」', '「Vâng, Seirin, đi thôi」')),            # VI with commas stays whole
+                said(sheet_row(8, 3, '「――……」', '「――……」,Ko Ouyo,「—...」'))]       # same string, other speaker
+        writes, rep = applysheet.plan(rows, js, {}, set('ùơóôạ'))
+        self.assertEqual(writes['A.tat'], {1: '...Phù phù. Cảm ơn mọi người!', 2: 'Cái bóng đậm hơn, tiếng rắn vang lên.',
+                                           3: '—...', 4: 'Một, hai', 6: 'Vâng, Seirin, đi thôi'})
+        self.assertEqual(dict((x['r']['row'], (x.get('why', x['action']), x['csv'] and x['csv'][1:])) for x in rep),
+                         {2: ('write', ('Ko Seirin', 'row')), 3: ('write', (None, 'row')), 4: ('write', ('Ko Seirin', 'row')),
+                          5: ('write', (None, 'columns')), 6: ('japanese', None), 7: ('write', None),
+                          8: ('same', ('Ko Ouyo', 'row'))})
+        # ruby and #T lines in the JP part as the old export wrote them
+        self.assertEqual(applysheet.csv_row('「水剋火――龍は水.」,Ko Ouyo,「Thủy khắc Hỏa.」',
+                                            '「#R(すい,こく,か)水剋火――龍は水。」', 'NameMess'),
+                         ('「Thủy khắc Hỏa.」', 'Ko Ouyo', 'row'))
+        self.assertEqual(applysheet.csv_row('#T1「え？ ナーヤ！？\n#T2「え？\n#T0 父上,何故」,Ko Seirin,「Hả? Naya!? Vì sao?」',
+                                            '#T1「え？　ナーヤ！？\n\n#T2「え？\n\n#T0　父上、何故」', 'NameMess'),
+                         ('「Hả? Naya!? Vì sao?」', 'Ko Seirin', 'row'))
+        with tempfile.TemporaryDirectory() as d:
+            applysheet.write_report(os.path.join(d, 'r.csv'), rep)
+            with open(os.path.join(d, 'r.csv'), encoding='utf-8-sig') as f:
+                noted = [row[1] for row in csv.reader(f) if 'CSV' in row[-1] or ',,,,,' in row[-1]]
+        self.assertEqual(noted, ['2', '3', '4', '5', '8'])
+
+    def test_a_speaker_name_or_comma_in_front_of_the_cell_is_dropped(self):
+        js = {'A.tat': ['', '「止まれ……！」', '「もう、立って歩かれているわ……」', '#P(250,300)「はい」', '（無理……）',
+                        '彼は言った。', '「はい」', '「え？」']}
+        said = lambda row: dict(row, cmd='NameMess')
+        rows = [said(sheet_row(2, 1, '「止まれ……！」', 'Fey,「Dừng lại……!」')),
+                said(sheet_row(3, 2, '「もう、立って歩かれているわ……」',
+                               'Thị nữ Tuyết Nguyệt Hoa Vương triều 1,「Trời ạ, đã đi được rồi……」')),   # 37 letters
+                said(sheet_row(4, 3, '#P(250,300)「はい」', '#P(250,300)Kỷ Uyển,「Vâng」')),            # tag stays
+                said(sheet_row(5, 4, '（無理……）', ',（Không thể...）')),                                # comma in front
+                sheet_row(6, 5, '彼は言った。', ',,Anh ấy nói.'),                                        # narration too
+                sheet_row(7, 6, '「はい」', 'Ừ,「Vâng」'),                     # not a NameMess line: left alone
+                said(sheet_row(8, 7, '「え？」', '「Hả?」, Fey, à'))]          # name not in front: left alone
+        writes, rep = applysheet.plan(rows, js, {}, set('ùơóôạ'))
+        self.assertEqual(writes['A.tat'], {1: 'Dừng lại……!', 2: 'Trời ạ, đã đi được rồi……', 3: '#P(250,300)Vâng',
+                                           4: '（Không thể...）', 5: 'Anh ấy nói.', 6: 'Ừ,Vâng', 7: "Hả?, Fey, à"})
+        self.assertEqual(dict((x['r']['row'], x['csv'] and x['csv'][1:]) for x in rep),
+                         {2: ('Fey', 'name'), 3: ('Thị nữ Tuyết Nguyệt Hoa Vương triều 1', 'name'), 4: ('Kỷ Uyển', 'name'),
+                          5: (None, 'comma'), 6: (None, 'comma'), 7: None, 8: None})
+        # both leftovers in one cell, and a JP line that itself opens with 、 keeps its comma
+        self.assertEqual(applysheet.cleanup(',Fey,「Ừ」,,,,', '「うん」', 'NameMess'), ('「Ừ」', 'Fey', 'columns+comma+name'))
+        self.assertIsNone(applysheet.cleanup(', và thế là', '、そして', 'GuideMess'))
+
+    def test_two_p_faults_are_mended(self):
+        self.assertEqual(applysheet.fix_tags('#P(1110220),――Khổ quá.', '#P(1110,220)――苦しい。'),
+                         ('#P(1110,220)――Khổ quá.', ['broken']))
+        self.assertEqual(applysheet.fix_tags('#P(440,1124)Vạn vật\n#P(440,1200)thuận', '#P(440,1200)「全てが」'),
+                         ('Vạn vật\nthuận', ['offscreen']))
+        self.assertEqual(applysheet.fix_tags('#P(440,300)a\n#P(440,1200)b', '#P(440,300)あ'),
+                         ('#P(440,300)a\n#P(440,1200)b', []))                    # part on screen: left alone
+        self.assertEqual(applysheet.fix_tags('#P(999),x', '#P(1,2)あ'), ('#P(999),x', []))   # no JP tag reads so
+        js = {'A.tat': ['', '#P(520,1200)「天地は」\n', '#P(1110,220)――苦しい。']}
+        rows = [sheet_row(2, 1, '#P(520,1200)「天地は」\n', '#P(520,1200)Trời đất.\n'),
+                sheet_row(3, 2, '#P(1110,220)――苦しい。', '#P(1110220),――Khổ quá.')]
+        writes, rep = applysheet.plan(rows, js, {}, set('ờấổá'))
+        self.assertEqual(writes['A.tat'], {1: 'Trời đất.\n', 2: '#P(1110,220)――Khổ quá.'})
+        with tempfile.TemporaryDirectory() as d:
+            applysheet.write_report(os.path.join(d, 'r.csv'), rep)
+            with open(os.path.join(d, 'r.csv'), encoding='utf-8-sig') as f:
+                notes = [row[-1] for row in csv.reader(f)][1:]
+        self.assertEqual([n.split(' ')[1] for n in notes], ['#P', '#P'])
+        self.assertIn('ngoài màn hình', notes[0])
+        self.assertIn('hỏng', notes[1])
+
+    def test_jp_text_without_its_dashes_still_matches(self):
+        js = {'A.tat': ['', '「――……」', '「――オマ、エ……」']}
+        rows = [sheet_row(2, 1, '「……」', '..'), sheet_row(3, 2, '「オマエ……」', 'Ngươi...')]   # 3: really another line
+        writes, rep = applysheet.plan(rows, js, {}, set('ươ'))
+        self.assertEqual(writes['A.tat'], {1: '..'})
+        self.assertEqual([(x.get('why') or x['action'], x.get('fixed')) for x in rep],
+                         [('write', ['dashes']), ('jp-mismatch', None)])
+
+    def test_a_kanji_in_brackets_is_a_gloss(self):
+        js = {'A.tat': ['', '嬅一族のこと。', '揺れ動く', 'あ']}
+        rows = [sheet_row(2, 1, '嬅一族のこと。', 'Chỉ tộc Hoa (嬅).'),
+                sheet_row(3, 2, '揺れ動く', 'lay動'),                    # a kanji in the text: a typo
+                sheet_row(4, 3, 'あ', 'cài（だ）')]                        # kana: wrong letter even in brackets
+        writes, rep = applysheet.plan(rows, js, {}, set('ỉộ'))
+        self.assertEqual(writes['A.tat'], {1: 'Chỉ tộc Hoa (嬅).'})
+        self.assertEqual([(x.get('why') or x['action'], x.get('chars')) for x in rep],
+                         [('write', None), ('japanese', '動'), ('japanese', 'だ')])
+        self.assertEqual(exetext.japanese_left('Hoa (嬅) っ'), [])
+
     def test_build_writes_cells_as_they_are_and_keeps_the_mods_other_lines(self):
         import shutil
         jp_a, _ = script('A.tat', ['#P(500,130)一', '名前', '#P(520,1200)詩'])
@@ -294,15 +394,15 @@ class ApplySheetTest(unittest.TestCase):
             jp = memfs.Archive(*patch.find_pair(os.path.join(d, 'jp')))
             mod = memfs.Archive(*patch.find_pair(os.path.join(d, 'mod')))
             js = applysheet.script_strings(jp)
-            # tags are the translator's call: a cell without #P stays without, an
-            # off-screen #P stays on; there is no row for the name
+            # tags are the translator's call: a cell without #P stays without; an
+            # off-screen #P goes (else the line shows only in the backlog); no row for the name
             rows = [sheet_row(2, 4, '#P(500,130)一', 'một nữa'), sheet_row(3, 6, '#P(520,1200)詩', '#P(520,1200)thơ')]
             writes, _ = applysheet.plan(rows, js, {'ộ': 'ば', 'ữ': '㈷'}, set('ơ'))
             body, mem, rep = applysheet.build(jp, mod, writes)
             self.assertEqual(patch.verify(body, mem, jp, {}, check_tags=False), [])
             self.assertEqual(patch.verify(body, mem, jp, {}), ['1 strings still lose #P'])   # what audit-style checks see
             out = applysheet.script_strings(memfs.Archive(data=(mem, body)))['A.tat']
-            self.assertEqual(out[4:], ['mばt n㈷a', 'Tên', '#P(520,1200)thơ'])
+            self.assertEqual(out[4:], ['mばt n㈷a', 'Tên', 'thơ'])
             self.assertEqual((rep['rows'], rep['stripped']), ([], []))
         finally:
             shutil.rmtree(d, ignore_errors=True)
@@ -511,6 +611,18 @@ class SpriteTest(unittest.TestCase):
             self.assertEqual(im.convert('RGBA').tobytes(), before)
         self.assertEqual([n for n in os.listdir(os.path.join(folder, 'ui')) if n.endswith('.bak')], ['label_on.png.bak'])
 
+    def test_export_saves_the_games_images_to_compare(self):
+        from PIL import Image
+        arc, folder = self.export()
+        Image.new('RGBA', (4, 2), (9, 9, 9, 9)).save(os.path.join(folder, 'ui', 'label_on.png'))
+        rc, log = self.quiet(sprite.cmd_export, arc, folder)
+        line = [l for l in log.splitlines() if l.startswith('anh goc de so sanh -> ')]
+        self.assertEqual(len(line), 1)
+        originals = line[0].split(' -> ', 1)[1]
+        with Image.open(os.path.join(originals, 'ui', 'label_on.png')) as im:      # the game's pixels
+            self.assertEqual(im.convert('RGBA').tobytes(), arc.textures['/ui.rtex'].image().crop((1, 3, 5, 5)).tobytes())
+        self.assertFalse(os.path.exists(os.path.join(originals, 'ui', 'label_off.png')))   # only changed ones
+
     def test_export_keeps_what_the_user_chose(self):
         from PIL import Image
         arc, folder = self.export()
@@ -678,6 +790,8 @@ NOP, BL = 0xd503201f, 0x94000001
 S1, S2, S3, S4, S5 = 0x1010, 0x1100, 0x1200, 0x1300, 0x1400      # rodata strings
 RELA, DYN = 0x1800, 0x2000
 TABLE = 0x20c0          # in .data: a struct whose first u32 is 'あ' then 0, like the glossary table
+S6, S7 = 0x1500, 0x1600                     # a file name and a string handed to wcscmp: stay JP
+JMPREL, SYMTAB, STRTAB, GOT, STUB = 0x1900, 0x1940, 0x1980, 0x20f8, 0x800    # the PLT stub of wcscmp
 
 
 def u32text(s):
@@ -705,28 +819,36 @@ def lz4_literals(d):
     return bytes(out + d)
 
 
-def make_main(compress=False):
+def make_main(compress=False, extra_relas=()):
     text = bytearray(0x1000)
     words = {0: 0x14000010, 4: 8,                                # b 0x40, MOD0 at 8
              0x40: exetext.adrp(0x40, S1, 1), 0x44: add_imm(1, 1, S1 & 0xfff),     # S1 by code
              0x48: adr(0x48, S4, 2),                                                # S4 by ADR
              0x4c: exetext.adrp(0x4c, S3, 3), 0x50: add_imm(3, 3, S3 & 0xfff),     # S3 is ASCII
              0x54: exetext.adrp(0x54, S5, 1), 0x58: BL, 0x5c: add_imm(0, 1, S5 & 0xfff),  # x1 lost in the call
-             0x60: exetext.adrp(0x60, TABLE, 4), 0x64: add_imm(4, 4, TABLE & 0xfff)}    # a table, not text
+             0x60: exetext.adrp(0x60, TABLE, 4), 0x64: add_imm(4, 4, TABLE & 0xfff),    # a table, not text
+             0x70: exetext.adrp(0x70, S7, 0), 0x74: add_imm(0, 0, S7 & 0xfff),     # wcscmp(S7, ...)
+             0x78: 0x94000000 | ((STUB - 0x78) >> 2),
+             STUB: exetext.adrp(STUB, GOT, 16), STUB + 4: 0xf9400211 | ((GOT & 0xfff) // 8) << 10,
+             STUB + 8: add_imm(16, 16, GOT & 0xfff), STUB + 12: 0xd61f0220}           # ldr x17, [x16]; br x17
     for i in range(0, 0x1000, 4):
         struct.pack_into('<I', text, i, words.get(i, NOP))
     text[8:12] = b'MOD0'
     struct.pack_into('<6i', text, 12, DYN - 8, 0x2100 - 8, 0x3100 - 8, 0, 0, 0)
     ro = bytearray(0x1000)
     for a, s in ((S1, '前回と同じ名前を使用します｡'), (S2, '\nよろしいですか？'), (S3, 'SYSTEM'),
-                 (S4, 'クイックセーブしました｡'), (S5, '設定')):
+                 (S4, 'クイックセーブしました｡'), (S5, '設定'), (S6, 'のぞき見.png'), (S7, '振り子')):
         b = u32text(s)
         ro[a - 0x1000:a - 0x1000 + len(b)] = b
-    relas = ((0x2080, S2), (0x2088, S1), (0x2090, S2 + 4))       # the last shares S2's tail
+    relas = ((0x2080, S2), (0x2088, S1), (0x2090, S2 + 4), (0x2098, S6)) + tuple(extra_relas)   # 0x2090: S2's tail
     for k, (off, add) in enumerate(relas):
         struct.pack_into('<QQq', ro, RELA - 0x1000 + 24 * k, off, 1027, add)
+    struct.pack_into('<QQq', ro, JMPREL - 0x1000, GOT, 1 << 32 | 1026, 0)        # JUMP_SLOT, symbol 1
+    struct.pack_into('<I', ro, SYMTAB - 0x1000 + 24, 1)
+    ro[STRTAB - 0x1000:STRTAB - 0x1000 + 8] = b'\0wcscmp\0'
     data = bytearray(0x100)
-    struct.pack_into('<8Q', data, 0, 7, RELA, 8, 24 * len(relas), 9, 24, 0, 0)
+    struct.pack_into('<16Q', data, 0, 7, RELA, 8, 24 * len(relas), 9, 24,
+                     23, JMPREL, 2, 24, 6, SYMTAB, 5, STRTAB, 0, 0)
     struct.pack_into('<II', data, TABLE - 0x2000, ord('あ'), 0)
     h = bytearray(0x100)
     h[:4] = b'NSO0'
@@ -775,6 +897,15 @@ class ExeTextTest(unittest.TestCase):
         self.assertEqual(exe.refs[S4], [('adr', 0x48)])
         self.assertEqual(exe.strings[S2 + 4], 'よろしいですか？')
 
+    def test_names_the_game_looks_up_stay_japanese(self):
+        exe = exetext.Exe(make_main(compress=True))
+        self.assertEqual(exetext.imports(exe.img, exe.text_size), {STUB: 'wcscmp'})
+        self.assertEqual(exe.keys, {S6: ('のぞき見.png', 'file'), S7: ('振り子', 'compare')})
+        rows = [dict(row=2, address=S6, jp='のぞき見.png', vi='nozokimi.png'),
+                dict(row=3, address=S7, jp='振り子', vi='Con lắc')]
+        writes, rep = exetext.plan(rows, exe, FONT)
+        self.assertEqual((writes, [x['why'] for x in rep]), ({}, ['key', 'key']))
+
     def test_moves_translations_and_repoints(self):
         exe = exetext.Exe(make_main())
         writes = {S1: 'Dùng lại tên lần trước, dài hơn câu tiếng Nhật nhiều.', S2: '\nBạn đồng ý chứ?', S4: 'Đã lưu.'}
@@ -814,6 +945,18 @@ class ExeTextTest(unittest.TestCase):
         self.assertEqual(writes[S2], '\nBヒn コんng ý chソ?')                 # \n kept, letters on the font's codes
         self.assertEqual(writes[S1], 'Dùng lヒi tên cũ.')
 
+    def test_jp_text_that_sheets_mangled_still_matches(self):
+        exe = exetext.Exe(make_main())
+        exe.strings[S4] = "'then' が必要です"
+        exe.strings[S1] = '"%ls"は既に定義されています'
+        rows = [dict(row=2, address=S4, jp="then' が必要です", vi="then' cần có"),      # leading ' dropped in both
+                dict(row=3, address=S1, jp='%lsは既に定義されています', vi='%ls đã có')]
+        writes, rep = exetext.plan(rows, exe, FONT)
+        self.assertEqual(writes, {S4: "'then' cハn có", S1: '%ls コã có'})
+        self.assertEqual([x['why'] for x in rep], ['quotes', 'quotes'])
+        other = exetext.plan([dict(row=2, address=S4, jp='then が必要', vi='x')], exe, FONT)[1]
+        self.assertEqual(other[0]['why'], 'jp-mismatch')
+
     def test_printf_codes_must_match(self):
         exe = exetext.Exe(make_main())
         exe.strings[S4] = '残り %d 個'
@@ -841,6 +984,244 @@ class ExeTextTest(unittest.TestCase):
         rc, log = self.quiet(exetext.cmd_export, os.path.join(out, 'main'), sheet, self.map)
         self.assertIn('1 dong da dien', log)
         self.assertEqual(self.quiet(exetext.cmd_check, os.path.join(out, 'main'))[0], 0)
+
+
+def adv_font(adv):
+    """A font file whose glyphs carry advances only - all overflow.py reads."""
+    def mk(pairs):
+        m = font.Map()
+        for k, v in pairs:
+            m.insert(k, v)
+        return m
+    chars = sorted(adv)
+    info = mk([('baseInfo', mk([('charWidth', 40)])), ('@fileType', 'rrlib/rfnt2'),
+               ('gryphInfo', [font.IntArr([0, 0, 0, 60, 62, adv[c], 0, 7]) for c in chars]),
+               ('charToIndex', mk([(c, i) for i, c in enumerate(chars)]))])
+    return font.write(mk([('bin', [font.write(info)]), ('hasSeparateBody', False),
+                          ('path', mk([('/fontdata.rson', 0)])), ('@fileType', 'rrlib/memfs')]))
+
+
+def letters(px):
+    """ASCII letters px wide, the space half that."""
+    out = dict((chr(c), px) for c in range(0x21, 0x7f))
+    out[' '] = px // 2
+    return out
+
+
+def scene(name, calls):
+    """A script with GuideMess (text), NameMess (name, text) and SltAdd (text) calls."""
+    strs = ['', 'GuideMess', 'NameMess', 'SltAdd', 'KW', '0', 'SLT_A']
+    code = b''
+    for c in calls:
+        strs.append(c[-1])
+        i = len(strs) - 1
+        if c[0] == 'GuideMess':
+            code += push(i) + push(1) + call(1)
+        elif c[0] == 'NameMess':
+            strs.append(c[1])
+            code += push(len(strs) - 1) + push(i) + push(2) + call(2)
+        else:
+            code += push(5) + push(6) + push(i) + push(3) + call(3)
+        code += push(4) + call(0)
+    return make_kuv(name, strs, code), strs
+
+
+class OverflowTest(unittest.TestCase):
+    def setUp(self):
+        self.std = overflow.Face('standard', letters(20))
+        self.narrow = overflow.Face('extra', letters(10))
+
+    def test_reads_lines_as_the_game_draws_them(self):
+        self.assertEqual(overflow.blocks('Mở đầu\n#P(500,130)một\r\nhai#P(500,250)ba'),
+                         [(None, None, ['Mở đầu', '']), (500, 130, ['một', 'hai']), (500, 250, ['ba'])])
+        self.assertEqual(overflow.blocks('#P(1,2)a'), [(1, 2, ['a'])])
+        self.assertEqual(overflow.variants('#T1Naya cười#T2${FirstName} cười#T0 rồi nói'),
+                         [('#T1', 'Naya cười rồi nói'), ('#T2', '${FirstName} cười rồi nói')])
+        self.assertEqual(overflow.variants('không tag'), [('', 'không tag')])
+        self.assertEqual(overflow.visible('#C(TR,0xff0000ff)Đỏ#C(TR,prev)#KW ${FirstName}#R(あ)亜', 'Hoa'), 'Đỏ Hoa亜')
+        self.assertEqual(self.std.width('ab c'), 70)
+        self.assertEqual(self.std.width('ab漢'), 80)                     # a missing glyph counts a full cell
+        self.assertEqual(self.std.missing('ab 漢'), {'漢'})
+
+    def test_boxes(self):
+        screen, log = overflow.BOX['screen'], overflow.BOX['backlog']
+        self.assertAlmostEqual(screen.over(100, 1800), -15)               # 1800 + 105 ends inside 1920
+        self.assertAlmostEqual(screen.over(200, 1800), 90)
+        self.assertAlmostEqual(screen.over(200, 1800, margin=10), 100)
+        self.assertAlmostEqual(log.room(), (1258 - 240) / 0.9)
+        self.assertEqual(screen.room(1919, margin=50), 1.0)
+
+    def test_measures_each_box_with_the_widest_font(self):
+        def run(s, kind='story'):
+            fd, tally, missing = overflow.Finding('A', 0, 'GuideMess', s), overflow.Tally(), set()
+            hit = overflow.measure(fd, kind, s, [self.narrow, self.std], 'Naya', 0, missing, tally)
+            return hit, dict((k, (round(v[0]), v[1])) for k, v in fd.worst.items()), tally
+        self.assertEqual(run('#P(1700,100)' + 'a' * 12)[:2], (True, {'screen': (32, 'standard')}))
+        hit, worst, tally = run('a' * 60)                                 # window and backlog
+        self.assertEqual(worst, {'window': (56, 'standard'), 'backlog': (62, 'standard')})
+        self.assertEqual(tally.over, {('standard', 'window'): 1, ('standard', 'backlog'): 1})
+        self.assertEqual(tally.per_char('standard'), 20)
+        self.assertEqual(tally.shrink('standard'), 6)                     # 1200 px in 1131 of room
+        self.assertEqual(tally.shrink('extra'), 0)
+        self.assertEqual(run('#P(500,1200)' + 'a' * 60)[1], {'backlog': (62, 'standard')})   # off-screen: logged only
+        self.assertEqual(run('a' * 10)[:2], (False, {}))
+        self.assertEqual(run('#T1' + 'a' * 10 + '#T2' + 'a' * 60)[1]['window'][0], 56)       # each variant alone
+        self.assertEqual(run('b' * 40, 'choice')[1], {'choice': (80, 'standard')})
+
+    def test_rewrap_fits_every_box_the_string_shows_in(self):
+        words = ' '.join(['abcd'] * 30)
+        out, note = overflow.rewrap(words, 'story', [self.std], 'Naya', 0)
+        lines = out.split('\n')
+        self.assertEqual([len(l.split(' ')) for l in lines], [12, 12, 6])  # 1131 px of backlog: 12 words of 90
+        self.assertTrue(all(self.std.width(l) * 0.9 + 240 <= 1258 for l in lines))
+        self.assertEqual(note, 'thêm 2 dòng')
+        out, note = overflow.rewrap('#P(500,130)' + words, 'story', [self.std], 'Naya', 0)
+        self.assertTrue(out.startswith('#P(500,130)abcd'))
+        self.assertIn('xem câu nằm ngay dưới', note)
+        self.assertEqual(overflow.rewrap('#T1a#T2b', 'story', [self.std], 'Naya', 0), ('', ''))
+        self.assertEqual(overflow.rewrap('#P(1,1)a#P(1,60)b', 'story', [self.std], 'Naya', 0), ('', ''))
+
+    def test_finds_overflow_in_a_mod_folder(self):
+        import shutil
+        raw, _ = scene('EV01.tat', [('GuideMess', '#P(1700,100)' + 'a' * 12), ('NameMess', '${FirstName}', 'a' * 60),
+                                    ('SltAdd', '【N1】' + 'b' * 40), ('GuideMess', 'ngắn'), ('GuideMess', '#P(1900,100)aaaa')])
+        d = tempfile.mkdtemp()
+        try:
+            write_pair(os.path.join(d, 'romfs', 'common'), [raw], [('/_bytecode/EV01.tatc', 0x30, [0, len(memfs.rz(raw))])])
+            fonts = os.path.join(d, 'romfs', 'spec_win', 'font')
+            os.makedirs(fonts)
+            for n, px in (('standard', 20), ('extra', 18), ('extra2', 16), ('extra3', 10)):
+                with open(os.path.join(fonts, n + '.font.memfs'), 'wb') as f:
+                    f.write(adv_font(letters(px)))
+            out = os.path.join(d, 'tran.csv')
+            log = io.StringIO()
+            with contextlib.redirect_stdout(log):
+                self.assertEqual(overflow.main(['--mod', d, '--csv', out]), 0)
+            log = log.getvalue()
+            self.assertIn('tu dien: khong co exefs/main - bo qua', log)
+            self.assertIn('font khong co: ắ', log)
+            with open(out, encoding='utf-8-sig', newline='') as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual([(r['index'], r['call'], r['over_px'], r['font'], r['fonts']) for r in rows],
+                             [('10', 'SltAdd', '80', 'standard', 'chỉ standard'),
+                              ('12', 'GuideMess', '64', 'standard', 'mọi font'),       # too far right for any font
+                              ('8', 'NameMess', '62', 'standard', 'chỉ standard'),
+                              ('7', 'GuideMess', '32', 'standard', 'chỉ extra, standard')])
+            self.assertIn('tran o moi font            1 cau', log)
+            self.assertIn('chi tran o mot so font     3 cau', log)
+            self.assertIn('(standard 3, extra 1, extra2 0, extra3 0)', log)
+            self.assertEqual(rows[2]['box'], 'backlog +62 px (1 dòng); khung thoại +56 px (1 dòng), khung ước lượng')
+            self.assertEqual(rows[3]['suggestion'], '#P(1700,100)' + 'a' * 12)   # one word: nothing to break
+            log = io.StringIO()
+            with contextlib.redirect_stdout(log):
+                overflow.main(['--mod', d, '--font', 'extra3', '--csv', out])
+            self.assertIn('-> %s (1 cau)' % out, log.getvalue())
+            self.assertNotIn('kieu tran', log.getvalue())                     # one font: nothing to compare
+            with self.assertRaises(SystemExit):
+                overflow.main(['--mod', d, '--fonts', d])                 # no font there
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_glossary_descriptions_from_the_program(self):
+        raw = make_main(extra_relas=((TABLE + 8, S4), (TABLE + 16, S1)))
+        exe = exetext.Exe(raw)
+        self.assertEqual(overflow.glossary(exe, TABLE), [(TABLE, S4, S1)])
+        face = overflow.Face('extra2', letters(20))
+        self.assertEqual(overflow.check_glossary(exe, face, lambda t: t, 0, set(), TABLE), ([], 1, 0))  # JP fits
+        desc = 'Ngắn.\n' + ' '.join(['abcd'] * 20)
+        new = exetext.Exe(exetext.build(exe, {S1: desc, S4: 'Từ'})[0])
+        found, n, done = overflow.check_glossary(new, face, lambda t: t, 0, set(), TABLE)
+        self.assertEqual((n, done, len(found)), (1, 1, 1))
+        fd = found[0]
+        self.assertEqual((fd.where, fd.index, fd.call), ('exefs/main', '0x%x' % S1, 'từ điển: Từ'))
+        self.assertEqual(fd.fonts_text(), 'mọi font')                           # the glossary has one font
+        self.assertAlmostEqual(fd.worst['glossary'][0], 576 + 1790 * 1.05 - 1362)
+        self.assertEqual([len(l.split(' ')) for l in fd.suggestion.split('\n')[1:]], [8, 8, 4])   # 748 px of paper
+        self.assertEqual(fd.suggestion.split('\n')[0], 'Ngắn.')                               # its own break kept
+
+
+class GlossaryKeyTest(unittest.TestCase):
+    """The script key (Mov GAMESTR_DictWords) must be the glossary term exactly."""
+
+    def test_exetext_reads_the_glossary_table(self):
+        exe = exetext.Exe(make_main(extra_relas=((TABLE + 8, S4), (TABLE + 16, S1))))
+        self.assertEqual(exetext.glossary(exe, TABLE), [(TABLE, S4, S1)])
+        self.assertEqual(exetext.glossary(exetext.Exe(make_main()), TABLE), [])    # no term pointer: no table
+
+    def test_dict_keys_are_the_values_of_mov_dictwords(self):
+        import shutil
+        strs = ['', 'Mov', applysheet.DICT_VAR, 'クイックセーブしました｡', 'GAMEFLAG_X', '1', 'GuideMess', '一']
+        code = (push(2) + push(3) + push(1) + call(2) +       # Mov GAMESTR_DictWords, key
+                push(4) + push(5) + push(1) + call(2) +       # another Mov
+                push(7) + push(6) + call(1))
+        raw = make_kuv('A.tat', strs, code)
+        d = tempfile.mkdtemp()
+        try:
+            write_pair(os.path.join(d, 'jp'), [raw], [('/_bytecode/A.tatc', 0x30, [0, len(memfs.rz(raw))])])
+            jp = memfs.Archive(*patch.find_pair(os.path.join(d, 'jp')))
+            self.assertEqual(applysheet.dict_keys(jp), {('A.tat', 3)})
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_keys_follow_the_title_exetext_writes(self):
+        import shutil
+        d = tempfile.mkdtemp()
+        try:
+            main = os.path.join(d, 'main')
+            with open(main, 'wb') as f:
+                f.write(make_main(extra_relas=((TABLE + 8, S4), (TABLE + 16, S1))))
+            lst = os.path.join(d, 'exe.csv')
+            with open(lst, 'w', encoding='utf-8', newline='') as f:
+                csv.writer(f).writerows([['address', 'refs', 'jp_text', 'vi_text', 'note'],
+                                         ['0x%x' % S4, '', 'クイックセーブしました｡', '"Lưu" nhanh  ', '']])
+            old = exetext.GLOSSARY
+            exetext.GLOSSARY = TABLE
+            try:
+                titles = applysheet.glossary_keys(main, lst, FONT)
+                with open(lst, 'w', encoding='utf-8', newline='') as f:
+                    csv.writer(f).writerows([['address', 'jp_text', 'vi_text'], ['0x%x' % S4, 'クイックセーブしました｡', '']])
+                untranslated = applysheet.glossary_keys(main, lst, FONT)
+            finally:
+                exetext.GLOSSARY = old
+            # the term as exetext writes it: quotes, spaces and letters exactly as there
+            self.assertEqual(titles, {'クイックセーブしました｡': ("'Lゔu' nhanh  ", "'Lưu' nhanh  ")})
+            self.assertEqual(untranslated, {'クイックセーブしました｡': ('クイックセーブしました｡', None)})
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_read_rows_finds_the_exe_tab_of_the_whole_sheet(self):
+        try:
+            import openpyxl
+        except ImportError:
+            self.skipTest('openpyxl')
+        wb = openpyxl.Workbook()
+        wb.active.title = 'Index'
+        wb.active.append(['index', 'sheet_name'])
+        ws = wb.create_sheet('exe')
+        ws.append(['address', 'refs', 'jp_text', 'vi_text', 'note'])
+        ws.append(['0x%x' % S4, '', 'クイックセーブしました｡', 'Đã lưu.', None])
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'sheet.xlsx')
+            wb.save(p)
+            self.assertEqual(exetext.read_rows(p), [dict(row=2, address=S4, jp='クイックセーブしました｡', vi='Đã lưu.')])
+
+    def test_plan_writes_the_title_whatever_the_cell_says(self):
+        js = {'A.tat': ['', 'Mov', applysheet.DICT_VAR, '石陰村', '蛍', '四凶']}
+        keys = {('A.tat', 3): ('Làng Thヒch Âm', 'Làng Thạch Âm'),
+                ('A.tat', 4): ('Đom đóm', 'Đom đóm'),
+                ('A.tat', 5): ('四凶', None)}                     # title left Japanese in the exe
+        rows = [sheet_row(2, 3, '石陰村', 'Thạch Âm Thôn'), sheet_row(3, 4, '蛍', 'Đom đóm'),
+                sheet_row(4, 5, '四凶', 'Tứ Hung'), sheet_row(5, 3, '石陰村', 'Thạch Âm Thôn')]
+        writes, rep = applysheet.plan(rows, js, {'ạ': 'ヒ'}, set('Đóâ'), keys)
+        self.assertEqual(writes['A.tat'], {3: 'Làng Thヒch Âm', 4: 'Đom đóm', 5: '四凶'})
+        self.assertEqual([x.get('key') for x in rep], [('Thạch Âm Thôn', 'Làng Thạch Âm'), None, ('Tứ Hung', None)])
+        with tempfile.TemporaryDirectory() as d:
+            applysheet.write_report(os.path.join(d, 'r.csv'), rep)
+            with open(os.path.join(d, 'r.csv'), encoding='utf-8-sig') as f:
+                notes = [row[-1] for row in csv.reader(f)][1:]
+        self.assertEqual(len(notes), 2)
+        self.assertIn('"Làng Thạch Âm"', notes[0])
+        self.assertIn('giữ khoá tiếng Nhật', notes[1])
 
 
 if __name__ == '__main__':

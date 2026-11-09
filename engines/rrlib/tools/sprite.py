@@ -62,6 +62,7 @@ import re
 import shutil
 import struct
 import sys
+import tempfile
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -340,6 +341,20 @@ def same_png(path, img):
         return False
 
 
+def save_originals(arc, files, changed):
+    """The game's own pixels of each changed image, under one temporary folder
+    with the same relative paths, so the app can put each beside the user's
+    file when it asks keep or replace. The folder is emptied on every run."""
+    folder = os.path.join(tempfile.gettempdir(), 'otome-translator', 'sprite-goc', safe(arc.name))
+    shutil.rmtree(folder, ignore_errors=True)
+    for rel, data in files:
+        if rel in changed and not isinstance(data, bytes):
+            dst = os.path.join(folder, *rel.split('/'))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            data.save(dst)
+    return folder
+
+
 def cmd_export(arc, out=None, overwrite=False, keep=()):
     """List every texture and its cells; with out, also save them as PNG and
     cells_<screen>.csv (named per screen, so screens can share a folder).
@@ -397,6 +412,7 @@ def cmd_export(arc, out=None, overwrite=False, keep=()):
         if changed:
             pairs = ['%s -> %s' % (rel, os.path.basename(backup_name(path_of(rel)))) for rel in changed]
             print('se thay file da co, ban cu chep sang file .bak cung thu muc: %s' % ', '.join(pairs))
+            print('anh goc de so sanh -> %s' % save_originals(arc, have, changed))
         print('chua ghi gi - them --overwrite de ghi de vao %s' % out)
         return 0
     keep = set(k.replace('\\', '/').strip() for k in keep)

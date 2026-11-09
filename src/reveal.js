@@ -24,4 +24,11 @@ function outputTarget(tool, values) {
   return side ? filled(values, side.name) : '';
 }
 
-if (typeof module !== 'undefined') module.exports = {outputTarget};
+// The image a run says it drew, as font.py gen --preview prints it on a dry
+// run: "anh xem truoc -> <path>", maybe followed by two spaces and a note in
+// brackets. The dialog that asks before writing shows it.
+function previewOf(output) {
+  return String(output || '').match(/^anh xem truoc -> (.+?)(?: {2}\(.*\))?\s*$/m)?.[1] || '';
+}
+
+if (typeof module !== 'undefined') module.exports = {outputTarget, previewOf};

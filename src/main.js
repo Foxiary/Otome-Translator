@@ -408,6 +408,17 @@ function pathKindOf(target) {
   return '';
 }
 ipcMain.handle('path-kind', (_event, target) => pathKindOf(target));
+// A preview image a dry run drew (font.py gen --preview), for the dialog that
+// asks before writing. PNG only, as a data URL: the page loads no file: images.
+ipcMain.handle('image-data', (_event, target) => {
+  const full = resolveUserPath(target);
+  if (!full || !/\.png$/i.test(full)) return '';
+  try {
+    const stat = fs.statSync(full);
+    if (!stat.isFile() || stat.size > 20 * 1024 * 1024) return '';
+    return `data:image/png;base64,${fs.readFileSync(full).toString('base64')}`;
+  } catch {return '';}
+});
 ipcMain.handle('reveal-path', async (_event, target) => {
   const full = resolveUserPath(target);
   const kind = pathKindOf(target);

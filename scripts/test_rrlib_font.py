@@ -141,6 +141,30 @@ class BC3Test(unittest.TestCase):
         self.assertEqual(g, gray)
 
 
+class PlaceTest(unittest.TestCase):
+    """Where gen puts a glyph's ink in its 60x62 cell (dx/dy put it back on the line)."""
+
+    def test_without_an_outline_it_is_the_jp_rule(self):
+        self.assertEqual(font.place((10, 20, 30, 50), 60, 62), (0, 0, True))
+        self.assertEqual(font.place((10, 20, 30, 63), 60, 62), (0, 4, True))     # g: up to row 59
+        self.assertEqual(font.place((3, 20, 30, 50), 60, 62), (4, 0, True))      # î: right of x 7
+
+    def test_room_for_the_outline_on_every_side(self):
+        self.assertEqual(font.outline_room(4.7), 5)
+        self.assertEqual(font.outline_room(4.0), 4)
+        self.assertEqual(font.outline_room(0), 0)
+        self.assertEqual(font.place((10, 20, 30, 63), 60, 62, 5), (0, 6, True))  # the g's tail moves up more
+        self.assertEqual(font.place((10, 2, 30, 40), 60, 62, 5), (0, -3, True))  # stacked accents move down
+        self.assertEqual(font.place((10, 20, 58, 50), 60, 62, 5), (-3, 0, True))  # a wide one moves left
+
+    def test_too_tall_shares_the_cut_and_keeps_the_text(self):
+        sx, sy, fits = font.place((10, 3, 30, 62), 60, 62, 5)
+        self.assertFalse(fits)
+        self.assertEqual(sy, 2)                    # 2 px of the outline lost at the top, 3 at the bottom
+        sx, sy, fits = font.place((10, 0, 30, 62), 60, 62, 5)
+        self.assertEqual(sy, 0)                    # the text fills the cell: it stays whole
+
+
 @unittest.skipUnless(HAVE_PIL, 'needs Pillow')
 class FontFileTest(unittest.TestCase):
     def setUp(self):
@@ -230,6 +254,98 @@ class GenTest(unittest.TestCase):
         self.assertLess(a_ol[0], a_main[0])
         self.assertGreater(a_ol[2], a_main[2])
 
+    def test_letters_that_run_into_each_other_are_spaced_out(self):
+        """A joining script reaches past its advance into the next letter (VL Ricca
+        Script for extra3: in game the words ran together, spaces gone). gen adds
+        the same tracking to every letter it draws and to the space, main and
+        outline alike, and leaves a font whose letters clear each other as it was."""
+        from PIL import ImageFont
+
+        class Joined(ImageFont.FreeTypeFont):
+            def getlength(self, text, *a, **k):          # every letter 8 px into the next
+                return super().getlength(text, *a, **k) - 8
+
+        def median_gap(f, word):
+            """Clear px between neighbouring letters' ink, laid out as the game does."""
+            x, boxes = 0, []
+            for ch in word:
+                g = f.glyph(ch)
+                bb = f.cell(g)[0].getbbox()
+                boxes.append((x + g.dx + bb[0], x + g.dx + bb[2]))
+                x += g.adv
+            gaps = sorted(b[0] - a[1] for a, b in zip(boxes, boxes[1:]))
+            return gaps[len(gaps) // 2]
+
+        jp = font.Font.load(os.path.join(self.jp, 'standard.font.memfs'))
+        rc, log, out = self.gen('--apply')
+        self.assertEqual(rc, 0, log)
+        self.assertNotIn('gian them', log)
+        plain = font.Font.load(os.path.join(out, 'standard.font.memfs'))
+        self.assertEqual(plain.glyph(' ').adv, jp.glyph(' ').adv)
+        self.assertGreaterEqual(median_gap(plain, 'Matsurika'), font.TRACK_GAP)
+
+        real = ImageFont.truetype
+        ImageFont.truetype = lambda f, size=10, index=0, **k: Joined(f, size, index=index)
+        try:
+            rc, log, out = self.gen('--apply')
+        finally:
+            ImageFont.truetype = real
+        self.assertEqual(rc, 0, log)
+        new = font.Font.load(os.path.join(out, 'standard.font.memfs'))
+        self.assertGreaterEqual(median_gap(new, 'Matsurika'), font.TRACK_GAP)
+        self.assertIn('gian them', log)
+        track = int(log.split('gian them ')[1].split()[0])
+        self.assertGreater(track, 0)                          # enough of the 8 px back for TRACK_GAP
+        for ch in 'aHmる':                                    # る carries ệ
+            self.assertEqual(new.glyph(ch).adv, plain.glyph(ch).adv - 8 + track, ch)
+        self.assertEqual(new.glyph(' ').adv, jp.glyph(' ').adv + track)
+        ol = font.Font.load(os.path.join(out, 'standard_outline.font.memfs'))
+        self.assertEqual([g.vals() for g in ol.glyphs], [g.vals() for g in new.glyphs])
+
+    def test_outline_under_a_descender_is_not_cut(self):
+        """The JP g/p/y end on row 59 and the outline under them is cut flat on
+        the cell's last row; a Vietnamese g's round tail showed it (user,
+        2026-11-08). gen moves the ink up by the outline's width as well, the
+        same in the font and its outline, and dy puts it back on the line."""
+        rc, log, out = self.gen('--apply', '--outline-radius', '4.7')     # standard's, measured on JP
+        self.assertEqual(rc, 0, log)
+        self.assertNotIn('vien bi cat', log)
+        new = font.Font.load(os.path.join(out, 'standard.font.memfs'))
+        ol = font.Font.load(os.path.join(out, 'standard_outline.font.memfs'))
+        radius = float(log.split('vien ')[1].split()[0])
+        room = font.outline_room(radius)
+        for ch in 'gpyạ':
+            g = new.glyph(ch)
+            self.assertEqual(ol.glyph(ch).vals(), g.vals(), ch)
+            bb = new.cell(g)[0].getbbox()
+            self.assertLessEqual(bb[3], g.h - room, ch)
+            self.assertGreaterEqual(bb[1], room, ch)
+        # Arial's g reaches below row 59 + room: it moved further up than the JP rule alone would
+        m = font.Metrics(font.Font.load(os.path.join(self.jp, 'standard.font.memfs')))
+        src = font.Chain([TTF], font.fit_px(TTF, m.cap)).pick('g')
+        jp_rule = font.draw_glyph(src, 'g', m, 7)
+        self.assertGreater(new.glyph('g').dy, jp_rule[3])
+        self.assertGreater(jp_rule[0].getbbox()[3], 62 - room)
+
+    def test_width_narrows_letters_at_the_same_height(self):
+        def built(*extra):
+            rc, log, out = self.gen('--apply', *extra)
+            self.assertEqual(rc, 0, log)
+            f = font.Font.load(os.path.join(out, 'standard.font.memfs'))
+            g = f.glyph('H')
+            bb = f.cell(g)[0].getbbox()
+            shutil.rmtree(out)
+            return g, bb, log
+        g, bb, _ = built()
+        g90, bb90, log = built('--width-standard', '90')
+        self.assertIn('be ngang 90%', log)
+        self.assertAlmostEqual(g90.adv, g.adv * 0.9, delta=1)
+        self.assertEqual((bb90[1], bb90[3], g90.dy), (bb[1], bb[3], g.dy))        # same height, same line
+        self.assertAlmostEqual(bb90[2] - bb90[0], (bb[2] - bb[0]) * 0.9, delta=1.5)
+        self.assertAlmostEqual(bb90[0], bb[0], delta=1)                          # still starts at the pen
+        with self.assertRaises(SystemExit):
+            self.gen('--width', '20')
+
     def test_size_for_one_font_only(self):
         rc, log, _ = self.gen('--px-standard', '30')
         self.assertEqual(rc, 0, log)
@@ -300,6 +416,31 @@ class GenTest(unittest.TestCase):
             # each block is the single-font image, outline included
             block = b.crop((0, a.height + font.PREVIEW_GAP, a.width, 2 * a.height + font.PREVIEW_GAP))
             self.assertEqual(block.tobytes(), a.convert('RGBA').tobytes())
+
+    def test_gen_draws_its_preview_on_the_dry_run(self):
+        png = os.path.join(self.d, 'gen.png')
+        rc, log, out = self.gen('--preview', png, '--preview-text', 'Hệ Ể\\nAH')
+        self.assertEqual(rc, 0)
+        self.assertIn('anh xem truoc -> %s' % png, log)
+        self.assertNotIn('khong co:', log)
+        self.assertTrue(os.path.isfile(png))
+        self.assertFalse(os.path.exists(out))                  # still a dry run: no font written
+        # The fonts it would write, drawn the way preview draws the written ones.
+        self.gen('--apply')
+        again = os.path.join(self.d, 'written.png')
+        rc, _ = self.preview(out, 'Hệ Ể\\nAH', again, '--map', os.path.join(self.d, 'map-out.json'))
+        self.assertEqual(rc, 0)
+        with Image.open(png) as a, Image.open(again) as b:
+            self.assertEqual(a.size, b.size)
+            self.assertEqual(a.convert('RGBA').tobytes(), b.convert('RGBA').tobytes())
+
+    def test_gen_preview_has_a_sample_text_and_needs_an_image(self):
+        png = os.path.join(self.d, 'gen.png')
+        rc, log, _ = self.gen('--preview', png)
+        self.assertEqual(rc, 0)
+        self.assertTrue(os.path.isfile(png))
+        with self.assertRaises(SystemExit):
+            self.gen('--preview-text', 'Hệ')
 
     def test_preview_of_a_folder_names_what_is_missing(self):
         _, _, out = self.gen('--apply')

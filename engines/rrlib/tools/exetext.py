@@ -34,13 +34,24 @@ import   writes the vi_text column in. Vietnamese is longer than Japanese,
          run of itself: always give it your mod's main, translated or not.
          Text is encoded for the mod's font with the map that
          applysheet.py --map saves; rows are checked as applysheet checks
-         sheet cells, plus %d/%ls must match JP (printf would crash).
+         sheet cells (kana left, or kanji outside brackets, skip a row),
+         plus %d/%ls must match JP (printf would crash). jp_text only
+         confirms the address, so the ' and " Google Sheets drops ('then'
+         -> then') are ignored there, and a vi that lost the same leading '
+         gets it back; the report names those rows.
 check    lists what is found, then moves every string to the new area
          unchanged, checks that each pointer reads the same string there and
          that undoing it gives the program back byte for byte.
 
 A pointer the code builds some other way is not found: that place keeps
 showing Japanese. Try each screen in the game.
+
+Some Japanese strings are names the game looks things up by, not text it
+shows, and stay Japanese (not in the sheet; a row for one is skipped):
+  - file names (ending .png, ...): the transition masks' table at .data
+    0x55ad30 pairs イメージマスクα.png with imagemask_a.png, the file it
+    loads - translate the left column and the lookup misses
+  - strings the code hands straight to wcscmp / wmemcmp ... (振り子)
 
 The NSO is written with its segments uncompressed (the loader takes both)
 and their hashes recomputed. The read redirects of the 02/10 patch's main
@@ -74,8 +85,19 @@ DROP = dict.fromkeys(map(ord, '「」『』“”​'), None)
 SUBST = (('"', "'"), ('　', ' '))
 JAPANESE = re.compile('[぀-ヿ㐀-䶿一-鿿]')
 SOUNDS = set('っッ')
+KANA = re.compile('[぀-ヿ]')
+GLOSS = re.compile(r'[（(][^（）()\n]*[）)]')
 PRINTF = re.compile(r'%[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:hh|h|ll|l|z|j|t|L)?[diouxXeEfgGcspn%]')
 BUTTON = re.compile(r'\{[A-Za-z+\-]{1,3}\}')
+# Names the game looks up, not text it shows: they stay Japanese.
+FILE_NAME = re.compile(r'\.[A-Za-z0-9]{2,4}$')
+COMPARE = frozenset(('wcscmp', 'wcsncmp', 'wmemcmp', 'wcscasecmp', 'wcsncasecmp', 'wcscoll', 'wcsstr'))
+CALL_WINDOW = 12              # instructions after the ADD/ADR a call is looked for in
+# JP 1.0.0 .data: the glossary, 124 entries of 32 bytes {u32 heading kana, 0,
+# term*, description*, ...}. The game finds an entry by its term without the
+# #R(...) ruby, compared exactly (std::wstring::compare) with the key a script
+# sets (Mov GAMESTR_DictWords) - applysheet.py keeps the two the same.
+GLOSSARY = 0x5557d0
 
 
 def u32(b, o):
@@ -226,6 +248,79 @@ def dynamic(img):
     return tags
 
 
+def imports(img, text_size):
+    """{address of a PLT stub in .text: name of the function it jumps to}.
+    A stub is ADRP x16; LDR x17, [x16, #slot]; ADD x16, ...; BR x17, and the
+    slot is a JUMP_SLOT relocation (DT_JMPREL) naming a dynamic symbol."""
+    tags = dynamic(img)
+    if 23 not in tags or 6 not in tags or 5 not in tags:
+        return {}
+    names = {}
+    for q in range(tags[23], tags[23] + tags.get(2, 0), 24):
+        off, info, _ = struct.unpack_from('<QQq', img, q)
+        p = tags[5] + u32(img, tags[6] + 24 * (info >> 32))
+        names[off] = bytes(img[p:img.index(b'\0', p)]).decode('ascii', 'replace')
+    n = text_size // 4
+    w = struct.unpack_from('<%dI' % n, img, 0)
+    out = {}
+    for i in range(n - 3):
+        if w[i + 3] == 0xd61f0220 and w[i + 1] & 0xffc003ff == 0xf9400211 and w[i] & 31 == 16:
+            page = adrp_target(w[i], 4 * i)
+            slot = None if page is None else page + ((w[i + 1] >> 10) & 0xfff) * 8
+            if slot in names:
+                out[4 * i] = names[slot]
+    return out
+
+
+def key_use(img, s, refs, stubs):
+    """'file' or 'compare' when s is a name the game looks up rather than
+    text it shows, else None."""
+    if FILE_NAME.search(s):
+        return 'file'
+    for kind, at in refs:
+        if kind == 'rela':
+            continue
+        for j in range(at + 4, at + 4 * CALL_WINDOW, 4):
+            x = u32(img, j)
+            if x & 0x7c000000 == 0x14000000:                  # B / BL: the first call decides
+                imm = x & 0x3ffffff
+                if stubs.get(j + 4 * (imm - ((imm & 0x2000000) << 1))) in COMPARE:
+                    return 'compare'
+                break
+    return None
+
+
+def relative_relocs(img):
+    """{place: addend} of the RELATIVE relocations."""
+    tags = dynamic(img)
+    out = {}
+    if 7 not in tags:
+        return out
+    rela, size, ent = tags[7], tags.get(8, 0), tags.get(9, 24) or 24
+    for q in range(rela, rela + size, ent):
+        off, info, add = struct.unpack_from('<QQq', img, q)
+        if info & 0xffffffff == R_AARCH64_RELATIVE:
+            out[off] = add
+    return out
+
+
+def glossary(exe, table=None):
+    """[(entry, term address, description address)] of the in-story glossary
+    table, addresses of the Japanese strings (exe.img is the program before
+    this tool). Stops at the first entry that does not read as one, so a
+    main of another version gives []."""
+    img, rel = exe.img, relative_relocs(exe.img)
+    out, a = [], GLOSSARY if table is None else table
+    while a + 32 <= len(img):
+        kana, zero = struct.unpack_from('<2I', img, a)
+        term, desc = rel.get(a + 8), rel.get(a + 16)
+        if not 0x3041 <= kana <= 0x30ff or zero or term not in exe.strings or desc not in exe.strings:
+            break
+        out.append((a, term, desc))
+        a += 32
+    return out
+
+
 def rela_refs(img, lo, hi):
     """{target: [('rela', address of the Elf64_Rela)]} for RELATIVE relocations into [lo, hi)."""
     tags = dynamic(img)
@@ -305,16 +400,21 @@ class Exe(object):
         bad = set(self.ambiguous)
         for t, rs in rela_refs(img, lo, hi).items():
             refs.setdefault(t, []).extend(rs)
-        self.refs, self.strings = {}, {}
+        self.refs, self.strings, self.keys = {}, {}, {}
         # String literals live in .rodata. Text-looking bytes in .data are a
         # struct: the glossary table (0x5557d0) starts with the u32 'あ', a 0,
         # then pointers - moving it as a string crashes the game on wcslen(NULL).
         ro_end = self.ro_moff + self.ro_size
+        stubs = imports(img, self.text_size)
         for t in sorted(refs):
             rs = [r for r in refs[t] if r not in bad]
             s = read_text(img, t, ro_end) if t % 4 == 0 and t < ro_end else None
             if rs and s and is_japanese(s):
-                self.refs[t], self.strings[t] = rs, s
+                why = key_use(img, s, rs, stubs)
+                if why:
+                    self.keys[t] = (s, why)       # looked up by name: stays Japanese
+                else:
+                    self.refs[t], self.strings[t] = rs, s
 
     def _undo(self, img, head):
         if img[head:head + 8] != MAGIC or u32(img, head + 8) != VERSION:
@@ -506,14 +606,24 @@ def write_rows(path, header, rows):
 
 
 def read_rows(path):
-    """[{row, address, jp, vi}] from a .csv or .xlsx with the export's columns."""
+    """[{row, address, jp, vi}] from a .csv or .xlsx with the export's columns.
+    In an .xlsx the first tab that has them counts, so the whole translation
+    sheet (its exe tab) can be given."""
     if path.lower().endswith('.xlsx'):
         try:
             import openpyxl
         except ImportError:
             raise SystemExit('can openpyxl de doc .xlsx (pip install openpyxl) - hoac tai bang ve dang .csv')
-        ws = openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0]
-        table = [['' if v is None else str(v) for v in r] for r in ws.iter_rows(values_only=True)]
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        table = None
+        for ws in wb.worksheets:
+            t = [['' if v is None else str(v) for v in r] for r in ws.iter_rows(values_only=True, max_row=1)]
+            if t and {'address', 'jp_text', 'vi_text'} <= set(h.strip().lower() for h in t[0]):
+                table = [['' if v is None else str(v) for v in r] for r in ws.iter_rows(values_only=True)]
+                break
+        if table is None:
+            ws = wb.worksheets[0]
+            table = [['' if v is None else str(v) for v in r] for r in ws.iter_rows(values_only=True)]
     else:
         with open(path, encoding='utf-8-sig', newline='') as f:
             table = list(csv.reader(f))
@@ -544,6 +654,35 @@ def load_map(path):
     if not isinstance(fmap, dict) or not all(isinstance(k, str) and len(k) == 1 for k in fmap):
         raise SystemExit('%s: khong phai bang ma font cua applysheet.py --map' % path)
     return fmap
+
+
+def japanese_left(text):
+    """Japanese characters in a translation that would show wrong: any kana
+    but っ/ッ (the font draws Vietnamese letters on kana codes), and kanji
+    outside brackets. A kanji in brackets is a gloss, 'tộc Hoa (嬅)', and
+    draws as itself: no Vietnamese letter sits on a kanji code."""
+    return sorted((set(KANA.findall(text)) | set(JAPANESE.findall(GLOSS.sub('', text)))) - SOUNDS)
+
+
+# Google Sheets takes a cell's leading ' as "keep as text" and drops it, and
+# the sheet lost the quotes round %ls: '"%ls"は…' came back as '%lsは…'.
+QUOTES = dict.fromkeys(map(ord, '\'"'), None)
+
+
+def same_jp(cell, jp):
+    """Does the sheet's jp_text name this string? Sheets may trim a leading
+    \n and drop quotes, so both are compared without them."""
+    t = cell.replace('\r\n', '\n').strip()
+    return t == jp.strip() or t.translate(QUOTES).strip() == jp.translate(QUOTES).strip()
+
+
+def lost_quote(vi, cell, jp):
+    """vi with the leading ' back when Sheets dropped it from both columns:
+    JP 'then' が必要です, cell then' が必要です, vi then' ... -> 'then' ..."""
+    if not jp.startswith("'") or cell.lstrip().startswith("'"):
+        return vi
+    head = jp[1:].split("'", 1)[0]
+    return "'" + vi if head and vi.startswith(head + "'") else vi
 
 
 def vietnamese_letter(ch):
@@ -604,7 +743,10 @@ WHY = {'no-string': 'Exe không có chuỗi tiếng Nhật nào ở địa chỉ
        'format': 'Các mã %d, %ls... khác tiếng Nhật: game có thể lỗi',
        'duplicate': 'Địa chỉ này đã có một dòng khác',
        'buttons': 'Ký hiệu nút {..} khác tiếng Nhật',
-       'font': 'Font chưa có chữ'}
+       'quotes': 'jp_text mất dấu nháy \' hoặc " (Google Sheets bỏ dấu \' đầu ô) - đã khớp theo địa chỉ, nên sửa ô',
+       'font': 'Font chưa có chữ',
+       'key': 'Tên file hoặc chuỗi game dùng để tra cứu, không hiện ra màn hình: dịch vào là game không tìm thấy '
+              '(vd. ảnh hiệu ứng chuyển màn) - giữ tiếng Nhật'}
 
 
 def plan(rows, exe, fmap):
@@ -615,15 +757,16 @@ def plan(rows, exe, fmap):
         rep = dict(r=r, action='skip', why='', more='')
         report.append(rep)
         if jp is None:
-            rep['why'] = 'no-string'; continue
-        if r['jp'].replace('\r\n', '\n').strip() != jp.strip():     # sheets may trim a leading \n
+            rep['why'] = 'key' if a in exe.keys else 'no-string'; continue
+        if not same_jp(r['jp'], jp):
             rep['why'] = 'jp-mismatch'; continue
+        quoted = r['jp'].replace('\r\n', '\n').strip() != jp.strip()
         if not r['vi'].strip():
             rep['why'] = 'empty'; continue
         if a in writes:
             rep['why'] = 'duplicate'; continue
-        text = prepare(r['vi'], jp)
-        left = sorted(set(JAPANESE.findall(text)) - SOUNDS)
+        text = prepare(lost_quote(r['vi'], r['jp'], jp), jp)
+        left = japanese_left(text)
         if left and text == jp.translate(DROP):
             rep['why'] = 'untranslated'; continue
         if left:
@@ -633,7 +776,7 @@ def plan(rows, exe, fmap):
         enc, unknown = encode(text, fmap)
         writes[a] = enc
         rep['action'] = 'write'
-        warn = []
+        warn = ['quotes'] if quoted else []
         if sorted(BUTTON.findall(text)) != sorted(BUTTON.findall(jp)):
             warn.append('buttons')
         if unknown:
@@ -671,6 +814,9 @@ def say_found(exe):
     hooks = redirects(exe.img[:exe.text_size])
     if hooks:
         print('doan chuyen huong doc kich ban cua ban patch: %d (giu nguyen)' % len(hooks))
+    if exe.keys:
+        print('%d chuoi la ten file / chuoi game dung de tra cuu - giu tieng Nhat, khong dua vao bang (vd. %s)' % (
+            len(exe.keys), ', '.join(s for s, _ in list(exe.keys.values())[:3])))
 
 
 def cmd_export(path, out, map_path):
@@ -713,6 +859,9 @@ def cmd_import(path, sheet, map_path, out, report, apply):
           'con sot chu Nhat %d, sai ma %%d %d, trung %d' % (
               len(rows), len(writes), count.get('empty', 0) + count.get('untranslated', 0), count.get('jp-mismatch', 0),
               count.get('no-string', 0), count.get('japanese', 0), count.get('format', 0), count.get('duplicate', 0)))
+    nkey = sum(1 for x in rep if x['why'] == 'key' and x['r']['vi'].strip())
+    if nkey:
+        print('giu tieng Nhat %d dong la ten file / chuoi tra cuu (dich vao game khong tim thay) - xem bao cao' % nkey)
     unknown = sorted(set(ch for x in rep if x['action'] == 'write' for ch in x['more']))
     if unknown:
         print('font chua co: %s' % ' '.join('%s(U+%04X)' % (ch, ord(ch)) for ch in unknown))

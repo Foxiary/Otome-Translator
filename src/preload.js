@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('vees', {
   fileExists: file => ipcRenderer.invoke('file-exists', file),
   pathKind: target => ipcRenderer.invoke('path-kind', target),
   revealPath: target => ipcRenderer.invoke('reveal-path', target),
+  imageData: target => ipcRenderer.invoke('image-data', target),
   choosePython: () => ipcRenderer.invoke('choose-python'),
   setupPython: () => ipcRenderer.invoke('setup-python'),
   checkPython: () => ipcRenderer.invoke('check-python'),

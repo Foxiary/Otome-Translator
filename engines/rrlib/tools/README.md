@@ -11,12 +11,13 @@ Mỗi script tự mô tả trong docstring đầu file (`python tools/<tên>.py 
 | `kuv.py` | `strings`, `calls`, `check` | Kịch bản `.tat`: liệt kê chuỗi, xem lệnh gọi (`GuideMess`, `KW`, `WinClear`…), dựng lại |
 | `exehook.py` | | Đọc các cặp (offset, size) mà `exefs/main` đã vá chuyển hướng |
 | `audit.py` | | Kiểm bản patch so với JP: code, số chuỗi, tag bị mất, tag đẩy chữ ra ngoài màn hình |
-| `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng, mã hoá theo font của mod, trả `#P`, tự kiểm |
+| `overflow.py` | | Tìm dòng tràn khung: xếp chữ bằng font của mod như game, so với màn hình, khung thoại, backlog, từ điển, lựa chọn; gợi ý ngắt dòng, cho biết font cần hẹp lại bao nhiêu |
+| `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng, mã hoá theo font của mod, ghi khoá từ điển đúng theo tiêu đề ở tab `exe` (`--exe-list`), tự sửa 2 lỗi `#P` (đẩy ra ngoài màn hình, dời dấu phẩy), tự kiểm |
 | `patch.py` | | Dựng lại `script.memfs` + `script.membody`: trả `#P`, trỏ thẳng chunk, nới u32, sửa header, tự kiểm |
 | `sheetfix.py` | | Từ sheet dịch (`.xlsx`) ra file đề xuất sửa tag theo đúng tab + dòng |
 | `sprite.py` | `translate`, `export`, `import`, `check` | Ảnh giao diện (`spec_win/ssdata/*.memfs`). `translate`: thư mục trống thì xuất từng ô chữ ra PNG theo tên phần hình, thư mục đã xuất thì dán các ô đã vẽ lại (ô vẽ khác cỡ được dời sang chỗ trống), đóng gói, tự kiểm. `export` / `import` là từng nửa riêng. Cần Pillow |
 | `exetext.py` | `export`, `import`, `check` | Chữ nằm trong `exefs/main` (UTF-32): hộp thoại, lưu nhanh, chú thích nút, từ điển, tên chương. `export` ra danh sách `.csv`, `import` ghi cột `vi_text` vào một vùng mới ở cuối exe và trỏ lại mọi chỗ dùng câu Nhật, tự kiểm, chạy lại được trên chính file nó ghi |
-| `font.py` | `gen`, `preview`, `export`, `info`, `check` | Font của game (`spec_win/font/*.font.memfs`, BC3). `gen` vẽ lại chữ ASCII + tiếng Việt từ file `.ttf`/`.otf`, cỡ khớp chữ H của game, dựng font viền; `--map` vẽ chữ Việt vào đúng ô kana mà kịch bản đang dùng, chữ thiếu (Ể, Ổ) thêm ô mới, `--map-out` lưu bảng mã cho `applysheet.py --use-map`. `preview` vẽ chữ ra PNG bằng một font, hoặc cả 4 font 一 二 三 四 của thư mục font (mỗi font kèm viền). Cần Pillow |
+| `font.py` | `gen`, `preview`, `export`, `info`, `check` | Font của game (`spec_win/font/*.font.memfs`, BC3). `gen` vẽ lại chữ ASCII + tiếng Việt từ file `.ttf`/`.otf`, cỡ khớp chữ H của game, dựng font viền; `--width` / `--width-<font>` bóp ngang chữ (90 = hẹp 10%, giữ chiều cao); `--map` vẽ chữ Việt vào đúng ô kana mà kịch bản đang dùng, chữ thiếu (Ể, Ổ) thêm ô mới, `--map-out` lưu bảng mã cho `applysheet.py --use-map`, `--preview` vẽ chữ bằng font mới ra PNG ngay ở lần chạy thử. `preview` vẽ chữ ra PNG bằng một font, hoặc cả 4 font 一 二 三 四 của thư mục font (mỗi font kèm viền). Cần Pillow |
 | `tags.py` | | Thư viện: đọc tag, trả `#P`, các số đo màn hình — không phải lệnh |
 
 ## Đã kiểm trên dữ liệu thật
@@ -52,6 +53,11 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
   - so với bản đang chơi: 65 845 chuỗi không đổi, 5 169 chuỗi đổi chữ theo sheet
     mới, 485 chuỗi chỉ đổi cách xuống dòng (các biến thể `#T` giờ mỗi cái một dòng
     như JP), 41 chuỗi chỉ khác tag. Không chuỗi đã dịch nào quay về tiếng Nhật;
+  - tab EV04_0008_02 có 188 ô không phải câu dịch. 113 ô là cả một dòng CSV cũ
+    dán vào (`JP,Ko Ouyo,「câu Việt」`, hoặc `JP,câu Việt,,,,,`), 75 ô thừa
+    `,,,,,` ở cuối. Từ 08/11 công cụ chỉ lấy phần câu Việt và ghi tên từng dòng
+    vào báo cáo để sửa trong sheet: ghi 30 578 chuỗi, chỉ 187 chuỗi của
+    EV04_0008_02 thay đổi;
   - ở những dòng mà chữ trong sheet vẫn giống bản 02/10, cách chuyển chữ cho ra
     giống từng byte 93,6% chuỗi của bản đó. Phần còn lại lệch vì builder cũ làm
     mất `#P`/`#KW` và gộp các đoạn có tag thành một dòng.
@@ -75,6 +81,20 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
   - `gen` trên thư mục font JP, Arial, bảng mã 70 chữ học từ bản mod, ~25 giây cho 10 file: vẽ 228 chữ mỗi font, thêm 30 ô (Ể, Ổ và chữ hoa bản mod chưa dùng; `ui` thêm 79 vì thiếu cả các mã kana). Ngoài các ô được vẽ, không khối 4×4 nào của ảnh đổi; kanji/kana giữ nguyên từng byte;
   - bán kính viền đo được trên cặp font JP: standard 4,7 px, extra 5,0, extra2 4,3, extra3 4,0, ui 3,2;
   - Arial rộng hơn chữ của font `standard` 14%: câu dài có thể tràn khung.
+  - viền (2026-11-08):
+    - font JP để đuôi g/p/y chạm hàng 59 nên viền dưới bị cắt phẳng ở đáy ô, và bản dựng cũ cũng vậy;
+    - với 5 font người dùng chọn ở cỡ vừa chữ H, số chữ bị mất viền: standard 58, extra 54, extra2 54, extra3 10, ui 9;
+    - `gen` giờ chừa chỗ cho viền (dời chữ trong ô, bù bằng `dx`/`dy`) nên không chữ nào còn mất viền, và font chữ với font viền vẫn có cùng bảng glyph;
+    - g giờ có `dy` 13; chữ hoa hai dấu của standard/extra có `dy` 5–6, nhỏ hơn mức 7 mà font JP chưa bao giờ xuống dưới. Chưa thử trong game.
+
+- `overflow.py` (2026-11-08) trên bản mod đang cài, khoảng 8 giây:
+  - đối chiếu 3 ảnh chụp trong game: EV00_0001_01 dòng 352 lố màn hình +20 px (ảnh: chữ "y" cuối bị cắt ở mép); trong backlog dòng 354 lố +76 px, dòng 356 +130 px (đo trên ảnh: +76, +136); từ điển "Huỳnh Thanh" lố +474 px, tức chữ dừng ở x 1836 (đo trên ảnh: 1841);
+  - các số đo lấy từ chính các ảnh đó: chữ truyện vẽ gấp 1,05 lần cỡ font (đo được 1,047–1,048 trên hai dòng), backlog 0,9 lần, từ điển dùng `extra2` gấp 1,05;
+  - với 4 font đang cài: `standard` 20,8 px/chữ, backlog chỉ chứa ~54 chữ/dòng nên ~22 000 câu tràn backlog; `extra` 18,2 px/chữ (6 750 dòng tràn); `extra2`, `extra3` gần như vừa hết. 68 / 121 mục từ điển đã dịch bị tràn vì viết thành một dòng dài;
+  - khung thoại và nút lựa chọn chưa có ảnh chụp câu dài: số giới hạn là ước lượng theo ảnh giao diện.
+  - dựng lại `standard` ở 34 px (bản tự chỉnh là 43 px; trước đó dựng lại 43 px ra giống từng byte bản đang cài): 17,0 px/chữ, số dòng tràn backlog từ 33 808 còn 303, phần lớn là câu rác ở EV04_0008_02 và câu chưa ngắt dòng. 36 px còn 3 413 dòng, 35 px còn 793. Đã cài vào mod (bản cũ ở `.bak8`), chưa thử trong game.
+  - kiểu tràn: với 4 font đang cài, 296 câu tràn ở mọi font và 5 972 câu chỉ tràn ở một số font (gần hết do `extra`). Chỉ giảm cỡ, `standard` 32 / `extra` 38 / `extra2` 34 / `extra3` 36 còn 121 câu tràn ở mọi font và 17 câu chỉ ở một số font.
+  - `--width` (2026-11-08): bề ngang 100 dựng ra giống từng byte bản cũ. Với 90%, `extra` (UVN La Xanh) từ 17,3 còn 15,7 px/chữ trung bình mà khoảng hở giữa chữ vẫn 2 px; lúc đầu co ảnh bằng LANCZOS thì viền nhoè làm công cụ tưởng chữ dính và tự giãn thêm 2 px, nên giờ co bằng BOX. Bộ `standard` 80% 40 px, `extra` 85%, `extra2` / `extra3` 90%: 125 câu tràn ở mọi font, 21 câu chỉ tràn ở một số font. Đã cài vào mod lúc 21:29 (bản cũ ở `.bak8` / `.bak9`), chưa thử trong game.
 
 **Đã thử trong game:** EV00_0001_01 với `#P` đã trả, và memfs có mục 32-bit. Menu tiêu đề `ttlm_nam` do `sprite.py import` dựng (07/11/2026, Astrid): 17 ô vẽ lại bằng chữ Việt (5 mục lúc chưa chọn và đang chọn, 5 câu chú thích dọc, 戻る, おまけ) hiện đúng. Ngày 08/11/2026 đã thử trong game bản có các nhãn menu vẽ to hơn ô gốc: chữ hiện đúng, tâm vẫn ở chỗ chữ Nhật cũ. Bản đó do một script thử dựng, dời ô theo đúng cách `sprite.py import` làm bây giờ. Bản do chính `sprite.py` dựng thì chưa chạy trong game, nhưng mọi trạng thái của nó cắt ra cùng điểm ảnh, ở cùng vị trí với bản kia.
 **Chưa thử trong game:** bản do `applysheet.py` dựng; font do `font.py gen` dựng (nhất là các ô mới thêm và độ dời `dx`/`dy`).
@@ -103,3 +123,10 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
     thuật ngữ ngay sau đoạn mở đầu thì đọc phải con trỏ rỗng và văng. Giờ công
     cụ chỉ lấy chuỗi trong .rodata; dòng `0x5557d0` trong bảng dịch cũ bị bỏ qua
     ("Exe không có chuỗi tiếng Nhật nào ở địa chỉ này").
+  - 13 chuỗi là tên game dùng để tra cứu, không hiện ra màn hình: 11 tên ảnh
+    mặt nạ chuyển màn (`イメージマスクα.png`, `のぞき見.png`… - bảng trong exe
+    đổi tên Nhật sang tên file thật), `振り子` và `角度維持` (code đưa thẳng vào
+    `wcscmp`/`wmemcmp`). Công cụ giữ tiếng Nhật, không đưa vào bảng; dòng đã
+    dịch bị bỏ qua với lý do riêng. Bản `main` 18:46 đã dịch 12 chuỗi trong số
+    đó; bản dựng lại không có chúng cài lúc 20:22, chưa biết có hết văng game
+    khi chuyển qua lại màn cài đặt không.

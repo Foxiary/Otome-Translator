@@ -393,12 +393,28 @@ async function offerApply(offer) {
     } catch {}
   }
   const entries = replaced.map(line => {const [name, backup] = line.split(/\s*->\s*/); return {name, backup};});
+  // Each changed image beside the game's own, which the dry run saved under
+  // "anh goc de so sanh -> <folder>" (sprite.py export), to decide by looking.
+  const originals = overwrite ? offer.output.match(/^anh goc de so sanh -> (.+?)\s*$/m)?.[1] || '' : '';
+  const sides = overwrite && where ? {where, originals} : null;
+  const single = sides && entries.length === 1 ? await compareImages(sides, entries[0].name) : null;
+  // A preview the dry run drew (font.py gen --preview): look at it, then write.
+  const preview = previewOf(offer.output);
+  let previewData = '';
+  if (preview) try {previewData = await window.vees.imageData(preview);} catch {}
   // True until the user says write, and that run starts a log of its own.
   setLog(`${currentLog}${text('apply.declined')}\n`);
   whenNoDialog(() => {
     dialogContent(text(`${words}.title`), body => {
       paragraph(body, text(`${words}.body`, {tool: toolText(item, 'title')}));
       if (where) {paragraph(body, text(overwrite ? 'overwrite.where' : 'apply.where')); paragraph(body, where, 'mono dialog-path');}
+      if (previewData) {
+        paragraph(body, text('apply.preview'));
+        const image = elt('img', 'dialog-preview');
+        image.src = previewData; image.alt = preview; image.title = text('apply.previewOpen');
+        image.addEventListener('click', () => window.vees.revealPath(preview).catch(() => {}));
+        body.append(image);
+      }
       // Files that get replaced stand out in a warning box: yellow while a
       // .bak keeps the old one, red when nothing does.
       if (replaced.length) {
@@ -414,6 +430,7 @@ async function offerApply(offer) {
         for (const line of replaced) lines.append(elt('div', 'mono', line.replace(/\s*->\s*/, '  →  ')));
         box.append(lines);
         body.append(box);
+        if (single) compareBlock(body, single);
       } else if (overwrite) paragraph(body, text('overwrite.same'));
       const actions = elt('div', 'dialog-actions');
       const add = (label, onClick, className = 'button') => actions.append(actionButton(className, label, onClick));
@@ -422,7 +439,7 @@ async function offerApply(offer) {
         const names = entries.map(entry => entry.name);
         add(text('overwrite.keepAll'), () => runConfirmed(offer, {'--keep': names.join('\n')}), 'button primary');
         add(text('overwrite.replaceAll'), () => runConfirmed(offer));
-        if (entries.length > 1) add(text('overwrite.each'), () => askEach(offer, entries));
+        if (entries.length > 1) add(text('overwrite.each'), () => askEach(offer, entries, sides));
       } else add(text(`${words}.write`), () => runConfirmed(offer), 'button primary');
       add(text(overwrite ? 'overwrite.cancel' : 'apply.notNow'), () => $('info-dialog').close(), 'button quiet');
       body.append(actions);
@@ -439,16 +456,47 @@ async function runConfirmed(offer, extra = {}) {
 }
 // One changed file at a time, as Finder asks: keep it or replace it, with a box
 // to do the same for the rest. Keep is the default; Stop writes nothing.
-function askEach(offer, entries) {
+// The user's image and the game's, side by side on a checkerboard so clear
+// pixels show; clicking the user's opens it in its folder.
+async function compareImages(sides, name) {
+  const load = async target => {try {return target ? await window.vees.imageData(target) : '';} catch {return '';}};
+  const mine = `${sides.where}/${name}`;
+  return {mine: await load(mine), game: await load(sides.originals && `${sides.originals}/${name}`), minePath: mine};
+}
+function compareBlock(parent, shown) {
+  const grid = elt('div', 'dialog-compare');
+  const side = (caption, data, path) => {
+    const figure = elt('figure');
+    const pane = elt('div', 'pane');
+    if (data) {
+      const image = elt('img');
+      image.src = data;
+      image.alt = caption;
+      if (path) {
+        image.title = text('overwrite.openMine');
+        image.addEventListener('click', () => window.vees.revealPath(path).catch(() => {}));
+      }
+      pane.append(image);
+    } else pane.append(elt('span', 'help', text('overwrite.noImage')));
+    figure.append(pane, elt('figcaption', '', caption));
+    grid.append(figure);
+  };
+  side(text('overwrite.mine'), shown.mine, shown.minePath);
+  side(text('overwrite.game'), shown.game, '');
+  parent.append(grid);
+}
+function askEach(offer, entries, sides) {
   const keep = [];
   let index = 0;
-  const step = () => {
+  const step = async () => {
     if (index >= entries.length) return runConfirmed(offer, {'--keep': keep.join('\n')});
     const {name, backup} = entries[index];
     const left = entries.length - index - 1;
+    const shown = sides && /\.png$/i.test(name) ? await compareImages(sides, name) : null;
     dialogContent(text('overwrite.eachTitle', {index: index + 1, total: entries.length}), body => {
       paragraph(body, name, 'mono dialog-file');
       paragraph(body, text(/\.png$/i.test(name) ? 'overwrite.eachBody' : 'overwrite.eachOther'));
+      if (shown) compareBlock(body, shown);
       if (backup) paragraph(body, text('overwrite.replaceNote', {backup}), 'help');
       let same = null;
       if (left) {

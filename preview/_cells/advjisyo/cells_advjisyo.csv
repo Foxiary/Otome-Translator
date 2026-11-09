@@ -1,0 +1,11 @@
+﻿file,texture,x,y,w,h,parts
+mat_advjisyo/mat_advjisyo_base.png,mat_advjisyo,4,4,1012,674,mat_advjisyo_base
+mat_advjisyo/mat_advjisyo_btn_modoru.png,mat_advjisyo,1020,4,304,186,mat_advjisyo_btn_modoru
+mat_advjisyo/mat_advjisyo_ttlbase.png,mat_advjisyo,1328,4,470,82,mat_advjisyo_ttlbase
+mat_advjisyo/mat_advjisyo_guide_txt.png,mat_advjisyo,1802,4,36,410,mat_advjisyo_guide_txt
+mat_advjisyo/mat_advjisyo_btn_l.png,mat_advjisyo,1842,4,98,132,mat_advjisyo_btn_l
+mat_advjisyo/mat_advjisyo_btn_r.png,mat_advjisyo,1944,4,94,132,mat_advjisyo_btn_r
+mat_advjisyo/mat_advjisyo_scrollbar_base.png,mat_advjisyo,1328,90,12,384,mat_advjisyo_scrollbar_base
+mat_advjisyo/mat_advjisyo_btn_modoru_txt.png,mat_advjisyo,1344,90,108,42,mat_advjisyo_btn_modoru_txt
+mat_advjisyo/mat_advjisyo_guide_txt02.png,mat_advjisyo,1456,90,36,100,mat_advjisyo_guide_txt02
+mat_advjisyo/mat_advjisyo_scrollbar_bar.png,mat_advjisyo,1496,90,38,38,mat_advjisyo_scrollbar_bar

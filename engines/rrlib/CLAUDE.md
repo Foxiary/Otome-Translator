@@ -207,6 +207,41 @@ moved copy, read a NULL term pointer and crashed in `wcslen` (LR main:0x10cd8c)
 right after the prologue text when it looked a glossary term up. The tool now
 ignores anything outside .rodata.
 
+The glossary is found by text. A script opens an entry with `Mov
+GAMESTR_DictWords, <key>` (131 Movs, 124 keys, never shown); the code at
+0x10ccb0.. walks the table and calls `std::wstring::compare` on each term,
+so a key works only if it equals the term, `#R(...)` taken off, character
+for character and after the font encoding. JP: 124/124 equal. The 02/10
+build had 82 of 131 keys different from its terms; the 09/11 sheet 71.
+`applysheet.py` therefore writes each key from the term `exetext.plan`
+produces from the exe tab (`exetext.glossary` reads the table), not from
+the key's own cell.
+
+Not all of it is text: 13 strings are names the game looks up and stay
+Japanese (`Exe.keys`, left out of the sheet, a filled row skipped as 'key'),
+so 770 remain to translate.
+- File names. The transition-mask table at .data 0x55ad30 pairs the name a
+  caller asks for with the file loaded: `イメージマスクα.png` →
+  `imagemask_a.png`, `のぞき見.png` → `window.png`, `風車.png` →
+  `windmill.png` (11 pairs). The code at 0x1b90b0.. also matches the request
+  with `wmemcmp(name, L"…", JP length)`. The 18:46 main had the left column
+  "translated" (`nozokimi.png`, `imagemask_a.png`...), so no request matched.
+- Strings handed straight to `wcscmp`/`wmemcmp`/`wcsncmp`/`wcsstr`: `振り子`
+  (0x16d488, translated `Con lắc` in that main) and `角度維持`. Found by
+  following the first `BL` after the string's `ADD` to a PLT stub (`imports()`
+  reads DT_JMPREL + .dynsym); 357 stubs.
+Who asks for those masks was not found: no script string pool nor romfs file
+holds the names in UTF-8/16/32 or SJIS. That main crashed twice
+(2026-11-08, PC main:0x15e5ac, LR 0x1626a0) after many switches between the
+settings screen and the main screen: the SpriteStudio player read pack 330 /
+339 of opt.ssdata (372 packs, both valid) through its cached data pointer
+(player+336, from resource+32) and found other data (pack table values
+0xff360026 / 0xe800000a, which read like i16 positions of a smaller ssdata's
+states). The JP game without the mod ran 1 min 52 s of that without a crash;
+the mod's crashes came after 3:26 and 4:25, and one mod session ran 10+ min
+clean. A main with those 12 back in Japanese was installed 20:22; not yet
+known whether it ends the crash.
+
 Space: VI is about twice as long, so nothing is rewritten in place. The
 module image ends at 0x6a6000 (.data 0x549000 + 0x5f6f8, .bss 0xfd908);
 MOD0's bss_end is 0x6a5d70. `exetext.py import` turns .bss into zero-filled
@@ -303,6 +338,73 @@ screen's last line should end by **y = 1000** unless JP itself goes lower.
 These are measurements, not engine constants; nothing clips, text simply
 draws over the art.
 
+## Line widths (overflow.py)
+
+The engine never wraps and never clips: a line breaks only at a `\n`, and a
+line too wide for its box draws past it. Measured 2026-11-08 on three
+screenshots of the installed build (2000x1115 window, so x scale 2000/1920),
+by fitting word starts against the font's advances:
+
+| where | font | scale | text from | stops at | source |
+|---|---|---|---|---|---|
+| story line with `#P(x,y)` | settings choice | 1.05 | x | 1920 (screen edge) | EV00_0001_01 #352 at #P(520,200): fit 1.047 / 1.048, offset 517 / 521 |
+| backlog | settings choice | 0.90 | 240 | 1258 (cyan name strip) | same lines in the backlog, correlation 0.84 at 0.900 |
+| glossary popup (advjisyo) | **extra2** always | 1.05 | 576 | 1362 (paper edge) | the Huỳnh Thanh entry, fit 1.053, while the story behind it used standard |
+| message window (no `#P`) | settings choice | 1.05 | 170 | 1374 | **estimate**: advwin `text_atari` 48x48 at x 167..215; the face picture `mat_adwin_facepic` covers x 1243..2063, the page arrow `mat_adwin_okuri` 1374..1474 |
+| choice button | settings choice | 1.05 | centred | 760 wide | **estimate**: `mat_advsen_texbase` is 840 wide |
+
+The story draws the 40 px fonts at about 42 px and the backlog at 36 px. The
+window art (`mat_adwin_win`) is a translucent band across the whole screen;
+nothing in it stops a line, so its limit is where the face picture starts to
+matter. JP's widest window line ends at 170 + 1134. A screenshot of a long
+window line and of a long choice would turn the two estimates into
+measurements (`--window-right`).
+
+The glossary table (see "Text in the program") gives each description's
+string; exetext's undo table gives the VI one. JP wraps descriptions by hand
+at 17 characters; the 2026-11-08 VI main has most as one long line.
+
+What the installed build showed: with `standard` (FertigoPro) at 20.8 px a
+character, a 62-character line is ~1290 px and the backlog holds ~1131, so
+about 22 000 strings run under the name strip; `extra` at 18.2 px is right
+at the limit (6 750 lines over), `extra2`/`extra3` fit. That is a font size
+question (`font.py gen --px-standard`), not one of translation. At 20:17
+standard (+ outline) was rebuilt at 34 px from the same sources and map
+(`font.py gen` reproduced the 43 px file byte for byte first): 17.0 px a
+character, backlog lines over 33 808 -> 303, most of them the junk below or
+strings the builder never wrapped (EV01_0006_01 #539). 36 px left 3 413, 35
+px 793. Not yet seen in game. A rebuild of all ten fonts at 20:10 (not this
+session) had made extra2 17.9 and extra3 17.3 px a character.
+
+One translation serves all four settings fonts, so the fonts have to agree:
+a string should run out in every font (the line's fault) or in none.
+`overflow.py` reports both kinds (`kieu tran`, CSV column `fonts`). With
+the 20:10 fonts + standard 34: 296 strings in every font, 5 972 in only
+some (extra 5 969). Shrinking alone, standard 32 / extra 38 / extra2 34 /
+extra3 36 leaves 121 and 17. Simulated (advances x 0.9, not built): the
+user's plan of -10% width at the fitted sizes brings extra / extra2 / extra3
+to 138 / 116 / 114 strings, 111 of them shared, but standard needs 37 px on
+top of it (14 469 -> 136). The ~111-125 strings over in every font are the
+EV04 junk, strings never wrapped and #P lines placed too far right. The same run
+found 44 over-wide strings in EV04_0008_02 that read "JP text,Speaker,VI
+text" - a CSV row pasted whole. That script has 112 such strings and 75 that
+end in ",,,,,", and the sheet holds them too (see "Pasted CSV rows").
+
+`font.py gen --width PCT` (and `--width-<family>`) draws every glyph PCT% as
+wide at the same height: the glyph is drawn as before, then the drawing is
+resized horizontally round the pen with BOX (area averaging), and the
+advance is the source advance times the factor. LANCZOS was tried first: its
+ringing left a faint halo that tracking() counted as ink, so UVN La Xanh at
+90% "touched" and got +2 px, ending wider than at 100%. Width 100 rebuilds
+the installed fonts byte for byte. Built and measured (overflow.py, 4 fonts):
+standard 80% at 40 px, extra 85%, extra2 90%, extra3 90% (fitted sizes 45 /
+39 / 41) gives 16.1-16.4 px a character for all four and 125 strings over in
+every font, 21 in only some - the most even set tried. extra2/extra3 keep
+their +1/+3 tracking at 90%. Installed into the Astris mod 2026-11-08 21:29 with
+font.py gen (older files kept as .bak8/.bak9); overflow.py on the mod then
+reports the same 125 + 21. Not seen in game yet. UVN La Xanh's tilde is a
+flat stroke that reads close to an acute at game size, at 100% as at 85%.
+
 ## The translation sheet
 
 Google Sheet, one tab per script, columns `record_id, command, script,
@@ -340,9 +442,17 @@ The exe (JP `main`, data at 0x549138) lists them in a table of 24-byte entries
 standard, standard_outline, extra, extra_outline, extra2, extra2_outline,
 extra3, extra3_outline, ui, ui_outline; flag 1 on standard, standard_outline
 and ui. The four フォント choices of the settings screen (一 二 三 四) follow
-that order: 二 drew the sample line in `extra` on screen (user's screenshot,
-2026-11-08, matched glyph for glyph); 一/三/四 = standard/extra2/extra3 is
-read off the order, not seen. `ui` is not one of the four.
+that order (一/三/四 = standard/extra2/extra3 read off the order; `ui` is not
+one of the four).
+
+The sample line under them is NOT drawn with the font: it is four pictures
+in `ssdata/opt` (texture mat_opt), cells `mat_opt_win_txt01`..`04`, the
+prologue line 「人々を救うって……」 (EV00_0001_01 string 560) pre-rendered
+once per font. A screenshot of 二 matched `extra` glyph for glyph only because
+the art was made with the same font. So the settings screen stays Japanese
+and never shows a rebuilt font, whatever font.py writes (user, 2026-11-08,
+extra3 installed, sample still JP). Judge fonts on story text, or redraw those
+four cells with sprite.py.
 
 A font is an rrlib/memfs with its body inside (`hasSeparateBody` false), and
 uses more of RSON than `script.memfs`, so font.py has its own reader/writer
@@ -385,8 +495,61 @@ dx/dy (usually 0/7) move a glyph whose ink would leave the cell. The JP 'p'
 sits 3 px higher in its cell than 'o' with dy 10, 'g' 2 px with dy 9, 'î' 3 px
 to the right with dx -3; so the engine draws a cell (dy-7) lower and dx further
 left. Inferred from the cell contents (the bowls of p/q/g line up with o once
-moved back); not yet confirmed on screen. font.py gen follows the same rule:
-ink kept right of x 7 and above row 59.
+moved back). dx seen on screen 2026-11-08: an extra3 line in game (T and s
+with dx -3, Đ -2) matches the same line laid out with dx as a left shift
+(IoU 0.291) better than with dx ignored (0.276) or reversed (0.248). dy not
+yet confirmed on screen.
+
+The JP fonts keep only the text in the cell: their g/p/y end on row 59, and
+the outline under them (4-5 px wider) is cut flat on row 61 in all four
+settings fonts. A VI g's round tail made the cut show (user, 2026-11-08).
+font.py gen (`place()`) keeps ink right of x 7 and above row 59 as JP does,
+and also leaves the family's outline width (`outline_room`: 5 px for
+standard/extra/extra2, 4 for extra3/ui) clear on every side, the same in the
+font and its _outline. With the user's fonts at their fitted sizes no glyph
+loses any outline (before: 58 in standard, 54 extra, 54 extra2, 10 extra3,
+9 ui). That puts g at dy 13 and moves the stacked capitals of
+standard/extra (Ằ Ẳ Ẩ Ể Ổ...) DOWN, dy 5-6: the JP fonts never go below dy 7.
+Neither was seen in game yet. A glyph too tall for its room keeps the text
+whole and is reported (`vien bi cat`).
+
+### Spacing
+
+The game lays a line out by advance alone (scaled: 1.05 in the story, 0.9 in
+the backlog, see "Line widths"):
+- no kerning, no contextual forms;
+- every letter gets its `_outline` drawn under it.
+
+The JP Latin was never meant for running text. Median clear space between
+neighbouring letters' ink, VI sample laid out by the JP advances: standard
++1.5, extra +2.8, extra2 +0.4, extra3 -1.8 px. extra3's space is 7 px, the
+others' 12-14.
+
+A joining script keeps its overlap by design: each letter reaches past its
+advance into the next, which the font's own kerning and alternates join up.
+- VL Ricca Script (the user's extra3) measures -3 px at 30 px, and so does VL
+  Kathya (extra2).
+- In game the black-screen narration in extra3 ran into one outlined blob
+  (user's screenshot, 2026-11-08):
+  - 11.8 px per character, exactly what `preview` draws from the same font;
+  - word gaps of 3 px, less than the 4 px outline.
+- It was not the size: H is fitted to the template's 29 px and the advances
+  come from the same drawing.
+
+`gen` measures that median on SAMPLE as it draws (`tracking`). Under
+`TRACK_GAP` (1 px), it adds the difference to every advance it writes and to
+the space's:
+- Ricca and Kathya +4, DL Thu Phap (ui) +2;
+- FertigoPro and UVN La Xanh measure +2 and get nothing; standard and extra
+  come out byte-identical to the build before.
+- Glyphs, dx/dy and textures do not change. The rebuilt extra3 differs from
+  the installed one only in 229 advances (+4).
+
+The dry run's "too wide" warning compares against the wider of the template's
+Latin and `LINE_CHAR_PX` (18.4 px, what the scripts are wrapped for).
+extra3's own 12 px Latin would flag every readable font.
+
+Not yet seen in game.
 
 Textures: RTEX flags 0x84002 = BC3 (DXT5), LINEAR block order (no Switch
 swizzle), payload RZ + zlib. Alpha is the glyph; RGB a white mask 1 px wider
@@ -430,20 +593,66 @@ parts into one wrapped paragraph - the #T2 text then breaks mid-sentence,
 because the #T1 text it never shows is counted into the line. applysheet
 keeps the cell's tags and lines, which follow JP.
 
-**Tags are the translator's call.** applysheet writes every tag exactly as
-the cell has it: it puts no lost #P back and takes no off-screen #P off
-(`patch.build(restore=False, untag_offscreen=False)`, `patch.verify(...,
-check_tags=False)`). Whether a line should carry a tag is decided by whoever
-edits the translation; `audit.py` on the build and `sheetfix.py` on the sheet
-are the tools that report what is missing or hidden.
+**Tags are the translator's call.** applysheet writes every tag as the cell
+has it and puts no lost #P back (`patch.build(restore=False,
+untag_offscreen=False)`, `patch.verify(..., check_tags=False)`). Whether a
+line should carry a tag is decided by whoever edits the translation;
+`audit.py` on the build and `sheetfix.py` on the sheet report what is missing
+or hidden. Two faults are mended in `fix_tags` (and reported), since the
+line is broken in game either way - the 09/11 sheet carried 27 and 4:
+- every #P of the cell off the screen (`tags.all_offscreen`): tags dropped.
+  JP hides the poems the art already shows (`#P(520,1200)`); a translation
+  kept there is readable only in the backlog (the user hit it 2026-11-07).
+- `#P(1110220),` - a CSV round trip moved the comma out of the tag: the JP
+  string's tag whose x and y read so is put back.
 
 Rows it leaves to the mod's string: `jp_text` not matching the game, a cell
 that is still the JP line, a cell with kana other than `っ`/`ッ` (the font
 gives those codes to Vietnamese letters; the gasp `っ` is kept on purpose and
-drawn, the patch has it in 228 strings), and a second row for a string with
+drawn, the patch has it in 228 strings) or a kanji outside brackets (a kanji
+in brackets is a gloss, `tộc Hoa (嬅)`, and no letter sits on a kanji code -
+`exetext.japanese_left`, shared by both tools), and a second row for a string with
 another translation (first row wins). The sheet has no rows for speaker
 names and choices - 1 196 translated strings in the 02/10 patch - so a build
 needs the mod as its base, never JP alone.
+
+### Pasted CSV rows
+
+Tab EV04_0008_02 (and nothing else in the 07/11 sheet) has 188 cells that
+are not a translation:
+- 113 hold a whole row of an older CSV export: `JP,Speaker,VI` on NameMess
+  lines (`…,Ko Ouyo,「…」`) and `JP,VI,,,,,` on narration.
+  - The JP part is jp_text without ruby, with 、。 as `,.` and line breaks as
+    spaces, and once a typo (`余エに` for 余計に).
+  - The translators edited the VI inside it, so the VI part is current.
+- 75 hold the VI followed by the empty columns `,,,,,`.
+- The 02/10 patch carries the same strings, and so did every build from the
+  sheet. Before the guard, applysheet skipped 108 of them for their kana and
+  kept the mod's equally broken string. It wrote the other 79 with the junk
+  in, because their JP part has no kana (`「――……」`) or there is no JP part.
+
+`csv_row` now takes the VI part:
+- The JP part is the cell before a comma that matches jp_text at 85% as the
+  export wrote it (`csv_jp`), scanning only while no Latin letter has
+  appeared.
+- On a NameMess line the next field is the speaker; trailing empty columns
+  are dropped.
+- The report and the summary line name each such row, so the cell can be
+  cleaned in the sheet. That includes a second row of the same string that
+  cleans to the same text (string 101), reported as 'same'.
+- The same export left two more kinds of junk, which `cleanup` also takes
+  off (2026-11-08):
+  - 207 NameMess cells in 9 other tabs open with the speaker's name,
+    `Fey,「Dừng lại……!」`, often an older spelling than speaker_vi
+    (`Kỷ Uyển` / `Quý Uyển`). The installed mod showed it in the line.
+    The rule applies only when the JP opens with a quote; a name may have up
+    to 40 characters.
+  - 5 cells open with a comma; it is kept where the JP line opens with 、.
+  - With all four kinds, 393 strings change against the committed tool, all
+    from cleaned cells.
+- String 124's JP has #T1/#T2 variants; its CSV text has no #T, so the
+  heroine is called Naya whatever her name. The cleaned cell keeps that until
+  a translator adds the tags.
 
 ## Verified
 
@@ -457,6 +666,10 @@ needs the mod as its base, never JP alone.
 - `applysheet.py` on the 07/11 sheet and the installed build: 30 470 strings
   written, check OK, no translated string turned back to JP, 0 #T / #KW lost
   against JP (the translators had fixed them). Not yet tried in game.
+  With the pasted-row guard (2026-11-08), same sheet: 30 578 written. The 188
+  rows are found in EV04_0008_02 only, and their VI matches a hand-made
+  cleanup. The only strings that change are 187 of EV04_0008_02, none of
+  which keeps `,,,,,`, `,Ko …,` or a kanji.
 - `font.py check`: all 20 fonts (JP + 02/10 mod) byte-identical. `gen` with
   the 70-letter map learnt from the mod: only the drawn cells' blocks change.
   Not yet tried in game.
