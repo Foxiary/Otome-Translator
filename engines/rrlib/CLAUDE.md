@@ -419,6 +419,16 @@ afterwards: 11 strings over in every font, 23 in only some (none in
 extra2), glossary 0. Installed with font.py gen (previous at .bak9, extra3
 at .bak10); not seen in game yet.
 
+The same day extra3 became LF Oregano Regular at 48 px, width 98% (fitted
+41 px gave 13.6 px a character; 50 px cuts the outline of Ệ Ộ). Its average
+is 15.8 px, but at 100% it ran out on more window lines than standard
+(19 against 15): compare the per-font line counts, not only the average.
+At 98% it is 14 window / 24 backlog lines against standard's 15 / 27.
+Its own space is 9 px, so the median word gap is 10 px against 14-16 in the
+other three: about 2 px clear between the outlines, words still apart in
+the preview. overflow.py on the mod: 11 strings over in every font, 26 in
+only some. Brainstroke is at .bak11, the 100% Oregano at .bak12.
+
 ## The translation sheet
 
 Google Sheet, one tab per script, columns `record_id, command, script,
