@@ -302,6 +302,27 @@ class GenTest(unittest.TestCase):
         ol = font.Font.load(os.path.join(out, 'standard_outline.font.memfs'))
         self.assertEqual([g.vals() for g in ol.glyphs], [g.vals() for g in new.glyphs])
 
+    def test_a_narrow_template_space_takes_the_fonts_own(self):
+        """extra3's JP space is 7 px; LF Brainstroke Condensed's own is ~15 px
+        at its size, and words would nearly touch under the outline. gen keeps
+        the template's space unless the new font's is wider (every font installed
+        so far has a narrower one, so those builds do not change)."""
+        for name in ('standard.font.memfs', 'standard_outline.font.memfs'):
+            p = os.path.join(self.jp, name)
+            f = font.Font.load(p)
+            f.glyph(' ').adv = 4
+            with open(p, 'wb') as out:
+                out.write(f.to_bytes())
+        rc, log, out = self.gen('--apply')
+        self.assertEqual(rc, 0, log)
+        m = font.Metrics(font.Font.load(os.path.join(self.jp, 'standard.font.memfs')))
+        own = int(round(font.Chain([TTF], font.fit_px(TTF, m.cap)).pick(' ').length(' ')))
+        self.assertGreater(own, 4)
+        self.assertIn('dau cach: font goc 4 px -> %d px' % own, log)
+        new = font.Font.load(os.path.join(out, 'standard.font.memfs'))
+        ol = font.Font.load(os.path.join(out, 'standard_outline.font.memfs'))
+        self.assertEqual((new.glyph(' ').adv, ol.glyph(' ').adv), (own, own))
+
     def test_outline_under_a_descender_is_not_cut(self):
         """The JP g/p/y end on row 59 and the outline under them is cut flat on
         the cell's last row; a Vietnamese g's round tail showed it (user,

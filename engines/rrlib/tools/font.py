@@ -45,7 +45,8 @@ same height, and its advance with it: the way to fit a line in fewer px
 without making the letters shorter. The game has no kerning, so a font whose
 letters run into each other (a joining script, a brush face) gets a few px
 more on every advance and the space - see
-tracking(); the dry run says how many. An *_outline font is the border
+tracking(); the dry run says how many. The space keeps the template's width
+(7 px in extra3, 13-14 in the others) unless the new font's own is wider. An *_outline font is the border
 drawn under the text: its glyphs are the text glyphs widened by a radius that
 gen measures on the template pair (4.0-4.8 px depending on the font).
 
@@ -900,12 +901,19 @@ def generate(tpl, chain, chars, m, outline=None, track=0, room=0):
     outline: (radius, hardness) when tpl is an _outline font. track: px
     added to every advance drawn, and to the space's (see tracking()). room:
     px kept clear around each glyph for the family's outline, the same for
-    the font and its _outline (see place()). Returns a report."""
+    the font and its _outline (see place()). The space keeps the template's
+    advance unless the new font's own space is wider (extra3's JP space is
+    7 px; a font with a 15 px space would run its words together). Returns
+    a report."""
     dy0 = Metrics.dy0(tpl)
-    rep = {'drawn': 0, 'added': [], 'missing': [], 'clipped': [], 'tight': []}
+    rep = {'drawn': 0, 'added': [], 'missing': [], 'clipped': [], 'tight': [], 'space': None}
     space = tpl.glyph(' ')
-    if track and space is not None:
-        space.adv += track
+    if space is not None:
+        src = chain.pick(' ')
+        own = int(round(src.length(' '))) if src is not None else 0
+        if own > space.adv:
+            rep['space'] = (space.adv, own)
+        space.adv = max(space.adv, own) + track
     for code, text in chars:
         src = chain.pick(text)
         if src is None:
@@ -1080,6 +1088,8 @@ def cmd_gen(a):
         for code, text in rep['added']:
             if code == text and not code.isascii():
                 newmap[code] = code       # a letter under its own code: applysheet must pass it through
+        if rep['space'] and not main_path:
+            print('  dau cach: font goc %d px -> %d px, theo dau cach cua font moi' % rep['space'])
         print('  ve %d chu, them %d o moi%s%s%s' % (
             rep['drawn'], len(rep['added']),
             ('; font khong co: ' + ''.join(rep['missing'])) if rep['missing'] else '',

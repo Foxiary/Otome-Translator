@@ -405,6 +405,20 @@ font.py gen (older files kept as .bak8/.bak9); overflow.py on the mod then
 reports the same 125 + 21. Not seen in game yet. UVN La Xanh's tilde is a
 flat stroke that reads close to an acute at game size, at 100% as at 85%.
 
+2026-11-10 the user swapped extra / extra2 / extra3 for LF Nghich Thuy Han
+(45 px, width 82%), LF Rancho (44 px, 103%, +1 tracking) and LF
+Brainstroke Condensed (52 px, 100%, space 14 px, see "Spacing"): 16.2 /
+15.2 / 16.0 px a character against standard's 16.1. At their fitted sizes
+and full width they were 19.2 / 12.8 / 12.9. extra2 stays a little narrower
+because it is also the glossary font: at 104% (15.8 px) five descriptions,
+wrapped by then for the old extra2, ran up to 25 px past the paper; at 103%
+none. A narrower font only ever overflows a subset of the others' lines, so
+the translation is still fixed against one width. Rancho at 48 px cut the
+outline of the stacked capitals (Ằ Ắ Ẳ Ấ Ẩ Ệ Ộ Ỳ). overflow.py on the mod
+afterwards: 11 strings over in every font, 23 in only some (none in
+extra2), glossary 0. Installed with font.py gen (previous at .bak9, extra3
+at .bak10); not seen in game yet.
+
 ## The translation sheet
 
 Google Sheet, one tab per script, columns `record_id, command, script,
@@ -544,6 +558,13 @@ the space's:
   come out byte-identical to the build before.
 - Glyphs, dx/dy and textures do not change. The rebuilt extra3 differs from
   the installed one only in 229 advances (+4).
+
+The space keeps the template's advance unless the new font's own space, at
+its size and width, is wider. LF Brainstroke Condensed's is 14 px at 52 px
+against extra3's JP 7; with 7 its word gaps were half the letters' width
+and barely wider than the 4 px outline. The fonts installed before all have
+a narrower own space (FertigoPro 7, UVN La Xanh 10, SignLanguage 8,
+Andalusia 5 px), and the 2026-11-08 set rebuilds byte for byte with the rule.
 
 The dry run's "too wide" warning compares against the wider of the template's
 Latin and `LINE_CHAR_PX` (18.4 px, what the scripts are wrapped for).
