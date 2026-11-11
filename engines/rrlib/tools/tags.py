@@ -94,10 +94,12 @@ def limit(x, wide=False):
     return max(20, w if wide else min(WRAP, w))
 
 
-def wrap(text, lim):
+def wrap(text, lim, fits=None):
+    """Greedy word wrap at lim visible characters; fits(line) -> False also
+    breaks before a word (overflow.fit_wrap: the line's pixel width)."""
     lines = []; cur = ''
     for w in text.split(' '):
-        if cur and vis(cur) + 1 + vis(w) > lim:
+        if cur and (vis(cur) + 1 + vis(w) > lim or (fits is not None and not fits(cur + ' ' + w))):
             lines.append(cur); cur = w
         else:
             cur = (cur + ' ' + w) if cur else w

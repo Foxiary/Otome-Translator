@@ -30,6 +30,21 @@ sheet's:
   3. letters encoded for the patch font, which puts Vietnamese letters on
      kana code points (ệ -> る)
 
+Step 2 counts characters, and the game never wraps or clips a line itself,
+so a line of wide letters (…, 《》, ――), or a #P line placed far right, ran
+out of its box, while most lines left room unused. By default the wrap
+measures instead (overflow.fit_wrap): each paragraph is filled up to the
+room of its boxes in the widest of the mod's four settings fonts - the
+message window, or the screen from its #P x, and the backlog. A backlog
+entry holds 3 lines (JP never has more), so a string still over 3 gets the
+line breaks of its cell joined, block by block, where that saves lines.
+--chars N caps lines at N characters as well (62: the old count, and a
+paragraph that fits keeps its old breaks), --max-lines 0 keeps every break
+of the cell, --fonts names another font folder, --chars-only wraps at 62
+characters only (what the 93.6% above was measured with). The report names
+each string that got more lines (one with #P may reach the line under it),
+each cell whose breaks were joined, and each string still over 3 lines.
+
 Tags are written as the cell has them: whether a line carries #P, #T or
 #KW is the translator's call, made in the sheet. Unlike that builder nothing
 is dropped and, unlike patch.py, no #P is put back - audit.py (and
@@ -94,6 +109,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import exetext   # noqa: E402
 import kuv       # noqa: E402
 import memfs     # noqa: E402
+import overflow  # noqa: E402
 import patch     # noqa: E402
 import tags      # noqa: E402
 from sheetfix import read_sheet   # noqa: E402
@@ -107,13 +123,17 @@ SOUNDS = set('っッ')
 SHARE = 0.8       # a letter's code must cover this much of its sightings
 
 
-def prepare(cell):
-    """A sheet cell as game text, before the font encoding."""
+def normalize(cell):
+    """A sheet cell as game text, before wrapping and the font encoding."""
     t = unicodedata.normalize('NFC', cell).translate(DROP)
     for a, b in SUBST:
         t = t.replace(a, b)
-    t = re.sub(r'\n{2,}', '\n', t.replace('\r\n', '\n').replace('\r', '\n'))
-    return tags.builder_wrap(t)
+    return re.sub(r'\n{2,}', '\n', t.replace('\r\n', '\n').replace('\r', '\n'))
+
+
+def prepare(cell):
+    """A sheet cell as game text, wrapped at 62 characters, before the font encoding."""
+    return tags.builder_wrap(normalize(cell))
 
 
 # A pasted CSV row: its JP part next to the jp_text the way the old export
@@ -334,12 +354,18 @@ def encode(text, fmap, seen):
     return ''.join(out), unknown
 
 
-def plan(rows, jp_strs, fmap, seen, keys=None):
+def plan(rows, jp_strs, fmap, seen, keys=None, faces=None, chars=0, max_lines=overflow.LOG_LINES):
     """Which game string each row writes. -> ({script: {index: text}}, report).
 
     keys: {(script, index): (text, VI title or None)} for the glossary keys
     (dict_keys + glossary_keys): those strings get the title's text whatever
-    the cell says, so the game finds the entry; never shown on screen."""
+    the cell says, so the game finds the entry; never shown on screen.
+    faces: the mod's settings fonts (overflow.story_faces). The text is then
+    wrapped after encoding with overflow.fit_wrap instead of at 62 characters:
+    each line filled up to the room of its boxes in the widest font (chars:
+    a cap on visible characters as well, 0 none), and a string over
+    max_lines lines (the backlog's 3; 0 never) gets the paragraphs of a
+    block refilled as one."""
     keys = keys or {}
     key = lambda t: re.sub(r'[\r\n]', '', t).strip()
     loose = lambda t: key(t).translate(DASHES)
@@ -392,9 +418,19 @@ def plan(rows, jp_strs, fmap, seen, keys=None):
         if left:
             add(action='skip', why='japanese', chars=''.join(left)); continue
         enc, unknown = encode(text, fmap, seen)
+        fit = refit = merged = 0
+        if faces:
+            # encoding is one code per character and keeps spaces and tags, so wrapping the
+            # encoded text breaks where builder_wrap would, and the font's advances measure it
+            fitted, fit, merged = overflow.fit_wrap(encode(normalize(cell), fmap, seen)[0], faces,
+                                                    chars=chars, max_rows=max_lines)
+            if not js[ci].endswith('\n'):
+                fitted = fitted.rstrip('\n')
+            refit, enc = fitted != enc, fitted
         first[k], written[k] = r, text
         writes[r['script']][ci] = enc
-        add(action='write', unknown=unknown)
+        many = overflow.rows(enc) if faces and max_lines and overflow.rows(enc) > max_lines else 0
+        add(action='write', unknown=unknown, fit=fit, refit=refit, merged=merged, rows=many)
     return writes, report
 
 
@@ -438,6 +474,12 @@ KEY_NOTE = ('Khoá từ điển (không hiện ra màn hình): sheet ghi "%s", �
             'để game tìm được mục - nên sửa ô trong sheet cho giống')
 KEY_JP = ('Khoá từ điển (không hiện ra màn hình): sheet ghi "%s" nhưng tiêu đề ở tab exe chưa dịch, '
           'exe giữ tiếng Nhật - đã giữ khoá tiếng Nhật để game tìm được mục')
+FIT_NOTE = ('Nhiều hơn %d dòng so với ngắt ở 62 ký tự: có dòng rộng quá khung (khung thoại, mép màn hình '
+            'tính từ #P, hoặc backlog) ở font rộng nhất trong mod')
+FIT_P = '; câu có #P: xem câu nằm ngay dưới có bị đè không'
+MERGE_NOTE = ('Đã nối các dòng xuống hàng trong ô thành một đoạn để câu còn tối đa 3 dòng (backlog chỉ chứa 3) '
+              '- nên sửa ô trong sheet')
+ROWS_NOTE = 'Câu vẫn có %d dòng, backlog chỉ chứa 3: nên rút gọn câu hoặc bớt xuống dòng trong ô'
 CLEANED_SHORT = {'row': 'dong CSV', 'columns': 'cot trong cuoi o', 'comma': 'dau phay dau o', 'name': 'ten nguoi noi dau o'}
 
 
@@ -464,6 +506,12 @@ def write_report(path, report):
                     notes.append(KEY_NOTE % (had, title) if title else KEY_JP % had)
                 for ch, how in x['unknown']:
                     notes.append('Font chưa có chữ %s (%s)' % (ch, 'dùng chữ thường' if how == 'lower' else 'để nguyên'))
+                if x.get('fit', 0) > 0:
+                    notes.append(FIT_NOTE % x['fit'] + (FIT_P if tags.P.search(r['vi'] or '') else ''))
+                if x.get('merged'):
+                    notes.append(MERGE_NOTE)
+                if x.get('rows'):
+                    notes.append(ROWS_NOTE % x['rows'])
             if x['action'] == 'write' and not notes:
                 continue
             w.writerow([r['tab'], r['row'], r['rid'], r['script'], r['ci'],
@@ -508,6 +556,15 @@ def main():
     ap.add_argument('--use-map', help='read the font encoding from this JSON file')
     ap.add_argument('--exe-list', help='glossary titles: the exetext list (address, jp_text, vi_text), '
                                        'default the --sheet\'s own exe tab')
+    ap.add_argument('--fonts', help='font folder the lines are wrapped for (default <mod>/romfs/spec_win/font)')
+    ap.add_argument('--chars', type=int, default=0,
+                    help='also cap a line at this many visible characters (62 = the old count); default none: '
+                         'each line is filled up to its box')
+    ap.add_argument('--max-lines', type=int, default=overflow.LOG_LINES,
+                    help='a string with more lines gets the line breaks of its cell joined where that saves lines '
+                         '(the backlog holds %d); 0 keeps every break' % overflow.LOG_LINES)
+    ap.add_argument('--chars-only', action='store_true',
+                    help='wrap at 62 characters only, as the old builder did, without measuring the fonts')
     ap.add_argument('--report', help='CSV of every row skipped or needing a look')
     ap.add_argument('--apply', action='store_true', help='write the files')
     a = ap.parse_args()
@@ -533,8 +590,19 @@ def main():
             json.dump(fmap, f, ensure_ascii=False, indent=0, sort_keys=True)
         print('font -> %s' % a.map)
 
+    faces = None
+    if not a.chars_only:
+        folder = a.fonts or os.path.join(a.mod, 'romfs', 'spec_win', 'font')
+        try:
+            faces = overflow.story_faces(folder)
+            print('ngat dong: lap day toi mep khung o font rong nhat%s, toi da %s dong (%s)' % (
+                ', toi da %d ky tu' % a.chars if a.chars else '', a.max_lines or 'khong gioi han', folder))
+        except SystemExit as e:
+            if a.fonts:
+                raise
+            print('ngat dong: chi theo 62 ky tu (%s)' % e)
     keys = sync_keys(jp, jp_strs, exe, a.exe_list or a.sheet, fmap)
-    writes, report = plan(rows, jp_strs, fmap, seen, keys)
+    writes, report = plan(rows, jp_strs, fmap, seen, keys, faces, a.chars, a.max_lines)
     if keys:
         changed = [x for x in report if x.get('key')]
         print('khoa tu dien: %d khoa ghi theo tieu de; %d dong sheet khac tieu de (xem --report)' % (
@@ -544,6 +612,17 @@ def main():
           'trung cau dich khac %d, trong %d' % (
               sum(len(w) for w in writes.values()), len(writes), why['jp-mismatch'], why['untranslated'],
               why['japanese'], why['duplicate'], why['empty']))
+    refit = [x for x in report if x.get('refit')]
+    if refit:
+        grown = [x for x in refit if x['fit'] > 0]
+        print('ngat dong khac 62 ky tu: %d chuoi; it dong hon %d, nhieu dong hon %d (%d co #P: xem cau ngay duoi), '
+              'noi dong trong o de con %d dong %d - xem --report' % (
+                  len(refit), sum(1 for x in refit if x['fit'] < 0), len(grown),
+                  sum(1 for x in grown if tags.P.search(x['r']['vi'] or '')), a.max_lines or overflow.LOG_LINES,
+                  sum(1 for x in refit if x['merged'])))
+    if faces and a.max_lines:
+        print('con qua %d dong (backlog chi chua %d): %d chuoi - nen sua ban dich, xem --report' % (
+            a.max_lines, a.max_lines, sum(1 for x in report if x.get('rows'))))
     unknown = collections.Counter(ch for x in report if x['action'] == 'write' for ch, _ in x['unknown'])
     if unknown:
         print('font chua co: %s' % ', '.join('U+%04X x%d' % (ord(ch), n) for ch, n in unknown.most_common()))

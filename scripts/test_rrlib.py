@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Tests for engines/rrlib/tools on synthetic files - no game data needed."""
+"""Tests for engines/rrlib/tools on synthetic files - no game data needed
+(SpriteGameScreensTest also reads the JP screens when they are there)."""
 import contextlib
 import csv
 import io
@@ -783,6 +784,71 @@ class SpriteResizeTest(unittest.TestCase):
         (ax, ay), (bx, by) = spots[0], spots[2]                # and clear of each other
         self.assertTrue(bx >= ax + 16 + 4 or ax >= bx + 8 + 4 or by >= ay + 8 + 4 or ay >= by + 8 + 4)
         self.assertEqual(spots[2], (16, 0))                    # the gap between the two is used
+
+
+@unittest.skipUnless(HAVE_PIL, 'Pillow is not installed')
+class SpriteCellNamesTest(unittest.TestCase):
+    """win draws three cells, two of them from the same corner in two widths
+    (as advwin's mat_adwin_win does); btn draws one."""
+
+    def test_same_corner_gets_the_size(self):
+        import shutil
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        parts = [('root', 0), ('win', 0), ('btn', 0)]
+        states = [(0, 0, 0, 0, 0), (1, 0, 0, 8, 2), (1, 0, 0, 4, 2), (1, 0, 4, 4, 2), (2, 4, 2, 4, 2)]
+        ss = make_ssdata(['ui.png'], parts, states, [[0, 1, 2, 3, 4]])
+        arc = sprite.Archive(write_sprite_pair(os.path.join(d, 'jp'), [('/ui.rtex', make_rtex(8, 6, 8, 8, gradient)),
+                                                                     ('/ui.ssdata', ss)]))
+        self.assertEqual(sorted(c.file for c in arc.cells),
+                         ['ui/btn.png', 'ui/win_0_0_4x2.png', 'ui/win_0_0_8x2.png', 'ui/win_0_4.png'])
+        folder = os.path.join(d, 'anh')
+        with contextlib.redirect_stdout(io.StringIO()):
+            sprite.cmd_export(arc, folder)
+        self.assertEqual(sprite.plan_import(arc, folder), ({}, [], []))
+
+
+GAME_SSDATA = os.environ.get('RRLIB_SSDATA') or os.path.expanduser('~/Documents/Game/matsurika/romfs/spec_win/ssdata')
+
+
+@unittest.skipUnless(HAVE_PIL and os.path.isdir(GAME_SSDATA), 'needs Pillow and the JP screens in ' + GAME_SSDATA)
+class SpriteGameScreensTest(unittest.TestCase):
+    """Every JP screen found (RRLIB_SSDATA, or the usual folder): each cell
+    has a file of its own, and an export imported back untouched changes
+    nothing. advwin's ten mat_adwin_win widths once shared one file."""
+
+    def test_untouched_export_imports_nothing(self):
+        import shutil
+        from concurrent.futures import ThreadPoolExecutor
+        from unittest import mock
+        from PIL import Image
+        screens = sorted(os.path.join(GAME_SSDATA, n) for n in os.listdir(GAME_SSDATA) if n.endswith('.memfs')
+                         and os.path.isfile(os.path.join(GAME_SSDATA, n[:-6] + '.membody')))
+        if not screens:
+            self.skipTest('no .memfs/.membody pair in ' + GAME_SSDATA)
+        save = Image.Image.save
+
+        def quick(img, fp, format=None, **params):       # the pixels are checked, not the file size
+            params.setdefault('compress_level', 1)
+            return save(img, fp, format, **params)
+
+        def run(memfs):
+            arc = sprite.Archive(memfs)
+            files = [c.file.lower() for c in arc.cells]     # a case-blind disk counts too
+            folder = tempfile.mkdtemp()
+            try:
+                sprite.cmd_export(arc, folder)
+                new, report, problems = sprite.plan_import(arc, folder)
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
+            return arc.name, sorted(set(f for f in files if files.count(f) > 1)), sorted(new), report, problems
+        with mock.patch.object(Image.Image, 'save', quick), contextlib.redirect_stdout(io.StringIO()), \
+                ThreadPoolExecutor(4) as pool:
+            results = list(pool.map(run, screens))
+        for name, shared, new, report, problems in results:
+            with self.subTest(screen=name):
+                self.assertEqual(shared, [])
+                self.assertEqual((new, report, problems), ([], [], []))
 
 
 # A tiny exefs/main: text at 0, rodata at 0x1000, data at 0x2000, then .bss.

@@ -23,11 +23,13 @@ mat_ttlm_com01_off is the 新しく始める label, mat_ttlm_com01_setu its help
 
 export   lists every texture and its cells - file name, place, size, parts.
          Given a folder it also writes every texture as <texture>.png and
-         every cell as <texture>/<part>.png, plus cells_<screen>.csv with the same
-         list. Into a folder that already holds any of them it writes
-         nothing unless --overwrite: the run names the files that differ from
-         the game (cells someone redrew), and with --overwrite each of those is
-         copied to <name>.bak beside it first. (`list` = export, no folder.)
+         every cell as <texture>/<part>.png (<part>_<x>_<y>.png when the part
+         draws several cells, plus _<w>x<h> when they share that corner),
+         plus cells_<screen>.csv with the same list. Into a folder that
+         already holds any of them it writes nothing unless --overwrite: the
+         run names the files that differ from the game (cells someone
+         redrew), and with --overwrite each of those is copied to <name>.bak
+         beside it first. (`list` = export, no folder.)
 import   reads that folder back. A cell PNG that differs from the game's
          pixels is pasted at its rectangle; a <texture>.png that differs
          replaces the whole texture first, so an edited cell wins over it.
@@ -297,8 +299,18 @@ class Archive(object):
         for c in out:
             names.setdefault((c.texture, c.parts[0]), []).append(c)
         for (tp, part), cs in names.items():
+            at = {}
             for c in cs:
-                base = part if len(cs) == 1 else '%s_%d_%d' % (part, c.x, c.y)
+                at[c.x, c.y] = at.get((c.x, c.y), 0) + 1
+            for c in cs:
+                # One part may draw several cells from one corner (advwin's
+                # mat_adwin_win: ten widths at 0,0); only those get the size.
+                if len(cs) == 1:
+                    base = part
+                elif at[c.x, c.y] == 1:
+                    base = '%s_%d_%d' % (part, c.x, c.y)
+                else:
+                    base = '%s_%d_%d_%dx%d' % (part, c.x, c.y, c.w, c.h)
                 c.file = '%s/%s.png' % (safe(stem(tp)), safe(base))
         out.sort(key=lambda c: (c.texture, c.y, c.x, c.w, c.h))
         return out, notes

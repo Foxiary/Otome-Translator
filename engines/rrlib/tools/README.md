@@ -12,8 +12,9 @@ Mỗi script tự mô tả trong docstring đầu file (`python tools/<tên>.py 
 | `exehook.py` | | Đọc các cặp (offset, size) mà `exefs/main` đã vá chuyển hướng |
 | `audit.py` | | Kiểm bản patch so với JP: code, số chuỗi, tag bị mất, tag đẩy chữ ra ngoài màn hình |
 | `overflow.py` | | Tìm dòng tràn khung: xếp chữ bằng font của mod như game, so với màn hình, khung thoại, backlog, từ điển, lựa chọn; gợi ý ngắt dòng, cho biết font cần hẹp lại bao nhiêu |
-| `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng, mã hoá theo font của mod, ghi khoá từ điển đúng theo tiêu đề ở tab `exe` (`--exe-list`), tự sửa 2 lỗi `#P` (đẩy ra ngoài màn hình, dời dấu phẩy), tự kiểm |
+| `applysheet.py` | | Ghi sheet dịch (`.xlsx`) vào `script.memfs` + `script.membody`: ngắt dòng lấp đầy tới mép khung ở font rộng nhất trong 4 font của mod, câu quá 3 dòng (backlog chỉ chứa 3) thì nối các dòng xuống hàng trong ô, mỗi bản tên `#T1`/`#T2` được ngắt riêng (`--chars`, `--max-lines`, `--fonts`, `--chars-only` để ngắt kiểu cũ), mã hoá theo font của mod, ghi khoá từ điển đúng theo tiêu đề ở tab `exe` (`--exe-list`), tự sửa 2 lỗi `#P` (đẩy ra ngoài màn hình, dời dấu phẩy), tự kiểm |
 | `patch.py` | | Dựng lại `script.memfs` + `script.membody`: trả `#P`, trỏ thẳng chunk, nới u32, sửa header, tự kiểm |
+| `extractsheet.py` | | Dựng sheet dịch (`.xlsx`) từ kịch bản JP: tab `Index` + mỗi kịch bản một tab, mỗi lệnh NameMess/GuideMess/SltAdd/Mov từ điển một dòng, đủ cột như sheet của nhóm. `--old` mang `vi_text`/`speaker_vi`/`note` từ sheet cũ sang theo script + const_index và chép các tab khác, `--exe` thêm tab `exe`, `--mod --map` lấy chữ Việt từ bản mod |
 | `sheetfix.py` | | Từ sheet dịch (`.xlsx`) ra file đề xuất sửa tag theo đúng tab + dòng |
 | `sprite.py` | `translate`, `export`, `import`, `check` | Ảnh giao diện (`spec_win/ssdata/*.memfs`). `translate`: thư mục trống thì xuất từng ô chữ ra PNG theo tên phần hình, thư mục đã xuất thì dán các ô đã vẽ lại (ô vẽ khác cỡ được dời sang chỗ trống), đóng gói, tự kiểm. `export` / `import` là từng nửa riêng. Cần Pillow |
 | `exetext.py` | `export`, `import`, `check` | Chữ nằm trong `exefs/main` (UTF-32): hộp thoại, lưu nhanh, chú thích nút, từ điển, tên chương. `export` ra danh sách `.csv`, `import` ghi cột `vi_text` vào một vùng mới ở cuối exe và trỏ lại mọi chỗ dùng câu Nhật, tự kiểm, chạy lại được trên chính file nó ghi |
@@ -39,6 +40,7 @@ Chạy trên NSP JP 1.0.0 và bản patch Việt ngày 02/10/2026:
   Trên bản đã sửa thì chỉ còn `#T`/`#KW`.
 - `patch.py` cho ra **giống từng byte** bản đã cài và chơi thử trong Astrid,
   trong 3,6 giây.
+- `extractsheet.py` trên JP 1.0.0 ra đúng 31 100 dòng của sheet, mọi cột (record_id, offset, opcode, all_args_json...) khớp từng ô với bản tải đầu tiên; với bản 12/11 chỉ khác 522 ô jp_text mà sheet đã mất `――`. `applysheet.py` trên sheet dựng bằng `--old` (bản 12/11) ra script.memfs + script.membody giống từng byte bản dựng từ chính sheet đó.
 - `sheetfix.py` trên sheet tải ngày 05/11/2026 ra file giống từng ô với file
   đề xuất đã gửi người dịch: 1279 câu `#P`, 27 câu không thêm tag, 138 `#T`, 31 `#KW`.
 

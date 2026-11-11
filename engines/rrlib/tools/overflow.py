@@ -8,7 +8,9 @@ The engine never wraps a line and never clips one to its box: a line breaks
 only where the string has a line break, and a line that is too wide runs on
 over the art or off the screen. The Vietnamese scripts are wrapped at 62
 characters (tags.WRAP), which the old patch font fitted; a wider font pushes
-the long lines out.
+the long lines out. applysheet.py now also wraps by width with fit_wrap
+below, so a build from the sheet should leave only the strings the sheet
+does not carry (choices, names) and lines that cannot be split.
 
 The tool lays every line out the way the game does - advance after advance,
 in the mod's own fonts, no kerning - and compares it with the room it has
@@ -88,6 +90,10 @@ SETTINGS = ('standard', 'extra', 'extra2', 'extra3')    # the settings screen's 
 GLOSSARY_FONT = 'extra2'
 GLOSSARY_TABLE = 0x5557d0   # JP 1.0.0 .data: 32-byte entries {u32 heading kana, 0, term*, description*, ...}
 MISSING = 40                # a character the font lacks is counted as a full cell
+# A backlog entry holds 3 lines: JP never has more (30 417 message strings,
+# none over 3), and the 2026-11-10 screenshot of EV01_0007_03 #474 in the
+# backlog shows the 4th line drawn over the entry's bottom edge.
+LOG_LINES = 3
 
 HIDDEN = re.compile(r'#C\([^)]*\)|#R\([^)]*\)|#KW')
 T_TAG = re.compile(r'(#T[012])')
@@ -159,6 +165,7 @@ class Finding(object):
         self.measured = set()    # fonts it was measured in
         self.suggestion = ''
         self.note = ''
+        self.rows = 0            # lines in the backlog, set when over LOG_LINES
 
     @property
     def everywhere(self):
@@ -166,6 +173,8 @@ class Finding(object):
         return self.fonts == self.measured
 
     def fonts_text(self):
+        if not self.fonts:
+            return 'mọi font'        # only too many lines: no font changes that
         return 'mọi font' if self.everywhere else 'chỉ ' + ', '.join(sorted(self.fonts))
 
     def add(self, box, over, face, line):
@@ -175,10 +184,10 @@ class Finding(object):
 
     @property
     def over(self):
-        return max(w[0] for w in self.worst.values())
+        return max([w[0] for w in self.worst.values()] or [0])
 
     def top(self):
-        return max(self.worst.items(), key=lambda kv: kv[1][0])
+        return max(self.worst.items(), key=lambda kv: kv[1][0]) if self.worst else (None, (0, '', ''))
 
 
 class Tally(object):
@@ -278,6 +287,142 @@ def wrap_words(lines, room, width):
     if cur:
         out.append(cur)
     return out
+
+
+def line_width(line, faces, name):
+    """Font px of one line of story text in the widest face, the widest #T
+    variant; #P and the other tags drawn as nothing."""
+    line = tags.P.sub('', line)
+    return max(f.width(visible(v, name)) for f in faces for _, v in variants(line))
+
+
+def t_mode(p, mode='0'):
+    """The #T mode at the end of p, starting in mode."""
+    for m in T_TAG.findall(p):
+        mode = m[2]
+    return mode
+
+
+def variant_chars(p, mode, v):
+    """(the text #T variant v shows of p, the index in p of each of its
+    characters), p starting in #T mode.
+
+    fit_wrap wraps each variant on its own and puts every break of either
+    into the string: a break inside a #T1 or #T2 part exists in that variant
+    only, one in a shared part in both, which can only make the other
+    variant's lines shorter. Wrapping the tagged text as one (the old
+    builder) left breaks that one variant does not have: EV01_0009_01 #251's
+    #T1 text ran 779 px past the window because its break sat in the #T2
+    part."""
+    out, where, i = [], [], 0
+    for part in T_TAG.split(p):
+        if T_TAG.match(part):
+            mode = part[2]
+        elif mode in ('0', v):
+            out.append(part)
+            where.extend(range(i, i + len(part)))
+        i += len(part)
+    return ''.join(out), where
+
+
+def rows(s):
+    """Lines a story string shows in the backlog: the most of any #T variant,
+    empty lines left out."""
+    return max(len([l for l in NEWLINE.split(v) if visible(tags.P.sub('', l), '').strip()]) for _, v in variants(s))
+
+
+def fit_wrap(text, faces, name='Naya', chars=None, max_rows=None):
+    """Story text wrapped so no line is wider than its boxes - the window (or
+    the screen from the line's #P x) and the backlog - in the widest face.
+    -> (text, lines added against the 62-character wrap (negative: saved),
+    paragraphs merged to keep within max_rows).
+
+    chars: the most visible characters a line may hold. None: tags.WRAP (62,
+    the old builder's count); then a paragraph whose 62-character lines all
+    fit keeps builder_wrap's breaks byte for byte, and only a too-wide one is
+    wrapped again. 0: no count - every paragraph is filled up to its room.
+
+    A #P block (the paragraphs from a #P to the next) that would get more
+    lines is first wrapped again as one paragraph: a block placed by #P has
+    a fixed height on its screen, and one line more reaches the next block
+    (EV01_0007_01 #97: its fourth line landed on the #P(230,880) under it).
+
+    max_rows (LOG_LINES for the game): a string with more lines than that
+    runs over its backlog entry, so the paragraphs of each block are refilled
+    as one where that saves lines, block after block, until it fits - the
+    cell's own line breaks give way. None leaves them."""
+    cap = tags.WRAP if chars is None else (chars or 10 ** 6)
+
+    def wrap(p, mode, room):
+        fits = lambda l: tags.vis(l) <= cap and line_width(l, faces, name) <= room
+        if mode == '0' and not T_TAG.search(p):
+            return tags.wrap(p, cap, lambda l: line_width(l, faces, name) <= room)
+        cut = set()
+        for v in '12':
+            text, where = variant_chars(p, mode, v)
+            start, prev = 0, None            # prev: the last space since start
+            for j in [j for j, c in enumerate(text) if c == ' '] + [len(text)]:
+                if prev is not None and not fits(text[start:j]):
+                    cut.add(where[prev])
+                    start = prev + 1
+                prev = j
+        return ''.join('\n' if i in cut else c for i, c in enumerate(p)).split('\n')
+
+    size = lambda lines: rows('\n'.join(lines)) if lines else 0
+
+    blocks_, at, mode = [], (None, None), '0'
+    for para in text.split('\n'):
+        p = para.strip()
+        if not blocks_ or tags.P.match(p):
+            blocks_.append([])
+        room = None
+        if p:
+            places = [at] if visible(tags.P.split(p)[0], name).strip() else []
+            places += [(int(m.group(1)), int(m.group(2))) for m in tags.P.finditer(p)]
+            at = places[-1] if places else at
+            room = min(box.room(bx) for x, y in (places or [at]) for box, bx in boxes_for('story', x, y))
+        blocks_[-1].append((p, room, mode))
+        mode = t_mode(p, mode)
+    refill = lambda block: wrap(' '.join(p for p, _, _ in block), block[0][2], min(r for _, r, _ in block))
+    whole = lambda block: len(block) > 1 and all(p for p, _, _ in block)
+    # a #T part changes the line for one variant only: its breaks must be shared ones
+    tagged = lambda p, m: m != '0' or T_TAG.search(p)
+    done, added = [], 0
+    for block in blocks_:
+        plain = [tags.wrap(p, tags.WRAP) if p else [''] for p, _, _ in block]
+        n = size([l for ls in plain for l in ls])
+        fit = all(not tagged(p, m) and all(line_width(l, faces, name) <= room for l in ls)
+                  for (p, room, m), ls in zip(block, plain) if p)
+        if fit and cap == tags.WRAP:
+            done.append([l for ls in plain for l in ls])
+            continue
+        lines = []
+        for (p, room, m), ls in zip(block, plain):
+            if p and (cap != tags.WRAP or tagged(p, m) or any(line_width(l, faces, name) > room for l in ls)):
+                ls = wrap(p, m, room)
+            lines += ls
+        if size(lines) > n and tags.P.match(block[0][0]) and whole(block):
+            one = refill(block)
+            if size(one) <= n:
+                lines = one
+        added += size(lines) - n
+        done.append(lines)
+    merged = 0
+    count = lambda: rows('\n'.join(l for ls in done for l in ls))
+    for i, block in enumerate(blocks_):
+        if not max_rows or count() <= max_rows:
+            break
+        if whole(block):
+            one = refill(block)
+            if size(one) < size(done[i]):
+                added -= size(done[i]) - size(one)
+                done[i], merged = one, merged + 1
+    return '\n'.join(l for ls in done for l in ls), added, merged
+
+
+def story_faces(folder):
+    """[Face] of the four settings fonts in folder (SystemExit if one is missing)."""
+    return [Face.load(p, n) for n, p in find_fonts(folder, SETTINGS).items()]
 
 
 def rewrap(s, kind, faces, name, margin):
@@ -399,9 +544,11 @@ def find_fonts(folder, wanted):
 
 
 def where_text(fd):
-    return '; '.join('%s +%d px (%d dòng)%s' % (BOX[k].label, round(v[0]), fd.lines[k],
-                                                ', khung ước lượng' if BOX[k].estimate else '')
-                     for k, v in sorted(fd.worst.items(), key=lambda kv: -kv[1][0]))
+    out = ['%s +%d px (%d dòng)%s' % (BOX[k].label, round(v[0]), fd.lines[k], ', khung ước lượng' if BOX[k].estimate else '')
+           for k, v in sorted(fd.worst.items(), key=lambda kv: -kv[1][0])]
+    if fd.rows:
+        out.append('backlog %d dòng (chứa được %d)' % (fd.rows, LOG_LINES))
+    return '; '.join(out)
 
 
 def write_csv(path, findings, decode):
@@ -418,7 +565,7 @@ def say_kinds(findings, names):
     """One translation serves every font, so a string should run out in all
     of them (fix the line) or in none. Strings that run out in only some
     mean the fonts are not equally wide yet (fix the fonts)."""
-    story = [fd for fd in findings if len(fd.measured) > 1]
+    story = [fd for fd in findings if len(fd.measured) > 1 and fd.worst]
     if len(names) < 2 or not story:
         return
     some = [fd for fd in story if not fd.everywhere]
@@ -486,7 +633,10 @@ def main(argv=None):
     missing, tally, findings = set(), Tally(), []
     for script, idx, call, kind, s in strings:
         fd = Finding(script, idx, call, s)
-        if measure(fd, kind, s, story_faces, name, a.margin, missing, tally):
+        wide = measure(fd, kind, s, story_faces, name, a.margin, missing, tally)
+        if kind == 'story' and rows(s) > LOG_LINES:
+            fd.rows = rows(s)
+        if wide or fd.rows:
             fd.suggestion, fd.note = rewrap(s, kind, story_faces, name, a.margin)
             findings.append(fd)
     print('kich ban: %d file, %d cau thoai va lua chon' % (len(set(s[0] for s in strings)), len(strings)))
@@ -512,6 +662,9 @@ def main(argv=None):
         n = sum(1 for fd in findings if b.key in fd.worst)
         lines = sum(fd.lines.get(b.key, 0) for fd in findings)
         print('  %-16s %5d / %5d%s' % (b.label, n, lines, '   (khung uoc luong)' if b.estimate else ''))
+    many = [fd for fd in findings if fd.rows]
+    print('  %-16s %5d cau     (backlog chua %d dong; ban Nhat khong cau nao qua %d)' % (
+        'qua %d dong' % LOG_LINES, len(many), LOG_LINES, LOG_LINES))
     say_kinds(findings, names)
     say_fonts(tally, names, a.margin)
     if missing:
@@ -523,6 +676,11 @@ def main(argv=None):
         for fd in worst:
             over, face, line = fd.worst[b.key]
             print('  %-13s %-8s +%4d px  %-8s %s' % (fd.where, fd.index, round(over), face, decode(visible(line, name))))
+    if a.top and many:
+        print('\nqua %d dong - nhieu dong nhat:' % LOG_LINES)
+        for fd in sorted(many, key=lambda fd: -fd.rows)[:a.top]:
+            print('  %-13s %-8s %d dong  %s' % (fd.where, fd.index, fd.rows,
+                                             decode(visible(tags.P.sub('', fd.text), name)).replace('\n', ' / ')[:90]))
     if a.csv:
         write_csv(a.csv, findings, decode)
         print('-> %s (%d cau)' % (a.csv, len(findings)))

@@ -17,7 +17,7 @@ const summaries = {
   Dump: 'Take the whole game, or single files, out of your .nsp or .xci, using your prod.keys.',
   Inspect: 'Look inside the script index, the script archive and the scripts.',
   Patch: 'Write the translation sheet into the game, check a Vietnamese patch against the Japanese scripts and rebuild it, find lines too wide for their box.',
-  Sheets: 'Turn the translation sheet into a list of tag fixes.',
+  Sheets: 'Make the translation sheet from the game\'s scripts, or turn the sheet into a list of tag fixes.',
   Images: 'Menu labels, buttons and help lines are painted into textures: take them out as images, redraw them and put them back.',
   Executable: 'Text built into the program file (exefs/main): dialog questions, quick save messages, button help, glossary and chapter titles.',
   Fonts: 'Redraw the Latin and Vietnamese letters of the game\'s fonts from a font file of your choice, and look at the result.'
@@ -61,12 +61,16 @@ const tools = [
   T('exehook', 'Inspect', 'Find redirects in the program', 'Lists the script reads a patched program file (exefs/main) sends elsewhere. An earlier patch used them for three prologue scripts.', 'tools/exehook.py', [],
     [A('main', 'file', 'exefs/main')]),
 
-  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped and encoded for the mod\'s Vietnamese font, with its tags as the sheet has them, and the result is checked. Check the tags with Check a patch. Two #P faults are mended and reported: tags that put a whole line off the screen are dropped (Japanese hides poems the art already shows; the translation would only show in the backlog), and a tag whose comma slipped out, #P(1110220), gets the Japanese tag back. Lines the sheet has no row for (names, choices) keep the mod\'s text. Glossary keys (never shown) are written as their glossary title from the sheet\'s exe tab, so the game finds the entry.', 'tools/applysheet.py', [],
+  T('apply', 'Patch', 'Write the sheet into the game', 'Writes the translation sheet (.xlsx) into script.memfs and script.membody: each line is wrapped to fill its box in the widest of the mod\'s four settings fonts (a backlog entry holds 3 lines, so the line breaks of a cell are joined where a line would otherwise be over 3) and encoded for the mod\'s Vietnamese font, with its tags as the sheet has them, and the result is checked. Check the tags with Check a patch. Two #P faults are mended and reported: tags that put a whole line off the screen are dropped (Japanese hides poems the art already shows; the translation would only show in the backlog), and a tag whose comma slipped out, #P(1110220), gets the Japanese tag back. Lines the sheet has no row for (names, choices) keep the mod\'s text. Glossary keys (never shown) are written as their glossary title from the sheet\'s exe tab, so the game finds the entry.', 'tools/applysheet.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true),
       V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/): its font, program and names are kept', true), V('--out', 'dir', 'Output folder', true), EXE,
       V('--report', 'save', 'CSV of the rows not written and the lines to look at'), V('--map', 'save', 'Save the font encoding learnt from the mod (.json)'),
       V('--use-map', 'file', 'Read the font encoding from a saved .json instead'),
-      V('--exe-list', 'file', 'Glossary titles: the program text list (address, jp_text, vi_text), if not the sheet\'s own exe tab'), B('--apply', 'Write the files')],
+      V('--exe-list', 'file', 'Glossary titles: the program text list (address, jp_text, vi_text), if not the sheet\'s own exe tab'),
+      V('--fonts', 'dir', 'Font folder the lines are wrapped for, if not romfs/spec_win/font in the mod'),
+      V('--chars', 'number', 'Also stop a line at this many characters; empty fills each line to its box'),
+      V('--max-lines', 'number', 'Lines a string may have before the line breaks of its cell are joined; empty uses 3, 0 keeps every break'),
+      B('--chars-only', 'Wrap at 62 characters only, as the old patch did, without measuring the fonts'), B('--apply', 'Write the files')],
     'Runs as a dry run first and asks before writing. A row left out keeps the mod\'s line; the report says why.'),
   T('audit', 'Patch', 'Check a patch', 'Compares a Vietnamese patch with the Japanese scripts: lost position, name and pause tags, lines hidden off-screen, broken headers. Nothing is changed.', 'tools/audit.py', [],
     [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--patch', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/)', true), EXE, V('--csv', 'save', 'Every finding with its Japanese and Vietnamese text')]),
@@ -86,6 +90,10 @@ const tools = [
       B('--no-restore', 'Only rebuild, do not touch #P'), B('--keep-offscreen', 'Keep #P tags that put a line off-screen'), V('--report', 'save', 'CSV of every line touched'), B('--apply', 'Write the files')],
     'Runs as a dry run first and asks before writing. Try the result in the game before you share it.'),
 
+  T('extractsheet', 'Sheets', 'Make the translation sheet', 'Builds the translation sheet (.xlsx) from the Japanese scripts: an Index tab, then one tab per script with a row for every line shown in game (dialogue, narration, choices, glossary keys) and the columns "Write the sheet into the game" reads (script, const_index, jp_text, vi_text, ...). Lines with nothing to translate, such as the heroine\'s 「……！」, get no row, as in the team\'s sheet. Old sheet carries vi_text, speaker_vi and note over by script and string, and copies its other tabs (notes, names); Program adds the exe tab. Mod fills vi_text from a Vietnamese patch instead, with its line breaks as built. Nothing in the game is changed.', 'tools/extractsheet.py', [],
+    [V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx); an existing one is kept as .bak', true),
+      V('--exe', 'file', 'Program: exefs/main, for the exe tab (the program\'s text)'), V('--old', 'file', 'Old sheet (.xlsx) to carry translations over from'),
+      V('--mod', 'dir', 'Vietnamese mod folder (with romfs/ and exefs/) to fill vi_text from'), V('--map', 'file', 'Font encoding (.json), saved by "Write the sheet into the game" (its Map field); needed with Mod')]),
   T('sheetfix', 'Sheets', 'Tag fixes for the sheet', 'Reads the translation sheet (.xlsx) and writes a workbook of fixes, by tab and row: #P tags to add, lines to leave untagged, and #T / #KW lines to fix by hand.', 'tools/sheetfix.py', [],
     [V('--sheet', 'file', 'Translation sheet (.xlsx)', true), V('--jp', 'dir', 'Folder with the Japanese script.memfs and script.membody', true), V('--out', 'save', 'Workbook to write (.xlsx)', true)]),
 

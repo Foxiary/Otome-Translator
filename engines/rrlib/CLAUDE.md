@@ -104,6 +104,9 @@ no RZ wrapper around the file itself.
 ```
 
 A cell is a distinct (texture, rectangle) any frame draws; its parts name it.
+Export writes it to `<texture>/<part>.png`, `<part>_<x>_<y>.png` when the part draws
+several cells, `<part>_<x>_<y>_<w>x<h>.png` when those share a corner (advwin's
+`mat_adwin_win`: ten widths from 0,0, which once overwrote one file).
 On the title menu `mat_ttlm_com0N_off` / `_on` are the five labels unselected
 / selected (1 新しく始める, 2 ロード, 3 古の調べ, 4 鑑賞, 5 設定),
 `mat_ttlm_com0N_setu` their vertical help lines, `mat_nam_bodoru_txt` is 戻る,
@@ -429,6 +432,20 @@ other three: about 2 px clear between the outlines, words still apart in
 the preview. overflow.py on the mod: 11 strings over in every font, 26 in
 only some. Brainstroke is at .bak11, the 100% Oregano at .bak12.
 
+Then extra2 went to 50 px, first at width 91%, then 100%: the user found the glossary text small
+for its line pitch (in game screenshot, Rancho at 44 px; its x-height is low).
+The 60x62 cell caps the size. Every glyph keeps its whole outline up to 46 px.
+At 47-50 px the outline is thinned at the top or under the dot of the
+capitals with two marks (50 px: Ằ Ắ Ẳ Ầ Ấ Ẩ Ậ Ề Ế Ể Ệ Ố Ổ Ộ Ợ Ự Ỳ Ý Ỷ),
+hardly visible at 2x zoom. From 52 px nearly every accented capital loses
+some (À Á É ...). Width and tracking interact: at 50 px Rancho's letters
+clear each other at 100% and get no tracking (15.7 px a character), while
+96% and 91% fall under TRACK_GAP and get +1 px on every advance (16.0 /
+15.4). So 100% is narrower than 96%, and narrower than 44 px at 103% with
+its +1 (five glossary descriptions over at 104%). At 50 px / 100% the
+glossary has 0 overflow and no line within 30 px of the paper. The 44 px
+build is at .bak10, the 91% one at .bak11.
+
 ## The translation sheet
 
 Google Sheet, one tab per script, columns `record_id, command, script,
@@ -442,6 +459,22 @@ row maps to the game by it. Two traps:
 
 The sheet is newer than any build: compare against it, not against strings
 pulled out of a patch.
+
+`tools/extractsheet.py` rebuilds the sheet from the JP scripts. Its rules,
+read off the team's sheet and reproduced cell for cell on its first
+download (31 100 rows, every non-translation column):
+- one row per call of NameMess (argc 2), GuideMess (1), SltAdd (3) and
+  `Mov GAMESTR_DictWords, key`, in code order; record_id runs across
+  scripts in script.memfs map order (= block_index), not membody order;
+- a call is left out when neither its text nor its speaker has a letter,
+  kana or kanji once tags and `${FirstName}` go: the heroine's 「……！」
+  (and ？？？'s), narration of dots - 86 calls;
+- jp_text writes `\r\n` as `\n\n`; all_args_json joins each `\n` plus
+  the newlines/spaces after it into one space and keeps `\r`;
+- rz_kind is the top 16 bits of the chunk's uncompressed size, offsets are
+  in the uncompressed .tat (const_offset = pool + string offset).
+The later downloads differ only in 522 jp_text cells that lost `――` to a
+find-and-replace (see applysheet's dash rule).
 
 ## VI text inside the patch
 
@@ -623,6 +656,47 @@ The remaining 7% is where the builder was wrong and the sheet is not: it lost
 parts into one wrapped paragraph - the #T2 text then breaks mid-sentence,
 because the #T1 text it never shows is counted into the line. applysheet
 keeps the cell's tags and lines, which follow JP.
+
+**Wrapping by width (2026-11-10).** 62 characters is a count, not a width:
+with the 2026-11-10 fonts, 37 strings still ran out (lines full of `……`,
+whose `…` is a 40 px JP glyph, and #P lines placed far right, which got the
+same 62 as a line from x 170), while most lines left room unused. And a
+**backlog entry holds 3 lines**: JP has no message string over 3 (30 417
+counted), and the 2026-11-10 screenshot of EV01_0007_03 #474 in the backlog
+shows its 4th line drawn over the entry's bottom edge. The VI build had
+1 100 strings of 4-5 lines.
+
+applysheet now wraps the ENCODED text with `overflow.fit_wrap` (the encoding
+is one code per letter and keeps spaces and tags, so the mod's fonts measure
+it directly). Default rules:
+- every paragraph is filled up to the room of its boxes in the widest of
+  the four settings fonts: the window (or the screen from its #P x) and the
+  backlog (1131 font px, the tightest for window lines) - no character
+  count (`--chars N` adds one; `--chars 62` keeps a paragraph that fits as
+  builder_wrap had it, byte for byte);
+- a #P block that would grow is first refilled as one paragraph. A placed
+  block has a fixed height on its screen: EV01_0007_01 #97 wrapped
+  paragraph by paragraph got a fourth line on the row of the #P(230,880)
+  block under it;
+- a string still over 3 lines gets the paragraphs of a block (the cell's
+  own line breaks) refilled as one, block by block, where that saves lines
+  (`--max-lines 0` keeps them); a blank line is kept as spacing;
+- #T variants are wrapped one at a time and every break of either goes in.
+  A break inside a #T1/#T2 part exists in that variant only; one in a
+  shared part in both, which can only shorten the other variant's lines.
+  Wrapping the tagged text as one (the old builder, and the first version
+  of this) left EV01_0009_01 #251's #T1 text one line 779 px wide - its
+  break sat in the #T2 part - and could not break EV06_0009_01 #158, whose
+  #T1 and #T2 parts are whole sentences on lines of their own.
+On the 10/11 sheet with the installed fonts: 20 312 strings wrapped
+differently, 4 590 with fewer lines, 9 with more (no #P block), 28 cells
+had their breaks joined; overflow.py finds no line past the screen, the
+window or the backlog (2 choices left, which the sheet does not carry), and
+384 strings still over 3 lines: 361 too long to fit in 3 even filled (the
+translation must get shorter), 20 with several #P blocks, 3 with #T. The
+report names each. `--fonts` measures another folder, `--chars-only` is the
+old rule. Rebuild the scripts after changing fonts. overflow.py reports
+strings over 3 lines (`qua 3 dong`, CSV box "backlog N dòng").
 
 **Tags are the translator's call.** applysheet writes every tag as the cell
 has it and puts no lost #P back (`patch.build(restore=False,
