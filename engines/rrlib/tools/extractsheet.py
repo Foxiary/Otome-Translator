@@ -363,33 +363,33 @@ def main():
     ap.add_argument('--map', help='font encoding (.json) from applysheet.py --map')
     a = ap.parse_args()
     if a.mod and not a.map:
-        ap.error('--mod can --map de doc chu Viet cua ban mod')
+        ap.error('--mod needs --map to read the mod\'s Vietnamese letters')
     try:
         import openpyxl  # noqa: F401
     except ImportError:
-        raise SystemExit('can openpyxl (pip install openpyxl)')
+        raise SystemExit('openpyxl is needed (pip install openpyxl)')
     arc = memfs.Archive(os.path.join(a.jp, 'script.memfs'), os.path.join(a.jp, 'script.membody'))
     scripts = extract(arc)
     total = sum(len(r) for r in scripts.values())
     kinds = collections.Counter(r['category'] for rows in scripts.values() for r in rows)
-    print('%d script, %d dong (%s)' % (len(scripts), total, ', '.join('%s %d' % kv for kv in sorted(kinds.items()))))
+    print('%d scripts, %d rows (%s)' % (len(scripts), total, ', '.join('%s %d' % kv for kv in sorted(kinds.items()))))
     if a.mod:
         import exetext
         n = fill_from_mod(scripts, mod_strings(a.mod), exetext.load_map(a.map))
-        print('ban mod: %d dong co chu Viet' % n)
+        print('mod: %d rows filled with its Vietnamese text' % n)
     routes, old_wb = {}, None
     if a.old:
         cells, routes, old_wb = read_old(a.old)
         n, lost = carry_over(scripts, cells)
-        print('sheet cu: %d dong mang ban dich sang' % n)
+        print('old sheet: %d rows carried over' % n)
         if lost:
-            print('  %d dong cua sheet cu khong con trong game (vd. %s)' % (
+            print('  %d rows of the old sheet are no longer in the game (e.g. %s)' % (
                 len(lost), ', '.join('%s #%d' % k for k in lost[:3])))
     exe_rows = exe_tab(a.exe, old_wb) if a.exe else None
     if exe_rows is not None:
-        print('tab exe: %d chuoi' % len(exe_rows))
+        print('exe tab: %d strings' % len(exe_rows))
     write_book(a.out, scripts, routes, exe_rows, old_wb)
-    print('-> %s' % a.out)
+    print('written to %s' % a.out)
     return 0
 
 

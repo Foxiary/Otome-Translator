@@ -23,6 +23,9 @@
     "af09236af71d2c153e7866829740fa3a1dead7dea310878bcd1f14b7b3e191aa",
     "eb4c7abd053994d9f74cd70ac52ed4e0a83b30b3f9b7016879bd2c2f1931b85c"
   ],
+  "tools/extractsheet.py": [
+    "2efd5c6549d12bd5dd1c879a6f779aa76a8615d08d364ab81f2d40a0fc2ea268"
+  ],
   "tools/font.py": [
     "41ffe45e73ebcc9db033fb483bf549a8646072b93765299c6515ade60c81ee46",
     "b9370a72aabf4d72f7149fa8f173e163cfea7518e97c975df39098c4efdeb8b4",

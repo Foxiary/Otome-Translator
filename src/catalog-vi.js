@@ -206,7 +206,7 @@ const engines = {
     }
   },
   rrlib: {
-    flow: 'Lấy kịch bản ra khỏi game → ghi bảng dịch vào game → kiểm tra bản patch → thử trong game.',
+    flow: 'Lấy kịch bản ra khỏi game → tạo bảng dịch → ghi bảng dịch vào game → kiểm tra bản patch → thử trong game.',
     groups: {
       Dump: {name: 'Lấy dữ liệu', summary: 'Lấy toàn bộ game, hoặc từng file, ra khỏi file .nsp hoặc .xci, dùng prod.keys của bạn.'},
       Inspect: {name: 'Xem', summary: 'Xem bên trong mục lục, gói kịch bản và từng kịch bản.'},
