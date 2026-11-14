@@ -278,7 +278,8 @@ every build (exetext.py keeps .text). Patches: `flo-title-rows` (flowchart
 title box horizontal, one word per line), `flo-hint-bottom` (flowchart
 button help), `ev-title-rows` and `ev-route-split` (scene replay list,
 below), `default-name` (heroine name check, below), `route-first` (save
-slot text, below), `hint-hide` (button help hidden higher, below). Routines live in free words before .rodata: 0x2f1f88 (shared by the two title patches,
+slot text, below), `hint-hide` (button help hidden higher, below),
+`losa-route` (save/load screen character, below). Routines live in free words before .rodata: 0x2f1f88 (shared by the two title patches,
 `Site.shared`), 0x2f1e88 (ev-route-split, 18 words) and 0x2f1ed0
 (default-name, 12 words, to 0x2f1f00) - between the 02/10 patch's
 read-redirect caves at 0x2f1e00 and 0x2f1f00. Nothing free is left there:
@@ -326,6 +327,75 @@ without a cave: its first 24 words only give two strings dummy text, so a
 stub there (name.insert(0, ルート)) is jumped to from 0x165604, the other
 `insert` at 0x165568 is a NOP. The ending paths are untouched. Installed
 2026-11-14 09:35 (main.bak32 = before); not seen in game.
+
+**Save/load screen character** (`losa-route`). The picture on the right of
+ssdata/losa follows the slot under the cursor: 0xab388(screen, slot) copies
+the slot info (screen+1032 + 96*slot; text std::wstring at +40), and if
+0xa55c0 says it holds a save, picks animation table .rodata 0x40b510
+[save/load][route + 1] (1191 heroine, 1192..1197 routes 1..6, 1198 no data).
+JP's route(info) at 0xab7c0 splits the text at the first space
+(0x1bde70), deletes ルート (entry 43) with replace-all (0x1bfdd0), then:
+== 終節 (entry 62) -> 0, contains 二角獣 (entry 70, Karuma's hidden name) ->
+6, else exact lookup in the route table (0x81040, wstring::compare against
+0x80f10's names) -> index, none -> 0. Route ids = EV numbers (EV01 Fey ..
+EV06 Karma, EV00 common). With route-first ("Tuyến Fey") the part before the
+space is "Tuyến"; names with spaces never match either; and slots saved by
+the JP program or the 02/10 patch ("ルヲルート") no longer equal a
+translated name - every slot showed the heroine (user, 2026-11-14). The
+patch writes a leaf routine over the first 90 words (no call, no stack,
+x0-x15 only; the rest of the old body is dead): skip entry 43 if the text
+starts with it, then prefix match - entry 70 -> 6, table names 1..6, then
+the JP names (UTF-32 inside the routine, out of exetext's reach: it only
+follows pointers into .rodata) -> 1..6 / 6; else 0. Emulated with unicorn
+on the installed main against all 17 slots of the user's LISTSAVE_INFO
+(VI "Tuyến Yến Lai" -> 3, JP "ゼベネラルート" -> 5, ...: each equals its
+scene's EV number) and 40 made-up lines (endings "Fey Xuân Tiền Chung
+Tiết", old "Fey Route", short and long strings). Installed 2026-11-14 15:56
+(main.bak37 = before); not seen in game yet.
+
+**Affection screen voice caption** (`kok-voice-caption`). The CHT release
+(0100F5A01EA12000) shows a translation of the profile voice that Y plays
+(`<who>_sys04`) on the affection screen: an extra screen kok_ex and a new task
+class (CHT 0x12b2f4) made in its Y handler. JP has neither and its animation
+table is fixed (1857 entries of 48 bytes, GOT 0x59efe0: name, u32 resource -
+kok is 13 -, u32, u32 pack, u32 loop, vector; accessor 0xf7c0, by name
+0xf7c8). The patch makes the task from the screen's own background class
+(new 0x12a6dc, ctor 0x12a778(task, 0, priority) - lower priority is drawn
+later: bg 50, picture/frame 49, buttons 29, button help 20, caption 16),
+gives it the list [in, -, -, -, -] with 0x15f540 and plays it with
+setState (slot 33 -> 0x15af5c(task, k, 0) plays element k; 4 = out, what
+the screen's close, slot 53, does). The fade-in is kei_chrNN 1080..1085
+(packs 34..39; the picture packs draw the bagua, nothing plays kei), whose
+packs `kok_caption.py voice` replaces with CHT's fade. The fade-out is the
+task's colour: setColor 0x15ae94(task, {1,1,1,a}) (RGBA at task+100, pushed
+to the players by slot 21), a = 1 - n/8, then the task is dropped. An id
+missing from the code as a literal is not proof it is unused: the button
+lists make btn_chrNN_on (1051..1076) as off + 1 (cinc, 0x12ab78) and play it
+as the idle look; the 16:57 build used it for the fade-out and the buttons
+lost their brushes while the corner flashed (user's screenshot).
+Hooks: Y 0x129d7c, main loop 0x7f18 (voice update 0x1aab04 runs there; the
+voice is "playing" while the name at 0x694618 is set), close 0x129390.
+**Its code sits in route(slot)'s dead tail 0xab928..0xabaf0**: losa-route
+must keep to its 90 words. The 16:57 build ran in game (no crash); the 18:00
+build was confirmed by the user ("Works").
+
+**Title ending voice caption** (same patch, v3, 2026-11-14 18:26). After an
+ending the title (resource 45 ttl, class vtable 0x552140, update slot 6
+0x8c478) calls play-voice(4, -1) at 0x8c560; with no current character the
+voice comes from game variable 65 = 1 + character * 3 + e (e 0 good / 1
+another / 2 bad -> sys05 + e), which play-voice clears. The hook reads it
+first and plays the caption through animation entry 1080 pointed at (45,
+rson 51 ttl.rson, pack 5 + idx). The rson table is a second resource table
+(entry +12; kok.rson is 19, ttl.rson 51). `end_caption.py build` grows
+ttl.ssdata's header from 6 to 24 pack slots (everything after it shifts by
+72 bytes; pointers: pack offsets, each pack's three tables, part names,
+frame lists, texture names - every other field is 0 in all ssdata seen) and
+adds 18 packs, each fading in its own texture mat_ttl_capNN (2048x1024 BC3
+like the fonts, flags 0x84002, stride 2048); ttl.rson gets 18 textures and
+patterns (frameList [[rson texture index, 0, 0, 0, 0, 1]]). Code space:
+caves B 0x2f1e00 / C 0x2f1f00 are the 02/10 read-redirect caves, whose call
+sites call straight again. Installed 18:26 (main.bak40, ttl.*.bak2 =
+before); not seen in game.
 
 **Scene replay list** (ssdata/ev, title menu 回想). Eight entries a page,
 columns 80 px apart from x 896; 16 boxes (8 titles, 8 numbers) made at

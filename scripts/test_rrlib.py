@@ -1315,13 +1315,17 @@ class GlossaryKeyTest(unittest.TestCase):
 def make_jp_main(text_size=exepatch.JP_TEXT_SIZE, compress=False, pad=0, change=None):
     """A main laid out like JP 1.0.0 (.rodata at 0x2f2000) holding the JP
     instructions exepatch.py replaces; routines' free space filled with
-    `pad` (0 = the JP original, NOP = the 02/10 main); `change` = {address:
+    `pad` (0 = the JP original, NOP = the 02/10 main, whose read-redirect
+    caves hold their code: a site's last `old` words); `change` = {address:
     word} overrides."""
     text = bytearray(text_size)
     for p in exepatch.PATCHES:
         for s in p.sites:
             if s.at + 4 * len(s.new) <= text_size:
-                words = (pad,) * len(s.new) if s.at >= exepatch.JP_TEXT_SIZE else s.old[0]
+                if s.at < exepatch.JP_TEXT_SIZE:
+                    words = s.old[0]
+                else:
+                    words = s.old[-1] if pad == exepatch.NOP else (pad,) * len(s.new)
                 struct.pack_into('<%dI' % len(words), text, s.at, *words)
     for a, w in (change or {}).items():
         struct.pack_into('<I', text, a, w)
@@ -1403,6 +1407,24 @@ class ExePatchTest(unittest.TestCase):
         # nothing past the hop is reached except through the stub: no store into the dummy buffer is left
         self.assertNotIn(0xa9012809, n)
         self.assertEqual(sum(1 for w in n if w == exepatch.NOP), 6 + 5 + 1)
+
+    def test_losa_route_routine(self):
+        at, w = exepatch.LOSA_ROUTE, exepatch.losa_route()
+        self.assertEqual(len(w), len(exepatch.LOSA_JP))
+        self.assertEqual(exepatch.branch_target(exepatch.LOSA_JP[10], at + 40), 0xa55c0)  # JP: its slot-state check
+        self.assertEqual((w[0], w[42]), (0xaa1e03ef, 0xd65f01e0))                         # mov x15, x30 ... ret x15
+        for i in (10, 14, 23, 31):
+            self.assertEqual(exepatch.branch_target(w[i], at + 4 * i), at + 4 * 43)       # bl PFX
+        # llvm-mc: adrp x14, 0x59e000; ldr x14, [x14, #4072] / adrp x7, 0x551000; add x7, x7, #2360 / adr x13, +108
+        self.assertEqual(w[7:9] + w[17:19] + [w[28]], [0xf000278e, 0xf947f5ce, 0xd0002527, 0x9124e0e7, 0x1000036d])
+        self.assertEqual((w[9], w[13]), (0xf940adc3, 0xf94119c3))                           # entries 43 (ルート), 70 (二角獣)
+        names = [''.join(chr(c) for c in w[i:i + 5] if c) for i in range(55, len(w), 5)]
+        self.assertEqual(names, list(exepatch.LOSA_JP_NAMES))
+        # leaf: no stack, nothing callee-saved (x16-x30) written except the BLs' x30
+        for x in w[:55]:
+            if x & 0x7c000000 != 0x14000000 and x & 0xff000000 not in (0x34000000, 0x36000000, 0xb4000000,
+                                                                      0xb5000000, 0x54000000) and x != 0xd65f01e0:
+                self.assertTrue(x & 31 < 16 or x & 31 == 31, hex(x))                     # 31: cmp's xzr
 
     def test_hint_hide_slides(self):
         sites = self.patch('hint-hide').sites
