@@ -270,6 +270,122 @@ shows both halves in Vietnamese. That proves the uncompressed NSO, the
 relocations, so a translation the code reaches with ADRP (`refs` "code") has
 not been seen in game yet.
 
+## Code patches (exepatch.py)
+
+`exepatch.py check|apply|revert` changes instructions, each compared with the
+JP 1.0.0 program first. Read off the JP main; addresses are the same in
+every build (exetext.py keeps .text). Patches: `flo-title-rows` (flowchart
+title box horizontal, one word per line), `flo-hint-bottom` (flowchart
+button help), `ev-title-rows` and `ev-route-split` (scene replay list,
+below), `default-name` (heroine name check, below), `route-first` (save
+slot text, below), `hint-hide` (button help hidden higher, below). Routines live in free words before .rodata: 0x2f1f88 (shared by the two title patches,
+`Site.shared`), 0x2f1e88 (ev-route-split, 18 words) and 0x2f1ed0
+(default-name, 12 words, to 0x2f1f00) - between the 02/10 patch's
+read-redirect caves at 0x2f1e00 and 0x2f1f00. Nothing free is left there:
+the flowchart routine leaves 2 NOPs. Text boxes:
+`0x14e0ac` builds one (font 9 = ui), `0x14e4d4` setText, `0x14e448`
+getText; layout at box+264: line alignment box+632 (`0x14fa1c`), vertical
+flag box+744 (`0x151bf0`), text scale box+452/456 (`0x150f3c(L, s)`, used by
+~20 screens; the node scale +88 is divided out of positions by 0x87630, so
+do not use it on the replay list).
+
+**Button help hidden off the top** (`hint-hide`). Seven screens draw their
+button help as one right-aligned text in the story font, shown at (right
+edge, 22), hidden by sliding up (0, height + 22): the hidden box ends exactly
+at y 0, and a closed screen leaves it there. Vietnamese g y p q, dots under
+ạ ậ ị ọ ụ and extra2's low capitals (Q X C) reach ~10 px below the box, so
+their bottoms showed as white marks along the top edge of the story, the
+in-game menu and the title menu (user, 2026-11-14: the load screen's
+`{A} Xác nhận {L}{R} Chuyển thẻ {B} Quay lại`, exe 0x40a318 via GOT
+0x59f078, after loading a save). Found by laying the help lines out in the
+mod's fonts and matching the marks' x and depth: 8/8 marks, extra2 at
+scale 1.0, right edge ~1198; the box is ~48 px high. Same code at all seven
+(0x254b4 text, 0x2728bc shown, 0x25654 size, `fadd s1, s0, s8`, 0x25624):
+the patch makes the slide 2 x height at 0x47058 (edge 1640), 0x7f1fc
+(1672), 0xa3b6c (1198, save/load), 0xe76f0 (1190, settings), 0x11f8b8
+(1196), 0x1291f8 (1258, affection); hidden box ends at ~-26. The
+flowchart's slide (0xae91c) is flo-hint-bottom's. Installed 2026-11-14
+10:15 (main.bak34 = before); user confirmed the marks gone in game the same day.
+
+**Save slot text** (load/save lists, `LISTSAVE_INFO`). A slot's two lines
+("Fey Route" / chapter title) are built by 0x1654d0 when it is saved and
+stored as UTF-8 in the save (`共通ルート\n終止と再生。...`), so an old slot
+keeps the text of the build that made it. Name (route-name table .data
+0x551940, wstring objects; accessor 0x81020 / 0x80f10) + exe string ルート
+(message table .data 0x54f2c0, entry 43; this function reaches the table
+through the GOT entry at 0x59dfe8, not ADRP+ADD, which is why a search for
+the string's address finds only the flowchart's two uses) + `\n` + title; a node whose kind holds 終節 (found with
+0x2f0c30 = wstring::find at 0x1655f8) gets ` 春前終節\n`-style text instead
+and no ルート. The same entry also goes into the flowchart's `B%02d:%ls%ls` string
+(0xb51a0; it reads like a map key, not checked), so what the sheet puts in
+it matters beyond the slot text.
+`route-first` puts the Vietnamese word before the name: "Tuyến Fey" (sheet exe
+row 542 = `Tuyến ` with its space; the 21:08 build with ` Route` gave "Fey Route",
+the user asked for it the other way, 2026-11-14). Done inside the function
+without a cave: its first 24 words only give two strings dummy text, so a
+stub there (name.insert(0, ルート)) is jumped to from 0x165604, the other
+`insert` at 0x165568 is a NOP. The ending paths are untouched. Installed
+2026-11-14 09:35 (main.bak32 = before); not seen in game.
+
+**Scene replay list** (ssdata/ev, title menu 回想). Eight entries a page,
+columns 80 px apart from x 896; 16 boxes (8 titles, 8 numbers) made at
+0x86384, filled at 0x8a0d4: number = swprintf("%02d．", n) with both digits
+mapped through the exe string at 0x3d1808 (`０一二三四五六七八九`), title =
+swprintf("%ls%ls", chapter, title) cut at the first `【` (text from it on, y
+372; none: whole text, y 392). The route-name title art above the list
+(SS animations 606..615 of mat_ev_l_base_ttl) is picked at 0x887b4 from the
+chosen entry's chapter BEFORE `【`, looked up in the route table at .data
+0x54f460 (10 exe strings, Cửu Quái .. Tứ Lôi Nhạc); no `【` = animation 1044,
+no art. The Vietnamese chapters write `Cửu Quái (Tự Tiết)`, so before
+`ev-route-split` the art never showed and every column repeated the route
+name (seen 2026-11-14, user's JP/VI screenshots). `ev-route-split`: 0x887d8
+calls a routine at 0x2f1e88 that finds `(` and returns the length without
+the spaces before it (all 56 chapters match a table key exactly); 0x8a294
+cuts the list text at `(`; 0x8a2e0 keeps that text at y 392 and 0x8812c /
+0x88144 pause the scroll there (372 put the first horizontal line under
+mat_ev_l_base_msk, whose window starts at y 390). The flowchart has a
+fallback (no `【`: route of the chosen character, 0xb9050) so its art shows.
+
+Numbers showed 12..19 for 01..08 in that build: the sheet's exe row 595
+(0x3d1808) had `123456789.0`; it must be `0123456789`. Fixed in the
+installed main 2026-11-14 05:20 by rewriting the string in place (main.bak29
+= before); a rebuild from the sheet puts the wrong one back until the sheet
+cell is fixed. The team also wanted the dot after the number gone: exe row
+296 (0x395ccc, `%02d．`, used only at 0x8a0d8) should be `%02d`; trimmed in
+the installed main 2026-11-14 09:13 (main.bak30 = before), sheet not yet.
+
+The page counter "8/8" above the list is not program text: it is three
+.ssdata parts (mat_ev_sosu_10 / _sl / _01) whose digit textures the program
+swaps by part name (0x15da00); their place is only in the states. The long
+VI title art covered it, so it was moved above the title's right end with
+~/Documents/Game/matsurika/flo-luu-do-2026-11-13/ev_counter.py (2026-11-14).
+
+**Heroine name and #T1/#T2.** Every scenario calls common.tat's
+`CHECK_HEROINE_NAME`: `GAMEINT_OutputTextAndSoundType` = 1 (#T1 text, voice
+that says Naya) only if `GAMESTR_HeroineFirstName ==
+SYSTEMSTR_CONST_DefaultHeroineFirstName` and `GAMESTR_HeroineLastName ==
+GAMESTR_CONST_DefaultHeroineLastName`; else 0 (#T2 / `${FirstName}`, voice
+that says お嬢さん). Variable names are tables in .data: GAMESTR from 0x54c318
+(NONE 0, TEST 1, HeroineFirstName 2, HeroineLastName 3, CONST_Input… 4,
+CONST_Default…LastName 5), SYSTEMSTR from 0x54e730 (CONST_NONE 0, TEST 1,
+arg0-3 2-5, HeroineFirstName 6 = last name confirmed, HeroineLastName 7,
+CONST_DefaultHeroineFirstName 8, …LastName 9, ScenarioId 10). The program's
+defaults: .data 0x55a9c8 -> ナーヤ (VI main: Naya), 0x55a9d0 -> "" (no last
+name in either), reached through GOT 0x59f448 / 0x59fa28. System data
+(0x5f84b0, 0x199b4 bytes = system.sav, `MTRC1.00`): SYSTEMSTR offsets at
++980 (u32 units from there, entry 21 = end), strings packed after them,
+NUL-terminated UTF-32; `0x1653e0(i, s, force)` sets one and moves the rest.
+SYSTEMSTR 8/9 are written only when system.sav is created (0x164810 ->
+0x163a60 -> 0x164044) and a script cannot write a CONST (0x165288 refuses
+names starting `SYSTEMSTR_CONST_` without force), so a system.sav from the
+JP game or the 02/10 patch keeps ナーヤ and the default name Naya never
+passes. The user's had it (2026-11-14: 'Naya' at 0x444, 'ナーヤ' at 0x45c);
+`default-name` re-sets SYSTEMSTR 8 at every load - confirmed in game the
+same day (that save, default name: the prologue voice says Naya again).
+The name screen's confirm
+(0x1a9d48) compares with the program's string itself and sets the same
+flags/GAMEINT, but the next scenario start recomputes them.
+
 ## .tat scripts ("KUV ")
 
 ```

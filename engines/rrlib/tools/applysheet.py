@@ -16,8 +16,9 @@
 Without --apply it builds, verifies and reports, and writes nothing.
 
 A row is matched to the game by script + const_index (the KUV string index);
-its jp_text only confirms the match, with dashes (―, —) left out: a
-find-and-replace on the whole sheet once took ―― out of jp_text too.
+its jp_text only confirms the match, with dashes (―, —) left out and 《》
+read as ": a find-and-replace on the whole sheet once took ―― out of
+jp_text and once turned 《》 into ".
 
 A cell becomes game text the way the VI builder made it, which reproduces
 93.6% of the 02/10 strings byte for byte where their text is still the
@@ -121,6 +122,36 @@ SUBST = (('"', "'"), ('　', ' '))
 # gives to a Vietnamese letter, so it would show as the wrong letter.
 SOUNDS = set('っッ')
 SHARE = 0.8       # a letter's code must cover this much of its sightings
+# jp_text only confirms the row's script + const_index. A find-and-replace on
+# the whole sheet once took ―― out of jp_text, and once turned 《》 into ".
+DASHES = dict.fromkeys(map(ord, '―—'), None)
+BOOKS = dict.fromkeys(map(ord, '《》"'), None)
+LOOSE = dict(DASHES)
+LOOSE.update(BOOKS)
+
+
+def loose_kinds(game, cell):
+    """How jp_text differs from the game string, ignoring line breaks.
+
+    None when a character other than a dash or a 《》/" swap differs: the row
+    is then another line and must not be written. [] when they are the same."""
+    g = re.sub(r'[\r\n]', '', game).strip()
+    c = re.sub(r'[\r\n]', '', cell).strip()
+    if g.translate(LOOSE) != c.translate(LOOSE):
+        return None
+    if g == c:
+        return []
+    chars = set()
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, g, c, autojunk=False).get_opcodes():
+        if tag != 'equal':
+            chars.update(g[i1:i2])
+            chars.update(c[j1:j2])
+    kinds = []
+    if chars & set('―—'):
+        kinds.append('dashes')
+    if chars & set('《》"'):
+        kinds.append('brackets')
+    return kinds or None
 
 
 def normalize(cell):
@@ -367,8 +398,6 @@ def plan(rows, jp_strs, fmap, seen, keys=None, faces=None, chars=0, max_lines=ov
     max_lines lines (the backlog's 3; 0 never) gets the paragraphs of a
     block refilled as one."""
     keys = keys or {}
-    key = lambda t: re.sub(r'[\r\n]', '', t).strip()
-    loose = lambda t: key(t).translate(DASHES)
     flat = lambda t: ''.join(tags.HIDDEN.sub('', t).split())
     writes =collections.defaultdict(dict); report = []; first = {}; written = {}
     for r in rows:
@@ -376,12 +405,10 @@ def plan(rows, jp_strs, fmap, seen, keys=None, faces=None, chars=0, max_lines=ov
         ci = r['ci']
         if js is None:
             report.append(dict(r=r, action='skip', why='no-script')); continue
-        if ci >= len(js) or loose(js[ci]) != loose(r['jp']):
+        kinds = loose_kinds(js[ci], r['jp']) if ci < len(js) else None
+        if kinds is None:
             report.append(dict(r=r, action='skip', why='jp-mismatch')); continue
-        if key(js[ci]) != key(r['jp']):
-            fixed = ['dashes']             # a find-and-replace on the sheet reached jp_text
-        else:
-            fixed = []
+        fixed = list(kinds)                # a find-and-replace on the sheet reached jp_text
         cell, csv_fix = r['vi'], None
         if cell and cell.strip():
             csv_fix = cleanup(cell, r['jp'], r.get('cmd'))
@@ -460,12 +487,10 @@ CLEANED = {'row': 'Ô là cả một dòng CSV dán vào (JP,%sVI): chỉ lấy 
            'columns': 'Ô thừa các cột trống ",,,,," ở cuối: đã bỏ - nên sửa ô trong sheet',
            'comma': 'Ô bắt đầu bằng dấu phẩy: đã bỏ - nên sửa ô trong sheet',
            'name': 'Ô bắt đầu bằng tên người nói "%s,": đã bỏ tên - nên sửa ô trong sheet'}
-# jp_text only confirms the row's script + const_index. The 09/11 (3) sheet
-# had ―― taken out of jp_text along with vi_text (a find-and-replace on the
-# whole sheet): 522 rows matched nothing until dashes were left out.
-DASHES = dict.fromkeys(map(ord, '―—'), None)
 TAG_FIXED = {'dashes': 'jp_text thiếu/thừa dấu ―― so với game (thay thế trên cả sheet?): đã khớp theo vị trí - '
                        'nên trả lại jp_text trong sheet',
+             'brackets': 'jp_text đổi 《》 thành " (thay thế trên cả sheet?): đã khớp theo vị trí - '
+                         'nên trả lại jp_text trong sheet',
              'broken': 'Tag #P hỏng (dấu phẩy bị dời ra ngoài, kiểu "#P(1110220),"): đã trả lại tag của câu JP - '
                        'nên sửa ô trong sheet',
              'offscreen': 'Tag #P đặt câu ra ngoài màn hình (JP làm vậy vì chữ đã vẽ sẵn trên ảnh): đã bỏ tag để câu '
@@ -635,6 +660,8 @@ def main():
     fixed = collections.Counter(k for x in report if x['action'] == 'write' for k in x.get('fixed', ()))
     if fixed['dashes']:
         print('jp_text khac game chi o dau ――: %d dong, da khop theo vi tri (xem --report)' % fixed['dashes'])
+    if fixed['brackets']:
+        print('jp_text doi 《》 thanh ": %d dong, da khop theo vi tri (xem --report)' % fixed['brackets'])
     print('tag: ghi nhu sheet, tru %d #P dua cau ra ngoai man hinh (da bo) va %d #P hong (da tra tag JP) - '
           'xem --report; kiem tag bang audit.py (Kiem tra ban patch)' % (fixed['offscreen'], fixed['broken']))
 

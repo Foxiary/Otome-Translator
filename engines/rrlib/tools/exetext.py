@@ -666,14 +666,34 @@ def japanese_left(text):
 
 # Google Sheets takes a cell's leading ' as "keep as text" and drops it, and
 # the sheet lost the quotes round %ls: '"%ls"は…' came back as '%lsは…'.
+# The same find-and-replace that hit the scripts turned 《》 into ".
 QUOTES = dict.fromkeys(map(ord, '\'"'), None)
+BOOKS = dict.fromkeys(map(ord, '《》"'), None)
 
 
 def same_jp(cell, jp):
     """Does the sheet's jp_text name this string? Sheets may trim a leading
-    \n and drop quotes, so both are compared without them."""
+    \n, drop quotes, or turn 《》 into ", so both are compared without them."""
     t = cell.replace('\r\n', '\n').strip()
-    return t == jp.strip() or t.translate(QUOTES).strip() == jp.translate(QUOTES).strip()
+    j = jp.strip()
+    if t == j or t.translate(QUOTES).strip() == j.translate(QUOTES).strip():
+        return True
+    return t.translate(BOOKS) == j.translate(BOOKS)
+
+
+def symbol_table(s):
+    """The punctuation list the engine reads (main 0x40b12c): symbols, marks
+    and ー only, ten characters or more. A sheet-wide 《》 replace rewrites it,
+    and writing that copy breaks vertical text, so it stays Japanese."""
+    body = ''.join(s.split())
+    if len(body) < 10:
+        return False
+    for ch in body:
+        if ch == 'ー':
+            continue
+        if unicodedata.category(ch)[0] not in 'PSZ':
+            return False
+    return True
 
 
 def lost_quote(vi, cell, jp):
@@ -744,6 +764,8 @@ WHY = {'no-string': 'Exe không có chuỗi tiếng Nhật nào ở địa chỉ
        'duplicate': 'Địa chỉ này đã có một dòng khác',
        'buttons': 'Ký hiệu nút {..} khác tiếng Nhật',
        'quotes': 'jp_text mất dấu nháy \' hoặc " (Google Sheets bỏ dấu \' đầu ô) - đã khớp theo địa chỉ, nên sửa ô',
+       'brackets': 'jp_text đổi 《》 thành " (thay thế trên cả sheet?) - đã khớp theo địa chỉ, nên sửa ô',
+       'symbol': 'Bảng dấu câu của engine, chỉ ký hiệu: giữ tiếng Nhật, không ghi bản trong sheet',
        'font': 'Font chưa có chữ',
        'key': 'Tên file hoặc chuỗi game dùng để tra cứu, không hiện ra màn hình: dịch vào là game không tìm thấy '
               '(vd. ảnh hiệu ứng chuyển màn) - giữ tiếng Nhật'}
@@ -758,9 +780,14 @@ def plan(rows, exe, fmap):
         report.append(rep)
         if jp is None:
             rep['why'] = 'key' if a in exe.keys else 'no-string'; continue
+        if symbol_table(jp):
+            rep['why'] = 'symbol'; continue
         if not same_jp(r['jp'], jp):
             rep['why'] = 'jp-mismatch'; continue
-        quoted = r['jp'].replace('\r\n', '\n').strip() != jp.strip()
+        cell_jp = r['jp'].replace('\r\n', '\n').strip()
+        game_jp = jp.strip()
+        books = ('《' in game_jp or '》' in game_jp) and cell_jp.translate(BOOKS) == game_jp.translate(BOOKS)
+        quoted = cell_jp != game_jp and not books
         if not r['vi'].strip():
             rep['why'] = 'empty'; continue
         if a in writes:
@@ -776,7 +803,7 @@ def plan(rows, exe, fmap):
         enc, unknown = encode(text, fmap)
         writes[a] = enc
         rep['action'] = 'write'
-        warn = ['quotes'] if quoted else []
+        warn = ['brackets'] if books else (['quotes'] if quoted else [])
         if sorted(BUTTON.findall(text)) != sorted(BUTTON.findall(jp)):
             warn.append('buttons')
         if unknown:

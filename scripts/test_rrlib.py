@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, 'engines', 'rrlib', 'tools'))
 
 import applysheet  # noqa: E402
 import exehook  # noqa: E402
+import exepatch  # noqa: E402
 import exetext  # noqa: E402
 import font     # noqa: E402
 import kuv      # noqa: E402
@@ -372,6 +373,15 @@ class ApplySheetTest(unittest.TestCase):
         self.assertEqual(writes['A.tat'], {1: '..'})
         self.assertEqual([(x.get('why') or x['action'], x.get('fixed')) for x in rep],
                          [('write', ['dashes']), ('jp-mismatch', None)])
+
+    def test_book_title_marks_turned_into_quotes_still_match(self):
+        js = {'A.tat': ['', '「生きる《月下ノ国》だ」', '「生きる《月下ノ国》よ」']}
+        rows = [sheet_row(2, 1, '「生きる"月下ノ国"だ」', 'X'),
+                sheet_row(3, 2, '「生きる"月下ノ国"だ」', 'Lệch.')]          # よ became だ: another line
+        writes, rep = applysheet.plan(rows, js, {}, set())
+        self.assertEqual(writes['A.tat'], {1: 'X'})
+        self.assertEqual([(x.get('why') or x['action'], x.get('fixed')) for x in rep],
+                         [('write', ['brackets']), ('jp-mismatch', None)])
 
     def test_a_kanji_in_brackets_is_a_gloss(self):
         js = {'A.tat': ['', '嬅一族のこと。', '揺れ動く', 'あ']}
@@ -1023,6 +1033,18 @@ class ExeTextTest(unittest.TestCase):
         other = exetext.plan([dict(row=2, address=S4, jp='then が必要', vi='x')], exe, FONT)[1]
         self.assertEqual(other[0]['why'], 'jp-mismatch')
 
+    def test_book_titles_match_and_the_punctuation_list_stays_japanese(self):
+        exe = exetext.Exe(make_main())
+        exe.strings[S4] = '《爪》の炯眼持ち'
+        exe.strings[S1] = ' ()-<=>[]_{}‐–—―‥…≪≫〈〉《》「」『』'
+        rows = [dict(row=2, address=S4, jp='"爪"の炯眼持ち', vi='Huynh Nhan'),
+                dict(row=3, address=S1, jp='()-<=>[]_{}‐–—―‥…≪≫〈〉""「」『』', vi='broken')]
+        writes, rep = exetext.plan(rows, exe, FONT)
+        self.assertEqual(writes, {S4: 'Huynh Nhan'})
+        self.assertEqual([x['why'] for x in rep], ['brackets', 'symbol'])
+        other = exetext.plan([dict(row=2, address=S4, jp='"牙"の炯眼持ち', vi='x')], exe, FONT)[1]
+        self.assertEqual(other[0]['why'], 'jp-mismatch')
+
     def test_printf_codes_must_match(self):
         exe = exetext.Exe(make_main())
         exe.strings[S4] = '残り %d 個'
@@ -1288,6 +1310,146 @@ class GlossaryKeyTest(unittest.TestCase):
         self.assertEqual(len(notes), 2)
         self.assertIn('"Làng Thạch Âm"', notes[0])
         self.assertIn('giữ khoá tiếng Nhật', notes[1])
+
+
+def make_jp_main(text_size=exepatch.JP_TEXT_SIZE, compress=False, pad=0, change=None):
+    """A main laid out like JP 1.0.0 (.rodata at 0x2f2000) holding the JP
+    instructions exepatch.py replaces; routines' free space filled with
+    `pad` (0 = the JP original, NOP = the 02/10 main); `change` = {address:
+    word} overrides."""
+    text = bytearray(text_size)
+    for p in exepatch.PATCHES:
+        for s in p.sites:
+            if s.at + 4 * len(s.new) <= text_size:
+                words = (pad,) * len(s.new) if s.at >= exepatch.JP_TEXT_SIZE else s.old[0]
+                struct.pack_into('<%dI' % len(words), text, s.at, *words)
+    for a, w in (change or {}).items():
+        struct.pack_into('<I', text, a, w)
+    segs = ((0, bytes(text)), (exepatch.TEXT_END, b'R' * 0x100), (exepatch.TEXT_END + 0x1000, b'D' * 0x100))
+    h = bytearray(0x100)
+    h[:4] = b'NSO0'
+    struct.pack_into('<I', h, 0x0C, 0x3f if compress else 0x38)
+    struct.pack_into('<I', h, 0x1C, 0x100)
+    struct.pack_into('<I', h, 0x2C, 1)
+    struct.pack_into('<I', h, 0x3C, 0x1000)
+    pos, body = 0x101, b''
+    for k, (moff, seg) in enumerate(segs):
+        packed = lz4_literals(seg) if compress else seg
+        struct.pack_into('<3I', h, 0x10 + 0x10 * k, pos, moff, len(seg))
+        struct.pack_into('<I', h, 0x60 + 4 * k, len(packed))
+        pos += len(packed); body += packed
+    return bytes(h) + b'\0' + body
+
+
+class ExePatchTest(unittest.TestCase):
+    def run_cmd(self, raw, cmd='apply', apply=True):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 'main')
+            with open(src, 'wb') as f:
+                f.write(raw)
+            out = os.path.join(d, 'out')
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = exepatch.cmd_check(src) if cmd == 'check' else exepatch.cmd_write(src, out, apply, cmd == 'revert')
+            path = os.path.join(out, 'main')
+            written = open(path, 'rb').read() if os.path.exists(path) else None
+        return rc, buf.getvalue(), written
+
+    def patch(self, name):
+        return next(p for p in exepatch.PATCHES if p.name == name)
+
+    def test_routines(self):
+        at = exepatch.FLO_CAVE
+        cave = exepatch.flo_cave()
+        self.assertEqual(at + 4 * len(cave), exepatch.TEXT_END)
+        fmt = (exepatch.flo_format() - at) // 4
+        self.assertEqual(''.join(map(chr, cave[fmt:fmt + 8])), '%ls\n%ls\0')
+        entry = (exepatch.ev_entry() - at) // 4
+        self.assertEqual(cave[entry], 0xd100a3a9)                                    # sub x9, x29, #40
+        self.assertEqual(exepatch.branch_target(cave[entry + 1], at + 4 * entry + 4), at + 4)
+        self.assertEqual(exepatch.fmov_s(0, 0.875), 0x1e2d9000)                      # llvm-mc
+        r, rat = exepatch.route_cave(), exepatch.ROUTE_CAVE
+        nat, n = exepatch.NAME_CAVE, exepatch.name_cave()
+        self.assertEqual((rat + 4 * len(r), nat + 4 * len(n)), (nat, 0x2f1f00))     # back to back, up to the 02/10 cave
+        self.assertEqual(exepatch.branch_target(n[1], nat + 4), 0x2f07e0)           # memcpy
+        self.assertEqual(n[2:8], [0xd0001568, 0xf9422508, 0xf9400101, 0x52800100, 0x52800022,  # llvm-mc: adrp x8 0x59f000;
+                                  exepatch.bl(nat + 28, 0x1653e0)])                 # ldr x8,[x8,#0x448]; ldr x1,[x8]; w0 8; w2 1
+        self.assertEqual(n[9], 0xd65f03c0)                                           # ret
+        self.assertEqual(exepatch.branch_target(r[2], rat + 8), 0x2f0b00)           # std::wstring::find
+        self.assertEqual(r[1], 0x52800501)                                           # mov w1, #'('
+        self.assertEqual(exepatch.branch_target(r[16], rat + 64), rat + 40)         # b L10
+        self.assertEqual(r[17], 0xd65f03c0)                                          # ret
+        ev = {s.at: s for s in self.patch('ev-route-split').sites}
+        self.assertEqual(exepatch.branch_target(ev[0x887d8].old[0][0], 0x887d8), 0x2f0b00)
+        self.assertEqual(exepatch.branch_target(ev[0x887d8].new[0], 0x887d8), rat)
+
+    def test_route_first_stub_and_branches(self):
+        sites = {s.at: s for s in self.patch('route-first').sites}
+        init, nl, end = sites[0x1654f0], sites[0x165568], sites[0x165604]
+        # the JP words: the call that gave "\n" its ルート, the branch to the concatenation
+        self.assertEqual(exepatch.branch_target(nl.old[0][0], 0x165568), 0x2f0b40)      # wstring::insert
+        self.assertEqual(nl.new, (exepatch.NOP,))
+        self.assertEqual(end.old[0], (0xb40003e0,))                                      # llvm-mc: cbz x0, 0x165680
+        self.assertEqual(end.new, (exepatch.cbz_x(0, 0x165604, 0x165500),))
+        n = init.new
+        self.assertEqual(len(n), 24)
+        self.assertEqual(n[:3], (0xaa0803f3, 0x381d03bf, 0x381e83bf))                    # mov x19,x8; sturb wzr [x29-48], [x29-24]
+        self.assertEqual(exepatch.branch_target(n[3], 0x1654fc), 0x16552c)               # hop over the stub
+        self.assertEqual(n[4:7], (0xd100c3a0, 0xaa1f03e1, 0xf940aea2))                   # x0 = name, x1 = 0, x2 = [x21,#344]
+        self.assertEqual(exepatch.branch_target(n[7], 0x16550c), 0x2f0b40)               # insert(0, ルート)
+        self.assertEqual(exepatch.branch_target(n[8], 0x165510), 0x165680)               # on to the concatenation
+        self.assertEqual(n[15], init.old[0][15])                                         # adrp x21 stays at 0x16552c
+        self.assertEqual((n[21], n[22]), (init.old[0][21], init.old[0][22]))             # the table loads stay
+        # nothing past the hop is reached except through the stub: no store into the dummy buffer is left
+        self.assertNotIn(0xa9012809, n)
+        self.assertEqual(sum(1 for w in n if w == exepatch.NOP), 6 + 5 + 1)
+
+    def test_hint_hide_slides(self):
+        sites = self.patch('hint-hide').sites
+        self.assertEqual(len(sites), 6)
+        for s in sites:
+            self.assertEqual(s.old, [(0x1e282801,)])                                   # llvm-objdump: fadd s1, s0, s8
+            self.assertEqual(s.new, (0x1e202801,))                                     # fadd s1, s0, s0
+        # no address shared with another patch (the flowchart's slide is flo-hint-bottom's)
+        others = set(s.at for p in exepatch.PATCHES if p.name != 'hint-hide' for s in p.sites)
+        self.assertFalse(others & set(s.at for s in sites))
+        self.assertIn(0xae91c, others)
+
+    def test_apply_revert_round_trip(self):
+        for pad, size in ((0, exepatch.JP_TEXT_SIZE), (exepatch.NOP, exepatch.TEXT_END)):
+            raw = make_jp_main(size, compress=True, pad=pad)
+            rc, out, new = self.run_cmd(raw)
+            self.assertEqual(rc, 0, out)
+            after = exepatch.Main(new)
+            self.assertEqual(after.text_size, exepatch.TEXT_END)
+            self.assertEqual([p.state(after.img) for p in exepatch.PATCHES], ['applied'] * len(exepatch.PATCHES))
+            self.assertTrue(exepatch.only_sites_differ(after.img, exepatch.Main(raw).img, exepatch.PATCHES))
+            rc, out, again = self.run_cmd(new)
+            self.assertEqual((rc, again), (0, None))
+            rc, out, back = self.run_cmd(new, 'revert')
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(exepatch.Main(back).img, exepatch.Main(make_jp_main(exepatch.TEXT_END, pad=exepatch.NOP)).img)
+
+    def test_shared_routine_and_older_cave(self):
+        raw = make_jp_main(exepatch.TEXT_END, pad=exepatch.NOP)
+        img = bytearray(exepatch.Main(raw).img)
+        flo, ev = self.patch('flo-title-rows'), self.patch('ev-title-rows')
+        for s in flo.sites:                                     # 2026-11-13 21:17: the routine without ev's entry
+            words = exepatch.FLO_CAVE_V2 if s.shared else s.new
+            struct.pack_into('<%dI' % len(words), img, s.at, *words)
+        v2 = exepatch.Main(raw).write(img)
+        self.assertEqual((flo.state(exepatch.Main(v2).img), ev.state(exepatch.Main(v2).img)), ('outdated', 'missing'))
+        rc, out, new = self.run_cmd(v2)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual((flo.state(exepatch.Main(new).img), ev.state(exepatch.Main(new).img)), ('applied', 'applied'))
+
+    def test_other_instructions_are_refused(self):
+        raw = make_jp_main(change={0x887d8: exepatch.bl(0x887d8, 0x2f0b10)})
+        rc, out, new = self.run_cmd(raw)
+        self.assertEqual((rc, new), (1, None))
+        self.assertIn('0x887d8', out)
+        with self.assertRaises(SystemExit):
+            self.run_cmd(make_jp_main(0x2f0000))                # another game version
 
 
 if __name__ == '__main__':
