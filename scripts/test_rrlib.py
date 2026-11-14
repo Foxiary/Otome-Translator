@@ -255,7 +255,7 @@ def sheet_row(n, ci, jp, vi, script='A.tat'):
 
 class ApplySheetTest(unittest.TestCase):
     def test_prepare_does_what_the_vi_builder_did(self):
-        self.assertEqual(applysheet.prepare('「Ừ, “đi” "nhé"」\n\nTiếp　theo'), "Ừ, đi 'nhé'\nTiếp theo")
+        self.assertEqual(applysheet.prepare('「Ừ, “đi” "nhé"」\n\nTiếp　theo'), 'Ừ, đi "nhé"\nTiếp theo')
         self.assertEqual(applysheet.prepare('Việt'), 'Việt')            # NFC
         long = applysheet.prepare(' '.join(['chữ'] * 30))
         self.assertGreater(long.count('\n'), 0)
@@ -1272,7 +1272,7 @@ class GlossaryKeyTest(unittest.TestCase):
             finally:
                 exetext.GLOSSARY = old
             # the term as exetext writes it: quotes, spaces and letters exactly as there
-            self.assertEqual(titles, {'クイックセーブしました｡': ("'Lゔu' nhanh  ", "'Lưu' nhanh  ")})
+            self.assertEqual(titles, {'クイックセーブしました｡': ('"Lゔu" nhanh  ', '"Lưu" nhanh  ')})
             self.assertEqual(untranslated, {'クイックセーブしました｡': ('クイックセーブしました｡', None)})
         finally:
             shutil.rmtree(d, ignore_errors=True)

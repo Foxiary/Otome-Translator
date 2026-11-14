@@ -24,8 +24,9 @@ A cell becomes game text the way the VI builder made it, which reproduces
 93.6% of the 02/10 strings byte for byte where their text is still the
 sheet's:
 
-  1. NFC; 「」『』“” and zero-width spaces dropped, " written as ' and the
-     ideographic space as a space - no 02/10 string carries any of them;
+  1. NFC; 「」『』“” and zero-width spaces dropped, the ideographic space
+     written as a space. " stays: the 02/10 builder wrote it as ' (its font
+     may have had no "), and every font font.py draws has " (2026-11-12);
      the sheet's doubled line breaks (its form of the game's \\r\\n) folded
   2. each paragraph wrapped at 62 visible characters (tags.builder_wrap)
   3. letters encoded for the patch font, which puts Vietnamese letters on
@@ -116,7 +117,9 @@ import tags      # noqa: E402
 from sheetfix import read_sheet   # noqa: E402
 
 DROP = dict.fromkeys(map(ord, '「」『』“”​'), None)
-SUBST = (('"', "'"), ('　', ' '))
+# The 02/10 builder also wrote " as ' (its font may have had no "); every font
+# font.py gen draws has ", so it stays as the translator typed it (2026-11-12).
+SUBST = (('　', ' '),)
 # っ/ッ stay in VI on purpose (a gasp, 「っ――!!」): the 02/10 patch keeps them in
 # 228 strings and the font draws them. Any other kana sits on a code the font
 # gives to a Vietnamese letter, so it would show as the wrong letter.

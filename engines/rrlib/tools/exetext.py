@@ -79,10 +79,11 @@ R_AARCH64_RELATIVE = 1027
 WINDOW = 32                   # instructions an ADRP's ADD is looked for in
 COLUMNS = ('address', 'refs', 'jp_text', 'vi_text', 'note')
 
-# Kept as applysheet.py does it for sheet cells: the VI builder dropped these
-# and the font is not known to have them.
+# Kept as applysheet.py does it for sheet cells. 「」『』“” are dropped (the
+# 02/10 builder did, and a glossary key must be prepared the same way here).
+# " stays: every font font.py gen draws has it (2026-11-12).
 DROP = dict.fromkeys(map(ord, '「」『』“”​'), None)
-SUBST = (('"', "'"), ('　', ' '))
+SUBST = (('　', ' '),)
 JAPANESE = re.compile('[぀-ヿ㐀-䶿一-鿿]')
 SOUNDS = set('っッ')
 KANA = re.compile('[぀-ヿ]')

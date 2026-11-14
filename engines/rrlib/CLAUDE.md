@@ -752,9 +752,10 @@ patch by putting each sheet cell next to the string the patch carries for it.
 Where the cell's text is still the patch's, these rules reproduce 93.6% of
 the strings byte for byte (23 776 of 25 410):
 
-- NFC, then `「」『』“”` and U+200B dropped, `"` written as `'`, U+3000 as a
-  space. No translated 02/10 string carries any of them; the font most likely
-  has no glyph for them.
+- NFC, then `「」『』“”` and U+200B dropped, U+3000 as a space. No translated
+  02/10 string carries `「」『』“”`; `"` is kept (2026-11-12). The 02/10 builder
+  wrote it as `'`, but every font `font.py gen` draws has a `"` glyph, and
+  the installed fonts do too. A glossary key is prepared the same way.
 - The sheet's doubled line breaks folded to one (it shows the game's `\r\n`
   as two), each paragraph wrapped at 62 visible characters
   (`tags.builder_wrap`), lines joined with `\n` - the patch never has `\r\n`.
