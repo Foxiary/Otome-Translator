@@ -116,6 +116,16 @@ class RsonTest(unittest.TestCase):
         self.assertEqual(small[p - int.from_bytes(small[p + 3:p + 5], 'little')] & 0xe0, 0xa0)
         self.assertEqual(font.parse(big)['a'][1], 'y')
 
+    def test_small_node_offsets_are_never_one_byte(self):
+        # The game (main 0x1c42a0) reads element byte 0 as u32 offsets; a
+        # 1-byte form written as 0 crashed the title on ttl.rson (2026-11-14).
+        tiny = font.write(mk([('a', [font.IntArr([1, 0, 0, 0, 0, 1])])]))
+        p = tiny.index(b'\xc8\x01')
+        self.assertEqual(tiny[p + 2], 1)           # u16 like JP, though 1 byte would fit
+        self.assertEqual(font.parse(tiny)['a'][0].vals, [1, 0, 0, 0, 0, 1])
+        self.assertEqual(font._node_width(0), 4)   # what a 0 means to the game
+        self.assertEqual(font._node_width(2), 3)
+
     def test_typed_arrays_keep_negatives(self):
         back = font.parse(font.write(mk([('g', font.IntArr([7, 62, 1280, 60, 62, 40, -3 & 0xffffffff, 10]))])))
         self.assertEqual(font._s32(back['g'].vals[6]), -3)

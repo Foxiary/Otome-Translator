@@ -63,8 +63,12 @@ FORMAT (worked out on JP v1.0.0; see also CLAUDE.md "Fonts")
     0x20/0x21 false/true; 0x40 int (codes 0-7 = 0,1,-1,2,-2,3,-3,4, longer
     ones two's complement in 11/19/32 bits); 0x80 UTF-16LE string (byte
     length) + 2 NULs; 0xa0 binary blob, 4-aligned; 0xc0 array: count, element
-    byte - 0x40/0x30/0x20 = u8/u16/u32 LE values, 0..3 = offsets of 1..4
-    bytes to child nodes (2-byte ones LE, 3-byte ones BE, as found);
+    byte - 0x40/0x30/0x20 = u8/u16/u32 LE values, 0x10 floats; otherwise
+    offsets to child nodes, read by the game's array accessor (main
+    0x1c42a0) from the byte's low bits: bit 0 set = u16 LE, bit 1 set = u24
+    BE, neither (0) = u32 LE. There is NO 1-byte form: a 0 written for
+    small offsets made the game read 4 bytes and crash (ttl.rson, 2026-11-14);
+    JP writes 1 (u16) even when every offset is under 256;
     0xe0 map: count, h, value offsets (u16 LE, or u32 LE when h=1), key
     offsets (u16 LE), key hashes (u16 LE) = CRC-16/CCITT-FALSE of the
     UTF-16LE key, entries sorted by hash. Offsets count back from the
@@ -194,6 +198,14 @@ def _off_bytes(v, w):
     return v.to_bytes(w, 'big' if w == 3 else 'little')
 
 
+def _node_width(et):
+    """Node-array element byte -> offset width, as main 0x1c42a0 reads it."""
+    return 2 if et & 1 else 3 if et & 2 else 4
+
+
+NODE_ET = {2: 1, 3: 2, 4: 0}               # offset width -> element byte
+
+
 def parse(m):
     """RSON bytes -> tree of Map / list / IntArr / str / bytes / int / bool."""
     if m[:4] != b'RSON':
@@ -229,7 +241,7 @@ def parse(m):
                 return IntArr(int.from_bytes(m[q + w * i:q + w * i + w], 'little') for i in range(n))
             if et > 3:
                 raise ValueError('array element byte %#x at %#x' % (et, p))
-            w = et + 1
+            w = _node_width(et)
             return [node(p - _off_read(m, q + w * i, w)) for i in range(n)]
         if kind == 0xe0:
             h = m[q]
@@ -299,8 +311,8 @@ def write(root):
             pad(len(head), 4)
             p = len(out)
             offs = [p - x for x in ps]
-            w = next(w for w in (1, 2, 3, 4) if max(offs or [0]) < 1 << (8 * w))
-            head = head[:-1] + bytes([w - 1])
+            w = next(w for w in (2, 3, 4) if max(offs or [0]) < 1 << (8 * w))
+            head = head[:-1] + bytes([NODE_ET[w]])
             out.extend(head)
             for o in offs:
                 out.extend(_off_bytes(o, w))

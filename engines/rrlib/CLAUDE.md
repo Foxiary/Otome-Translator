@@ -395,7 +395,16 @@ like the fonts, flags 0x84002, stride 2048); ttl.rson gets 18 textures and
 patterns (frameList [[rson texture index, 0, 0, 0, 0, 1]]). Code space:
 caves B 0x2f1e00 / C 0x2f1f00 are the 02/10 read-redirect caves, whose call
 sites call straight again. Installed 18:26 (main.bak40, ttl.*.bak2 =
-before); not seen in game.
+before). **That ttl crashed the game at the title on every boot**
+(2026-11-14 22:48-22:50, three logs: PC main:0x28b0e4 `ldrb w0, [x1]` in
+the RSON node reader 0x28b0c8, called from the array accessor 0x1c42a0 via
+0x1c4408; x1 = a node address far outside the file). font.write had
+written the 23 one-element `frameList` arrays of ttl.rson with element
+byte 0, meaning 1-byte offsets to font.py, u32 offsets to the game, which
+then read the offset byte plus the next three. Fixed in font.py (never 0;
+u16 like JP); the rebuilt ttl differs only in those 23 bytes and was
+installed 23:01 (ttl.*.bak3 = the crashing build). The release zip
+Matsurika-VI 1.0.0 carries the crashing ttl.
 
 **Scene replay list** (ssdata/ev, title menu 回想). Eight entries a page,
 columns 80 px apart from x 896; 16 boxes (8 titles, 8 numbers) made at
@@ -712,9 +721,11 @@ size   0-7 the value; 8-15 +1 byte, 16-23 +2, 24 +4; code's low 3 bits are the
 0x80   UTF-16LE string, byte length, + 2 NULs; text 2-aligned
 0xa0   binary blob, data aligned to alignBytes (4)
 0xc0   array: count, element byte. 0x40/0x30/0x20: u8/u16/u32 LE values,
-       narrowest that fits (negatives as u32). 0..3: node offsets of 1..4
-       bytes - 2-byte ones LITTLE-endian, 3-byte ones BIG-endian (ui has the
-       first, the others the second). Payload 4-aligned for node arrays, to
+       narrowest that fits (negatives as u32). Any other byte: node offsets,
+       as the game's accessor (main 0x1c42a0) reads them - bit 0 set = u16
+       LITTLE-endian, bit 1 set = u24 BIG-endian, 0 = u32 LE. There is no
+       1-byte form: every ssdata .rson uses 1 (u16) even for offsets under
+       256, ui uses 1, the other fonts 2. Payload 4-aligned for node arrays, to
        the element size for typed ones.
 0xe0   map: count, h, value offsets (u16 LE; u32 LE when h=1, used when one
        does not fit), key offsets u16 LE, key hashes u16 LE = CRC-16/CCITT-FALSE
